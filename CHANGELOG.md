@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Isolated typed SharedPreferences with staged editors, atomic persistent writes,
+  package/case/link checks and explicit storage ceilings. `--data-dir`,
+  `--ephemeral` and headless `--input` controls.
+- Authored preferences APK verifies native UTF-8 paste/save/restart/clear and
+  five persistence/error/isolation regressions. Standard AppKit Edit menu fixes
+  native paste; apply remains synchronous pending scheduling support.
+- Unmodified Notepad 1.0.0 startup reaches DBFlow and stops at unsupported HashSet;
+  this is a diagnosed failure, not working notes-app compatibility.
+
 - Playful lime/ink identity, custom SVG robot/banner/runtime diagram, refreshed
   README and portable website with self-hosted OFL fonts and accessible motion.
 - Next working checkpoint raised to 50%; milestone labels remain separate from

@@ -23,6 +23,16 @@ Limits: 64 Activity instances, 128 pending transitions and 16,384 entries per Bu
 Saved-state recreation, activity results, launch modes/flags, tasks, implicit/
 external intents and launching from non-Activity contexts remain unsupported.
 
+## Preferences subset
+
+Context.getSharedPreferences, Activity.getPreferences and getApplicationContext
+support the current lifecycle/storage fixtures. Preference stores support typed
+String/int/long/float/boolean values, defaults, contains, staged editors,
+remove/clear and commit/apply. Values survive Activity transitions and GC; optional
+disk persistence is confined to host-selected per-package directories. Apply is
+currently synchronous. MODE_PRIVATE only; listeners/String sets/files/SQLite remain
+unsupported. [Exact storage semantics and boundaries](storage.md).
+
 Exact method signatures map to DROIDLESS behavior. setContentView accepts a View
 or layout resource; findViewById searches the guest graph. Widget mutations alter
 objects read by rendering. Window metrics use the logical host dimensions and
@@ -55,6 +65,8 @@ styling attributes are omitted. The real screenshot visibly reflects this subset
 NSButton actions invoke the app's View.OnClickListener bytecode; XML onClick
 invokes an Activity method. NSTextField changes update EditText, which callbacks
 read through getText. Native controls supply focus/selection/accessibility.
+The standard macOS Edit menu supplies Cut/Copy/Paste/Select All through AppKit's
+responder chain. Native UTF-8 paste into EditText is verified in the preferences fixture.
 Escape dispatches Activity Back. Other key-down/up maps digits, letters and common operators to Android KeyEvent codes
 and executes OnKeyListener. Initial key focus uses the first enabled visible
 listener; complete Android focus/IME/gesture behavior remains future work.

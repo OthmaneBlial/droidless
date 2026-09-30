@@ -81,3 +81,36 @@ Escape on Home ended the process with status 0. The headless CLI replay likewise
 returned JSON null after the last Activity finished. Local CI passes 17 Rust tests,
 4,096 parser mutations and all ten unchanged KasCalc scenarios. No new release
 archive or third-party multi-screen compatibility is claimed by this increment.
+
+## Current source: persistent preferences
+
+The authored Preferences APK runs typed/staged-editor conformance in its own DEX
+and exposes separate main/edit Activities. Native AppKit automation pasted
+`Native notes survive restart 📓`, clicked Save note, and observed the same text
+on the parent screen. Closing and restarting the native process with the same
+host data root displayed the saved UTF-8 note again. Clear note displayed
+`No saved note`; a fresh process confirmed that the value remained cleared.
+Native close/Back emitted the expected teardown and process exit 0.
+
+This increment fixes the earlier clipboard limitation by adding standard AppKit
+Edit actions. Paste now reaches EditText and the APK reads/saves that value. Full
+Android IME behavior, multiline editing and clipboard APIs remain unverified or
+unsupported.
+
+Five storage regressions cover typed values/NaN/wide values across restarts,
+staging/clear order/null removal/ClassCastException, multiple packages and memory-only
+runs, failed writes/retry, 1 MiB ceilings, damaged files, path traversal, symlink/
+Unix hard-link rejection, replaced directories and case-colliding names/identity
+markers. Full local CI passes 22 Rust tests, 4,096 parser mutations, warning-free
+Clippy/release build and all ten unchanged KasCalc cases.
+
+The unmodified Notepad 1.0.0 release, package `ir.cafebazaar.notepad`, was also
+inspected and attempted headlessly. Original artifact:
+[upstream release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0).
+SHA-256: `2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+It has seven Activities and no native libraries. Application.getApplicationContext
+now resolves; DBFlow initialization then fails in
+`Lcom/raizlabs/android/dbflow/config/h;-><init>(Landroid/content/Context;)V`,
+PC `0x0003`, on unsupported `Ljava/util/HashSet;`. No Activity/UI or notes workflow
+was reached. The APK was neither changed nor redistributed. Next work follows
+generic Java collections and the actual subsequent failures.

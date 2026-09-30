@@ -7,6 +7,7 @@ mod native;
 enum Action {
     Click(String),
     Key(String),
+    Input(String),
     Back,
 }
 
@@ -20,7 +21,7 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
         println!(
-            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --key CHAR --back --stats\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\nNative Back: Escape. Experimental runtime; unsupported features fail explicitly."
+            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --key CHAR --input TEXT --back --stats\n             --data-dir APPS_ROOT | --ephemeral\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText. Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
         );
         return Ok(());
     }
@@ -37,6 +38,8 @@ fn run() -> Result<()> {
         let mut path = None;
         let mut stats = false;
         let mut headless = args[0] == "inspect-ui";
+        let mut data_dir = None;
+        let mut ephemeral = false;
         let mut i = 1;
         while i < args.len() {
             match args[i].as_str() {
@@ -65,6 +68,26 @@ fn run() -> Result<()> {
                     ));
                 }
                 "--back" => actions.push(Action::Back),
+                "--input" => {
+                    i += 1;
+                    actions.push(Action::Input(
+                        args.get(i)
+                            .ok_or_else(|| anyhow::anyhow!("--input requires text"))?
+                            .clone(),
+                    ));
+                }
+                "--data-dir" => {
+                    i += 1;
+                    let value = args
+                        .get(i)
+                        .ok_or_else(|| anyhow::anyhow!("--data-dir requires an apps root"))?;
+                    if value.is_empty()
+                        || data_dir.replace(std::path::PathBuf::from(value)).is_some()
+                    {
+                        bail!("expected one nonempty --data-dir");
+                    }
+                }
+                "--ephemeral" => ephemeral = true,
                 s if s.starts_with('-') => bail!("unknown run option {s}"),
                 _ => {
                     if path.replace(args[i].clone()).is_some() {
@@ -77,7 +100,15 @@ fn run() -> Result<()> {
         let start = std::time::Instant::now();
         let apk = Apk::open(path.ok_or_else(|| anyhow::anyhow!("missing APK path"))?)?;
         let loaded = start.elapsed();
-        let mut runtime = Runtime::new(apk)?;
+        anyhow::ensure!(
+            !(ephemeral && data_dir.is_some()),
+            "--data-dir and --ephemeral are mutually exclusive"
+        );
+        let mut runtime = if ephemeral {
+            Runtime::new(apk)?
+        } else {
+            Runtime::with_data_dir(apk, data_dir.map(Ok).unwrap_or_else(default_data_dir)?)?
+        };
         runtime.trace = trace;
         runtime.launch()?;
         for action in actions {
@@ -95,6 +126,7 @@ fn run() -> Result<()> {
                     runtime.click_text(&text)?;
                 }
                 Action::Back => runtime.back()?,
+                Action::Input(text) => runtime.input(&text)?,
             }
         }
         if headless {
@@ -183,4 +215,29 @@ fn run() -> Result<()> {
         command => bail!("unknown command {command}; see --help"),
     }
     Ok(())
+}
+
+fn default_data_dir() -> Result<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var_os("HOME")
+            .filter(|v| !v.is_empty())
+            .ok_or_else(|| anyhow::anyhow!("HOME is unavailable; use --data-dir or --ephemeral"))?;
+        Ok(std::path::PathBuf::from(home).join("Library/Application Support/DROIDLESS/apps"))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let base = std::env::var_os("XDG_DATA_HOME")
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .filter(|v| !v.is_empty())
+                    .map(|v| std::path::PathBuf::from(v).join(".local/share"))
+            })
+            .ok_or_else(|| {
+                anyhow::anyhow!("no application-data directory; use --data-dir or --ephemeral")
+            })?;
+        Ok(base.join("droidless/apps"))
+    }
 }

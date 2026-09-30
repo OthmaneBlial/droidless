@@ -36,7 +36,7 @@ cases = [
 ]
 results = []
 for clicks, expected_text in cases:
-    cmd = [str(args.binary), "run", "--headless", "--stats", str(apk)]
+    cmd = [str(args.binary), "run", "--headless", "--ephemeral", "--stats", str(apk)]
     for click in clicks:
         cmd.extend(["--click", click])
     process = subprocess.run(cmd, text=True, capture_output=True, check=True)

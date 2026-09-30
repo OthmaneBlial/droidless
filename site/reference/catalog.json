@@ -47,6 +47,32 @@
       "native_close_exit_zero": true,
       "source": "examples/intents",
       "notes": "Current source: explicit navigation, typed copied extras, preserved input/title, Back override and lifecycle/GC tests. Authored fixture, not independent multi-screen APK evidence."
+    },
+    {
+      "package": "org.droidless.preferences",
+      "origin": "droidless-fixture",
+      "status": "interactive-fixture",
+      "native_ui": true,
+      "native_mouse": true,
+      "native_text_verified": true,
+      "native_paste_verified": true,
+      "native_restart_persistence_verified": true,
+      "native_clear_persistence_verified": true,
+      "native_close_exit_zero": true,
+      "source": "examples/preferences",
+      "notes": "Authored fixture: typed/staged preferences, native save/restart/clear and package/path/link isolation. Apply is synchronous. Not independent notes-app evidence."
+    },
+    {
+      "package": "ir.cafebazaar.notepad",
+      "version": "1.0",
+      "origin": "third-party",
+      "artifact_url": "https://github.com/MohMah/android-notepad/releases/download/v1.0.0/notepad-v1.0.0.apk",
+      "sha256": "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f",
+      "status": "startup-blocked",
+      "native_ui": false,
+      "first_failure": "unsupported class Ljava/util/HashSet; in DBFlow initialization at PC 0x0003",
+      "notes": "Parsed; Application.getApplicationContext resolves. No Activity/UI or notes workflow reached. Original release APK unmodified and not redistributed.",
+      "release_tag": "v1.0.0"
     }
   ]
 }

@@ -35,7 +35,12 @@ are implemented for the fault paths covered by conformance tests.
 Current source adds explicit same-APK Intent constructors/setClass/setClassName,
 startActivity, getIntent, finish/isFinishing/onBackPressed, Bundle typed extras and
 back-stack lifecycle. This is authored-fixture evidence, not a third-party notes
-app claim; the v0.1.0 release predates navigation.
+app claim; the v0.1.0 release predates navigation and persistence.
+SharedPreferences adds String/int/long/float/boolean reads and staged editors,
+commit/apply/remove/clear, MODE_PRIVATE stores, Activity.getPreferences and a
+minimal application-context singleton. Native authored-note save/restart/clear
+and isolated persistence are verified. Apply is synchronous; preference listeners,
+String sets and general file APIs remain unsupported. [Storage limits](storage.md).
 
 ## Known ceilings
 
@@ -48,7 +53,7 @@ app claim; the v0.1.0 release predates navigation.
 - Java float string scientific-notation edge cases differ from Rust formatting.
 - Failed class initialization is sticky and retains causes; concurrent initialization
   is unsupported. Instruction/field/method checks are not a complete Java type verifier.
-- No collections/I/O/Handler/Looper/SQLite/images/networking/JNI/JIT,
+- No collections/general file I/O/Handler/Looper/SQLite/images/networking/JNI/JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.
 

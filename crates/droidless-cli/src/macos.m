@@ -58,6 +58,14 @@ void *dl_open(const char *title, float width, float height, void *context, Callb
     NSMenu *appMenu = [[NSMenu alloc] initWithTitle:@"DROIDLESS"];
     NSMenuItem *quit = [appMenu addItemWithTitle:@"Quit DROIDLESS" action:@selector(quit:) keyEquivalent:@"q"];
     appItem.submenu = appMenu;
+    NSMenuItem *editItem = [[NSMenuItem alloc] initWithTitle:@"Edit" action:NULL keyEquivalent:@""];
+    NSMenu *editMenu = [[NSMenu alloc] initWithTitle:@"Edit"];
+    [editMenu addItemWithTitle:@"Cut" action:@selector(cut:) keyEquivalent:@"x"];
+    [editMenu addItemWithTitle:@"Copy" action:@selector(copy:) keyEquivalent:@"c"];
+    [editMenu addItemWithTitle:@"Paste" action:@selector(paste:) keyEquivalent:@"v"];
+    [editMenu addItemWithTitle:@"Select All" action:@selector(selectAll:) keyEquivalent:@"a"];
+    editItem.submenu = editMenu;
+    [menu addItem:editItem];
     NSApp.mainMenu = menu;
     DroidlessHost *host = [DroidlessHost new];
     quit.target = host;

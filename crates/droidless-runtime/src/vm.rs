@@ -48,6 +48,8 @@ pub struct Runtime {
     pub(crate) screens: BTreeMap<usize, crate::activities::Screen>,
     pub(crate) back_stack: Vec<Word>,
     pub(crate) navigation: std::collections::VecDeque<crate::activities::Navigation>,
+    pub(crate) storage: Option<crate::storage::Storage>,
+    pub(crate) preferences: BTreeMap<String, Word>,
 }
 impl Runtime {
     pub(crate) fn reset_budget(&mut self) {
@@ -103,7 +105,18 @@ impl Runtime {
             screens: BTreeMap::new(),
             back_stack: vec![],
             navigation: std::collections::VecDeque::new(),
+            storage: None,
+            preferences: BTreeMap::new(),
         })
+    }
+    /// Enable disk storage below a host-approved apps root; `new` is ephemeral.
+    pub fn with_data_dir(apk: Apk, apps_dir: impl AsRef<std::path::Path>) -> Result<Self> {
+        let mut vm = Self::new(apk)?;
+        vm.storage = Some(crate::storage::Storage::open(
+            apps_dir.as_ref(),
+            &vm.apk.manifest.package,
+        )?);
+        Ok(vm)
     }
     pub fn launch(&mut self) -> Result<()> {
         self.budget = 0;
@@ -120,9 +133,9 @@ impl Runtime {
                 vec![object],
                 false,
             )?;
-            self.lifecycle_call(object, &class, "onCreate", vec![])?;
             self.statics
                 .insert("droidless:application".into(), vec![object]);
+            self.lifecycle_call(object, &class, "onCreate", vec![])?;
         }
         let name = self
             .apk
@@ -271,6 +284,21 @@ impl Runtime {
         view.text = text.to_owned();
         Ok(())
     }
+    /// Edit the first enabled visible EditText in the foreground screen.
+    pub fn input(&mut self, text: &str) -> Result<()> {
+        fn find(node: &Node) -> Option<usize> {
+            if node.view.visible != 0 {
+                return None;
+            }
+            if node.view.editable && node.view.enabled {
+                Some(node.handle)
+            } else {
+                node.children.iter().find_map(find)
+            }
+        }
+        let handle = find(&self.snapshot()?).context("no editable View")?;
+        self.edit(handle, text)
+    }
     pub fn key(&mut self, handle: usize, action: i32, keycode: i32) -> Result<bool> {
         ensure!([0, 1].contains(&action), "invalid KeyEvent action");
         self.budget = 0;
@@ -348,6 +376,7 @@ impl Runtime {
                 | crate::activities::Navigation::Finish(intent) => *intent,
             }))
             .chain(self.statics.values().flatten().copied())
+            .chain(self.preferences.values().copied())
             .chain(self.interned.values().copied())
             .chain(self.failed_classes.values().flatten().copied())
             .chain(self.frames.iter().flat_map(|f| {

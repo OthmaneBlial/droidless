@@ -9,7 +9,8 @@ The following are objectives, not completed capability claims.
    style resolution, images/drawables and weighted measurement. Gate: native
    interaction and comparisons with expected Android behavior.
 3. Multi-screen/persistence: explicit Intents/Bundle/back stack are proven in an
-   authored native fixture. Next: isolated SharedPreferences/files, then a real
+   authored native fixture. Isolated SharedPreferences save/restart/clear are also
+   proven in an authored native fixture. Next: general app files, then a real
    notes/todo APK with restart/persistence tests.
 4. Async Java: deterministic Handler/Looper/Runnable scheduling before threads.
    Gate: timer callbacks update UI under the documented main-thread model.

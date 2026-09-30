@@ -14,7 +14,7 @@ impl Runtime {
         self.heap.get_mut(object)?.data = Data::Bundle(BTreeMap::new());
         Ok(object)
     }
-    fn bundle_put(
+    pub(crate) fn bundle_put(
         &mut self,
         object: Word,
         key: String,

@@ -39,6 +39,9 @@ impl Runtime {
         if let Some(result) = self.component_native(method, args)? {
             return Ok(Some(result));
         }
+        if let Some(result) = self.preference_native(method, args)? {
+            return Ok(Some(result));
+        }
         let signature = method.signature();
         let arg =
             |n| -> Result<Word> { args.get(n).copied().context("framework argument missing") };

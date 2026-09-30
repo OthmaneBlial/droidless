@@ -42,5 +42,7 @@ repository Actions are disabled. Website deployment is separate from source CI.
 
 `zip` handles ZIP/deflate; `sha1` checks DEX signatures; `anyhow` retains errors;
 `serde`/`serde_json` export inspection/test data; build-only `cc` compiles AppKit.
+`cap-std`/`cap-fs-ext` supply directory-relative, no-follow host I/O for isolated
+preferences; `serde_json` also stores the bounded DROIDLESS preference format.
 None supplies Android execution, lifecycle, resources or the View model.
 Cargo.lock fixes the dependency versions.

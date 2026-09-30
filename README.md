@@ -94,6 +94,8 @@ Use `--trace-bytecode`, `--trace-methods`, `--trace-framework` or
 `--trace-lifecycle` to follow execution. `--stats` / `--heap-stats` report real
 counters and timings. `--click`, `--key`, `--back`, `--headless` and `inspect-ui`
 support repeatable experiments. **Escape delivers Back** in the native window.
+Current source adds `--input TEXT` for the first visible EditText, per-package
+preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only runs.
 
 </details>
 
@@ -121,9 +123,10 @@ support repeatable experiments. **Escape delivers Back** in the native window.
 | 🪟 Native widgets | TextView, Button, EditText, LinearLayout and FrameLayout; approximate layout/style |
 | 🖱️ Input | Native calculator mouse callbacks, Counter text/key callbacks and clean close |
 | 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish and lifecycle — current source |
-| 🛠️ Next up | Persistent storage, lists, images and timers; a substantial unmodified notes/todo APK |
+| 📓 Persistent preferences | Typed SharedPreferences, isolated package data, native authored-note save/restart/clear — current source |
+| 🛠️ Next up | General app files, collections, lists, images and timers; a substantial unmodified notes/todo APK |
 
-The published **v0.1.0 archive predates navigation**. Current source capability
+The published **v0.1.0 archive predates navigation and persistence**. Current source capability
 is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
 and games remain future compatibility work. [Exact limits](docs/compatibility.md).
 
@@ -135,6 +138,8 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | SmallestAPK | [Independent sample](https://github.com/krossovochkin/SmallestAPK) | Original signed APK executes its Activity and creates the expected TextView |
 | Counter | [Authored Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks, resources and VM conformance |
 | Intents | [Authored Java/XML fixture](examples/intents/MainActivity.java) | Native screen transitions, retained text/title, Back override, extras and lifecycle/GC checks |
+| Preferences | [Authored Java/XML fixture](examples/preferences/MainActivity.java) | Native UTF-8 paste, save/restart/clear, typed values and package/path isolation |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Parsed; application startup stops at unsupported HashSet. No UI or working-notes claim |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).
@@ -174,8 +179,9 @@ clear compatibility boundary. [Follow the roadmap](docs/roadmap.md).
 ## 🔐 A small but important boundary
 
 This prototype is not a security sandbox. Parser/VM limits do not replace OS
-isolation. Guest filesystem, networking, native-library and process APIs are
-unavailable in the published implementation. Use trusted APKs.
+isolation. Current source grants only isolated SharedPreferences I/O; general files,
+networking, native-library and process APIs are unavailable. Use trusted APKs.
+[Storage behavior and limits](docs/storage.md).
 [Security boundaries](docs/security.md).
 
 ---
