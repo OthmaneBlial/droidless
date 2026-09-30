@@ -36,6 +36,13 @@ Current source adds explicit same-APK Intent constructors/setClass/setClassName,
 startActivity, getIntent, finish/isFinishing/onBackPressed, Bundle typed extras and
 back-stack lifecycle. This is authored-fixture evidence, not a third-party notes
 app claim; the v0.1.0 release predates navigation, persistence, collections, scheduling and the new calculator demo.
+Application lifecycle observers add bounded registration/removal, GC-rooted
+snapshot delivery from six Activity super methods and canonical getApplication
+identity. Native authored navigation/Back/close executes these observers; saved-state
+and modern pre/post callbacks remain unsupported. [Lifecycle scope](framework.md).
+Build.VERSION.SDK_INT exposes a fixed read-only API-21 branch profile, independent
+of APK/host metadata. It does not imply complete API-21 support.
+[Profile and field checks](framework.md#virtual-api-profile).
 SharedPreferences adds String/int/long/float/boolean reads and staged editors,
 commit/apply/remove/clear, MODE_PRIVATE stores, Activity.getPreferences and a
 minimal application-context singleton. Native authored-note save/restart/clear

@@ -137,8 +137,10 @@ LinkedBlockingQueue constructor and then Thread.start. Current source resolves
 both. Primitive metadata, native map copying and read-only List construction also
 resolve. Snapshot CopyOnWriteArrayList construction now resolves too; snapshot
 stability across serial worker writes is checked in the authored Collections
-fixture. The unchanged Notepad release now stops at `Build.VERSION.SDK_INT` in
-Application.onCreate PC `0x002e`.
+fixture. Fixed SDK metadata and Application lifecycle-observer registration now
+resolve too. The unchanged Notepad release stops at `FileInputStream` in bundled
+`com/b/a/a/e.b()` PC `0x0006`, under `e.a()` PC `0x000a` and Application.onCreate
+PC `0x0056`, while Stetho reads process information.
 This is still before Activity/UI creation; the independent worker/notes workflow
 has not executed successfully. The 50% checkpoint remains ahead. The v0.1.0 release
 archive predates scheduling and workers.

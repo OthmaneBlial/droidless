@@ -2,12 +2,26 @@
 
 ## Unreleased
 
+- Fixed read-only Build.VERSION.SDK_INT = 21, independent of APK/host metadata.
+  Compiled checks cover stable reads, inherited aliases and native final-field
+  faults. This branch profile does not imply full API-21 compatibility.
+- Application lifecycle-observer registration/removal and GC-rooted snapshot
+  delivery from six Activity super methods; canonical getApplication identity.
+  GC during observer callbacks exposed and fixed roots for active navigation
+  actions and registered Activities. Compiled checks cover reentrant registration,
+  navigation/Back/close, retention/release and callback fault cleanup. Native
+  navigation/Back/close executes 33 observer calls and exits with status 0.
+  Saved-state/pre/post callbacks and missing-super enforcement remain unsupported.
+- Unmodified Notepad passes SDK checks and observer registration, then reaches
+  FileInputStream while Stetho reads /proc/self/cmdline. No Activity/UI workflow
+  yet. Local CI passes 41 Rust tests, 4,096 mutations and 17 calculator scenarios.
+
 - Bounded CopyOnWriteArrayList operations and snapshot iterators: old values
   survive live mutations, GC and serial guest worker updates; iterator removal
   raises UnsupportedOperationException. Read-only views preserve snapshots. The
   normal SnapshotContract also passes on desktop Java. Reentrant remove equality,
   copy constructors, bulk APIs and ListIterator/subList remain unsupported.
-- Unmodified Notepad passes snapshot-list construction and now stops at
+- At the snapshot-list checkpoint, unmodified Notepad passed construction and stopped at
   Build.VERSION.SDK_INT in Application.onCreate, before Activity/UI creation.
   Local CI passes 40 Rust tests, 4,096 mutations and 17 calculator scenarios.
 

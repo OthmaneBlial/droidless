@@ -91,6 +91,10 @@ impl Runtime {
         for dex in &apk.dex {
             for c in &dex.classes {
                 ensure!(
+                    c.name != "Landroid/os/Build$VERSION;",
+                    "APK redefinition of native Build.VERSION is unsupported"
+                );
+                ensure!(
                     names.insert(c.name.clone()),
                     "duplicate class across DEX modules: {}",
                     c.name
@@ -399,11 +403,11 @@ impl Runtime {
             .into_iter()
             .chain(self.root)
             .chain(self.back_stack.iter().copied())
-            .chain(
-                self.screens
-                    .values()
-                    .flat_map(|s| s.root.into_iter().chain([s.intent])),
-            )
+            .chain(self.screens.iter().flat_map(|(handle, s)| {
+                std::iter::once(Word::Ref(*handle))
+                    .chain(s.root)
+                    .chain([s.intent])
+            }))
             .chain(self.navigation.iter().map(|n| match n {
                 crate::activities::Navigation::Start(intent)
                 | crate::activities::Navigation::Finish(intent) => *intent,
@@ -450,11 +454,18 @@ impl Runtime {
         })
     }
     pub(crate) fn resolve_field(&self, field: &Field, static_field: bool) -> Result<Field> {
-        if field.name == "TYPE"
+        let native_type = if field.name == "TYPE"
             && self.class_location(&field.class).is_none()
             && crate::reflection::primitive_wrapper(&field.class).is_some()
         {
-            if field.ty != "Ljava/lang/Class;" {
+            Some("Ljava/lang/Class;")
+        } else if self.sdk_field(field) {
+            Some("I")
+        } else {
+            None
+        };
+        if let Some(ty) = native_type {
+            if field.ty != ty {
                 return Err(fault("Ljava/lang/NoSuchFieldError;", field.key()));
             }
             if !static_field {
@@ -505,6 +516,14 @@ impl Runtime {
                     work.push(parent.clone());
                 }
                 work.extend(def.interfaces.iter().rev().cloned());
+            } else if class == "Landroid/os/Build$VERSION;" && field.name == "SDK_INT" {
+                return self.resolve_field(
+                    &Field {
+                        class,
+                        ..field.clone()
+                    },
+                    static_field,
+                );
             } else if !static_field
                 && ((class == "Landroid/util/DisplayMetrics;"
                     && [

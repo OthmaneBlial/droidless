@@ -104,6 +104,35 @@ impl Runtime {
         let sig = method.signature();
         let mut result = vec![];
         match (method.class.as_str(), sig.as_str()) {
+            (
+                "Landroid/app/Application;",
+                "registerActivityLifecycleCallbacks(Landroid/app/Application$ActivityLifecycleCallbacks;)V",
+            )
+            | (
+                "Landroid/app/Application;",
+                "unregisterActivityLifecycleCallbacks(Landroid/app/Application$ActivityLifecycleCallbacks;)V",
+            ) => {
+                let list = self.lifecycle_callbacks(receiver)?;
+                self.invoke(
+                    Method {
+                        class: "Ljava/util/ArrayList;".into(),
+                        name: if method.name.starts_with("unregister") {
+                            "remove"
+                        } else {
+                            "add"
+                        }
+                        .into(),
+                        parameters: vec!["Ljava/lang/Object;".into()],
+                        returns: "Z".into(),
+                    },
+                    vec![list, arg(1)?],
+                    true,
+                )?;
+            }
+            ("Landroid/app/Activity;", "getApplication()Landroid/app/Application;") => {
+                self.screen(receiver)?;
+                result.push(self.application_context(receiver)?);
+            }
             ("Landroid/os/Bundle;", "<init>()V") => {
                 self.heap.get_mut(receiver)?.data = Data::Bundle(BTreeMap::new());
             }

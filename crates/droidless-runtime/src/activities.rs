@@ -1,4 +1,7 @@
-use crate::{heap::Word, vm::Runtime};
+use crate::{
+    heap::{Data, Word},
+    vm::Runtime,
+};
 use anyhow::{Context, Result, ensure};
 use droidless_formats::dex::Method;
 
@@ -14,6 +17,96 @@ pub(crate) enum Navigation {
 }
 
 impl Runtime {
+    pub(crate) fn application_context(&mut self, receiver: Word) -> Result<Word> {
+        let object = if let Some(object) = self
+            .statics
+            .get("droidless:application")
+            .and_then(|v| v.first())
+            .copied()
+        {
+            object
+        } else if self.is_a(&self.heap.get(receiver)?.class, "Landroid/app/Application;") {
+            receiver
+        } else {
+            self.new_instance("Landroid/app/Application;")?
+        };
+        self.statics
+            .insert("droidless:application".into(), vec![object]);
+        Ok(object)
+    }
+    pub(crate) fn lifecycle_callbacks(&mut self, application: Word) -> Result<Word> {
+        let object = self.heap.get(application)?;
+        ensure!(
+            self.is_a(&object.class, "Landroid/app/Application;"),
+            "callback registry requires Application"
+        );
+        if let Some(list) = object
+            .fields
+            .get("droidless:lifecycle")
+            .and_then(|v| v.first())
+            .copied()
+        {
+            return Ok(list);
+        }
+        let list = self.heap.instance("Ljava/util/ArrayList;")?;
+        self.heap.get_mut(list)?.data = Data::Collection {
+            values: vec![],
+            version: 0,
+        };
+        self.heap
+            .get_mut(application)?
+            .fields
+            .insert("droidless:lifecycle".into(), vec![list]);
+        Ok(list)
+    }
+    pub(crate) fn dispatch_activity_callback(&mut self, name: &str, args: &[Word]) -> Result<()> {
+        let Some(application) = self
+            .statics
+            .get("droidless:application")
+            .and_then(|v| v.first())
+            .copied()
+        else {
+            return Ok(());
+        };
+        let Some(list) = self
+            .heap
+            .get(application)?
+            .fields
+            .get("droidless:lifecycle")
+            .and_then(|v| v.first())
+            .copied()
+        else {
+            return Ok(());
+        };
+        let callbacks = self.collection(list)?.0.to_vec();
+        let roots = self.native_roots.len();
+        self.native_roots.extend([application, list]);
+        self.native_roots.extend(args.iter().copied());
+        self.native_roots.extend(callbacks.iter().copied());
+        let result = (|| -> Result<()> {
+            let mut parameters = vec!["Landroid/app/Activity;".into()];
+            if args.len() == 2 {
+                parameters.push("Landroid/os/Bundle;".into());
+            }
+            for callback in callbacks {
+                self.invoke(
+                    Method {
+                        class: "Landroid/app/Application$ActivityLifecycleCallbacks;".into(),
+                        name: name.into(),
+                        parameters: parameters.clone(),
+                        returns: "V".into(),
+                    },
+                    std::iter::once(callback)
+                        .chain(args.iter().copied())
+                        .collect(),
+                    true,
+                )?;
+            }
+            Ok(())
+        })();
+        self.native_roots.truncate(roots);
+        result
+    }
     pub fn activity_depth(&self) -> usize {
         self.back_stack.len()
     }
@@ -113,55 +206,66 @@ impl Runtime {
     }
     pub(crate) fn drain_navigation(&mut self) -> Result<()> {
         while let Some(action) = self.navigation.pop_front() {
-            match action {
-                Navigation::Start(intent) => {
-                    let target = *self
-                        .heap
-                        .get(intent)?
-                        .fields
-                        .get("component")
-                        .and_then(|v| v.first())
-                        .context("implicit/external Intent unsupported")?;
-                    let target = self.heap.text(target)?.to_owned();
-                    let previous = self.activity;
-                    if let Some(activity) = previous {
-                        let class = self.heap.get(activity)?.class.clone();
-                        self.lifecycle_call(activity, &class, "onPause", vec![])?;
-                    }
-                    self.create_screen(&target, intent)?;
-                    if let Some(activity) = previous {
-                        let class = self.heap.get(activity)?.class.clone();
-                        self.lifecycle_call(activity, &class, "onStop", vec![])?;
-                    }
-                }
-                Navigation::Finish(activity) => {
-                    let Some(position) = self.back_stack.iter().position(|a| *a == activity) else {
-                        continue;
-                    };
-                    let active = self.activity == Some(activity);
-                    let class = self.heap.get(activity)?.class.clone();
-                    if active {
-                        self.lifecycle_call(activity, &class, "onPause", vec![])?;
-                    }
-                    self.back_stack.remove(position);
-                    if active {
-                        if let Some(previous) = self.back_stack.last().copied() {
-                            self.activate(previous)?;
-                            let parent_class = self.heap.get(previous)?.class.clone();
-                            for name in ["onRestart", "onStart", "onResume"] {
-                                self.lifecycle_call(previous, &parent_class, name, vec![])?;
-                            }
-                        } else {
-                            self.activity = None;
-                            self.root = None;
-                            self.stop_messages()?;
+            // Guest lifecycle callbacks may collect after an action leaves the queue.
+            let roots = self.native_roots.len();
+            self.native_roots.push(match &action {
+                Navigation::Start(intent) | Navigation::Finish(intent) => *intent,
+            });
+            let result = (|| -> Result<()> {
+                match action {
+                    Navigation::Start(intent) => {
+                        let target = *self
+                            .heap
+                            .get(intent)?
+                            .fields
+                            .get("component")
+                            .and_then(|v| v.first())
+                            .context("implicit/external Intent unsupported")?;
+                        let target = self.heap.text(target)?.to_owned();
+                        let previous = self.activity;
+                        if let Some(activity) = previous {
+                            let class = self.heap.get(activity)?.class.clone();
+                            self.lifecycle_call(activity, &class, "onPause", vec![])?;
                         }
-                        self.lifecycle_call(activity, &class, "onStop", vec![])?;
+                        self.create_screen(&target, intent)?;
+                        if let Some(activity) = previous {
+                            let class = self.heap.get(activity)?.class.clone();
+                            self.lifecycle_call(activity, &class, "onStop", vec![])?;
+                        }
                     }
-                    self.lifecycle_call(activity, &class, "onDestroy", vec![])?;
-                    self.screens.remove(&activity.reference()?);
-                }
-            }
+                    Navigation::Finish(activity) => {
+                        let Some(position) = self.back_stack.iter().position(|a| *a == activity)
+                        else {
+                            return Ok(());
+                        };
+                        let active = self.activity == Some(activity);
+                        let class = self.heap.get(activity)?.class.clone();
+                        if active {
+                            self.lifecycle_call(activity, &class, "onPause", vec![])?;
+                        }
+                        self.back_stack.remove(position);
+                        if active {
+                            if let Some(previous) = self.back_stack.last().copied() {
+                                self.activate(previous)?;
+                                let parent_class = self.heap.get(previous)?.class.clone();
+                                for name in ["onRestart", "onStart", "onResume"] {
+                                    self.lifecycle_call(previous, &parent_class, name, vec![])?;
+                                }
+                            } else {
+                                self.activity = None;
+                                self.root = None;
+                                self.stop_messages()?;
+                            }
+                            self.lifecycle_call(activity, &class, "onStop", vec![])?;
+                        }
+                        self.lifecycle_call(activity, &class, "onDestroy", vec![])?;
+                        self.screens.remove(&activity.reference()?);
+                    }
+                };
+                Ok(())
+            })();
+            self.native_roots.truncate(roots);
+            result?;
         }
         if self.activity.is_some() {
             ensure!(

@@ -17,6 +17,25 @@ stops/destroys the outgoing Activity. Each instance retains its title, content
 and Intent, and remains a GC root. Finishing a stopped Activity destroys it without
 changing the foreground screen. isFinishing remains true during teardown.
 
+Application.registerActivityLifecycleCallbacks / unregisterActivityLifecycleCallbacks
+use a per-Application bounded managed ArrayList. Registrations preserve order,
+duplicates and nulls; removal uses the first guest-equal entry. Activity.getApplication
+and getApplicationContext share the package's canonical Application. The native
+Activity super implementations deliver created/started/resumed/paused/stopped/
+destroyed observers at the super call, including navigation, Back and native close.
+They do not send a second notification after an APK override returns.
+
+Each delivery takes a GC-rooted snapshot: registration/removal during a callback
+affects later events, while the current snapshot still runs in order. Callback
+faults propagate and temporary roots are released. Registered Screen objects and
+active navigation actions stay rooted across callbacks and GC. The registry uses
+the existing 16,384-entry List ceiling and its equality-mutation guard. Callback
+delivery is synchronous on main; worker/native-bridge waits remain unsupported.
+Saved-state delivery/restoration, modern pre/post observers and missing-super
+enforcement remain unsupported. No Android reference run is claimed.
+[Application registry reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/app/Application.java)
+and [Activity super-call reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/app/Activity.java).
+
 `--back` and native Escape dispatch virtual onBackPressed, including APK overrides.
 Finishing the last Activity ends the native loop normally; headless output is null.
 Limits: 64 Activity instances, 128 pending transitions and 16,384 entries per Bundle.
@@ -37,16 +56,20 @@ unsupported. [Exact storage semantics and boundaries](storage.md).
 
 HashSet/ArrayList/HashMap and basic LinkedHashMap operations provide bounded
 storage, nulls and guest virtual equals. Lists preserve duplicates/order and add
-indexed reads, updates, insertion/removal and first/last index lookup. Set/List
+indexed reads, updates, insertion/removal and first/last index lookup. ArrayList/Set
 iteration supports removal and catchable invalid-state/exhaustion/concurrent-change
 errors. Collections.unmodifiableSet is a live read-only view, including its
 iterator. Class literals have stable identity; Class.getPackage/Package.getName
-expose basic metadata. Bulk operations, Map views, access-order maps and eviction
+expose basic metadata. Native map copying and live read-only List views are also
+checked. CopyOnWriteArrayList supports snapshot iteration across live changes and
+GC; reentrant write equality remains unsupported. Other bulk operations, Map
+views, access-order maps and eviction
 hooks remain unsupported. [Exact methods and ceilings](collections.md).
 
 LinkedBlockingQueue adds immediate FIFO add/offer, head reads/removal, size/capacity,
 membership and clear, with guest equality and inherited override dispatch. Queue
-waiting, worker execution and weakly consistent iterators remain unsupported.
+take/put waits run on the bounded serial guest worker executor. Timed waits and
+weakly consistent queue iterators remain unsupported.
 [Queue semantics and limits](collections.md#immediate-fifo-queues).
 
 ## Main-thread scheduling subset
@@ -54,8 +77,27 @@ waiting, worker execution and weakly consistent iterators remain unsupported.
 Handler/Looper/Message queue deferred and delayed guest callbacks, with identity
 cancellation, virtual dispatch and GC retention. Native callbacks update Views;
 headless `--advance-ms` provides deterministic replay. Minimal Thread metadata
-and explicit manual run are supported; Thread.start and blocking waits fail
-explicitly. [Exact methods, clocks, limits and native evidence](threading.md).
+and explicit manual run are supported. Deferred Thread.start executes DEX workers,
+with bounded queue/monitor waits, interruption and main Handler result delivery.
+Main waits, native bridge/initializer suspension and parallel CPU execution remain
+unsupported. [Exact methods, clocks, limits and native evidence](threading.md).
+
+## Virtual API profile
+
+Build.VERSION.SDK_INT is a read-only native static int with a fixed value of 21.
+This is the runtime's API-branch profile, independent of host OS, APK min/target SDK
+or package name. It is metadata for app version checks, not complete Android API-21
+support. APK redefinition of the native VERSION class is rejected, so guest class
+definitions cannot replace the profile. Unknown methods and fields still fail explicitly. Other Build/version
+fields, selectable profiles and complete Android configuration remain unsupported.
+
+Native SDK reads, repeated reads through GC, Class lookup and inherited aliases
+are checked in compiled DEX. Field aliases resolve to the declaring native owner
+without initializing a subclass. Writes raise IllegalAccessError; instance access
+raises IncompatibleClassChangeError, and mismatched types raise NoSuchFieldError.
+This framework-specific check is not part of the desktop Java differential run.
+[Android field contract](https://developer.android.com/reference/android/os/Build.VERSION#SDK_INT)
+and [API-21 version code](https://developer.android.com/reference/android/os/Build.VERSION_CODES#LOLLIPOP).
 
 ## APK classes and Java numbers
 
@@ -105,7 +147,8 @@ Escape dispatches Activity Back. Other key-down/up maps digits, letters and comm
 and executes OnKeyListener. Initial key focus uses the first enabled visible
 listener; complete Android focus/IME/gesture behavior remains future work.
 
-All guest/UI work is currently on the main thread. FFI copies strings synchronously
+UI work stays on main; bounded DEX workers execute serially on the shared-heap host
+executor. FFI copies strings synchronously
 and retains the host until the event loop ends. Callback errors/panics stop the
 loop and report errors. Rust unsafe sites describe their contracts; guest parser/
 VM memory uses checked Rust structures, never host pointers.

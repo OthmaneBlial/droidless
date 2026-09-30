@@ -66,7 +66,10 @@
       "native_back_verified": true,
       "native_close_exit_zero": true,
       "source": "examples/intents",
-      "notes": "Current source: explicit navigation, typed copied extras, preserved input/title, Back override and lifecycle/GC tests. Authored fixture, not independent multi-screen APK evidence."
+      "notes": "Current source: explicit navigation, typed copied extras, preserved input/title, Back override and lifecycle/GC tests. Application observer registration, snapshot mutation, canonical identity, retention/release and callback fault cleanup pass compiled checks. Fresh native navigation/Back/close with GC in observers records 33 interface calls and exits 0. Authored fixture, not independent multi-screen APK evidence; saved-state/pre/post callbacks remain unsupported.",
+      "headless_application_observers_verified": true,
+      "native_application_observers_verified": true,
+      "native_observer_interface_calls": 33
     },
     {
       "package": "org.droidless.preferences",
@@ -107,8 +110,9 @@
       "desktop_java_differential_verified": true,
       "android_reference_verified": false,
       "source": "examples/reflection",
-      "notes": "Authored compiled APK: class lookup/construction, initialization/access faults, arrays, inherited field aliases and all nine native wrapper TYPE identities; GC, wrong-kind/type and rejected final-write regressions. Same ReflectionContract and PrimitiveContract pass on Java 17 with Java 8 source/target. Primitive metadata does not imply general boxing support.",
-      "desktop_java_primitive_differential_verified": true
+      "notes": "Authored compiled APK: class lookup/construction, initialization/access faults, arrays, inherited field aliases and all nine native wrapper TYPE identities; GC, wrong-kind/type and rejected final-write regressions. Same ReflectionContract and PrimitiveContract pass on Java 17 with Java 8 source/target. Primitive metadata does not imply general boxing support. Framework-specific compiled checks add fixed SDK_INT=21, repeated reads, declaring-owner aliases without subclass initialization, and rejected final writes/wrong-kind/type access. SDK checks are separate from desktop Java differential evidence.",
+      "desktop_java_primitive_differential_verified": true,
+      "headless_sdk_profile_verified": true
     },
     {
       "package": "org.droidless.scheduling",
@@ -138,8 +142,8 @@
       "sha256": "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f",
       "status": "startup-blocked",
       "native_ui": false,
-      "first_failure": "unsupported framework field Landroid/os/Build$VERSION;->SDK_INT:I in Lir/cafebazaar/notepad/App;->onCreate()V at PC 0x002e",
-      "notes": "Parsed; DBFlow collections, reflection, inherited fields, deferred Thread.start, primitive TYPE metadata, native map copying, read-only List and CopyOnWriteArrayList construction resolve. Startup advances to Build.VERSION.SDK_INT. No Activity/UI or independently working notes/worker workflow reached. Original release APK unmodified and not redistributed.",
+      "first_failure": "unsupported class Ljava/io/FileInputStream; in Lcom/b/a/a/e;->b()Ljava/lang/String; at PC 0x0006, e.a() PC 0x000a (Application.onCreate PC 0x0056)",
+      "notes": "Parsed; DBFlow collections, reflection, inherited fields, deferred Thread.start, primitive TYPE metadata, map copying, read-only/snapshot-list construction, fixed SDK profile and lifecycle-observer registration resolve. Stetho process-name lookup reaches FileInputStream for /proc/self/cmdline. No Activity/UI, observer delivery or independently working notes/worker workflow reached. Original release APK unmodified and not redistributed.",
       "release_tag": "v1.0.0"
     }
   ]

@@ -705,6 +705,8 @@ impl Runtime {
                 if get {
                     let value = if let Some(primitive) = self.primitive_field(&field) {
                         vec![self.class_object(primitive)?]
+                    } else if self.sdk_field(&field) {
+                        vec![Word::from(crate::framework::SDK_INT)]
                     } else if static_field {
                         self.statics
                             .get(&key)
@@ -720,7 +722,7 @@ impl Runtime {
                     };
                     self.put(f, dest, &value)?;
                 } else {
-                    if self.primitive_field(&field).is_some() {
+                    if self.primitive_field(&field).is_some() || self.sdk_field(&field) {
                         return Err(fault(
                             "Ljava/lang/IllegalAccessError;",
                             format!("cannot write final field {key}"),

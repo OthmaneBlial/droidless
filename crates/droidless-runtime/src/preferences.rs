@@ -150,15 +150,7 @@ impl Runtime {
                 result.push(self.open_preferences(name, arg(1)?.int()?)?);
             }
             ("Landroid/content/Context;", "getApplicationContext()Landroid/content/Context;") => {
-                let object = if let Some(object) = self.statics.get("droidless:application").and_then(|v| v.first()).copied() {
-                    object
-                } else if self.is_a(&self.heap.get(receiver)?.class, "Landroid/app/Application;") {
-                    receiver
-                } else {
-                    self.new_instance("Landroid/app/Application;")?
-                };
-                self.statics.insert("droidless:application".into(), vec![object]);
-                result.push(object);
+                result.push(self.application_context(receiver)?);
             }
             ("Landroid/content/SharedPreferences;", "edit()Landroid/content/SharedPreferences$Editor;") => {
                 let editor = self.heap.instance("Landroid/content/SharedPreferences$Editor;")?;

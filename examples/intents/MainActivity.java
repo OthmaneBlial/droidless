@@ -10,10 +10,13 @@ import android.widget.TextView;
 public class MainActivity extends Activity {
     public static String events = "";
     public static int finishing;
+    public static boolean creating;
     private static MainActivity home;
     private int resumes;
     public void onCreate(Bundle state) {
+        creating=true;
         super.onCreate(state);
+        creating=false;
         home = this;
         events += "home:create;";
         setTitle("Home");

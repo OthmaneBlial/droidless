@@ -91,63 +91,121 @@ fn inherited_field_resolution_rejects_missing_and_wrong_kind_members() {
 }
 
 #[test]
-fn primitive_type_fields_keep_identity_and_reject_wrong_kind_type_and_writes() {
-    let read = Method {
-        class: "Lorg/droidless/reflection/PrimitiveContract;".into(),
-        name: "readInt".into(),
-        parameters: vec![],
-        returns: "Ljava/lang/Class;".into(),
-    };
-    for (opcode, ty, diagnostic) in [
-        (0x69, "Ljava/lang/Class;", "IllegalAccessError"),
-        (0x54, "Ljava/lang/Class;", "IncompatibleClassChangeError"),
-        (0x62, "I", "NoSuchFieldError"),
+fn native_metadata_fields_keep_values_and_reject_wrong_kind_type_and_writes() {
+    for (class_name, method_name, field_class, field_name, original_type, sget, sput, iget) in [
+        (
+            "PrimitiveContract",
+            "readInt",
+            "Ljava/lang/Integer;",
+            "TYPE",
+            "Ljava/lang/Class;",
+            0x62,
+            0x69,
+            0x54,
+        ),
+        (
+            "MainActivity",
+            "readSdk",
+            "Landroid/os/Build$VERSION;",
+            "SDK_INT",
+            "I",
+            0x60,
+            0x67,
+            0x52,
+        ),
     ] {
-        let mut vm = Runtime::new(
-            Apk::parse(include_bytes!("../../../fixtures/generated/reflection.apk")).unwrap(),
-        )
-        .unwrap();
-        let first = vm.invoke(read.clone(), vec![], false).unwrap()[0];
-        vm.collect();
-        assert_eq!(vm.invoke(read.clone(), vec![], false).unwrap(), vec![first]);
-        let field = vm.apk.dex[0]
-            .fields
-            .iter()
-            .position(|f| f.class == "Ljava/lang/Integer;" && f.name == "TYPE")
+        let read = Method {
+            class: format!("Lorg/droidless/reflection/{class_name};"),
+            name: method_name.into(),
+            parameters: vec![],
+            returns: original_type.into(),
+        };
+        for (opcode, ty, diagnostic) in [
+            (sput, original_type, "IllegalAccessError"),
+            (iget, original_type, "IncompatibleClassChangeError"),
+            (
+                sget,
+                if original_type == "I" {
+                    "Ljava/lang/Class;"
+                } else {
+                    "I"
+                },
+                "NoSuchFieldError",
+            ),
+        ] {
+            let mut vm = Runtime::new(
+                Apk::parse(include_bytes!("../../../fixtures/generated/reflection.apk")).unwrap(),
+            )
             .unwrap();
-        let class = vm.apk.dex[0]
-            .classes
-            .iter()
-            .position(|c| c.name == read.class)
-            .unwrap();
-        let method = vm.apk.dex[0].classes[class]
-            .methods
-            .iter()
-            .position(|m| vm.apk.dex[0].methods[m.index].name == "readInt")
-            .unwrap();
-        let original_code = vm.apk.dex[0].classes[class].methods[method]
-            .code
-            .clone()
-            .unwrap();
-        let mut code = original_code.clone();
-        let access = code
-            .instructions
-            .windows(2)
-            .position(|words| words[0] & 0xff == 0x62 && usize::from(words[1]) == field)
-            .expect("compiled TYPE sget-object");
-        code.instructions[access] = (code.instructions[access] & 0xff00) | opcode;
-        vm.apk.dex[0].classes[class].methods[method].code = Some(code);
-        vm.apk.dex[0].fields[field].ty = ty.into();
-        let error = vm.invoke(read.clone(), vec![], false).unwrap_err();
-        assert!(format!("{error:#}").contains(diagnostic));
-        assert_eq!(vm.stack_depth(), 0);
-        vm.collect();
-        vm.apk.dex[0].classes[class].methods[method].code = Some(original_code);
-        vm.apk.dex[0].fields[field].ty = "Ljava/lang/Class;".into();
-        assert_eq!(
-            vm.invoke(read.clone(), vec![], false).unwrap(),
-            vec![first],
-            "native final TYPE changed after rejected access"
-        );
+            let first = vm.invoke(read.clone(), vec![], false).unwrap()[0];
+            vm.collect();
+            assert_eq!(vm.invoke(read.clone(), vec![], false).unwrap(), vec![first]);
+            let field = vm.apk.dex[0]
+                .fields
+                .iter()
+                .position(|f| f.class == field_class && f.name == field_name)
+                .unwrap();
+            let class = vm.apk.dex[0]
+                .classes
+                .iter()
+                .position(|c| c.name == read.class)
+                .unwrap();
+            let method = vm.apk.dex[0].classes[class]
+                .methods
+                .iter()
+                .position(|m| vm.apk.dex[0].methods[m.index].name == method_name)
+                .unwrap();
+            let original_code = vm.apk.dex[0].classes[class].methods[method]
+                .code
+                .clone()
+                .unwrap();
+            let mut code = original_code.clone();
+            let access = code
+                .instructions
+                .windows(2)
+                .position(|words| words[0] & 0xff == sget && usize::from(words[1]) == field)
+                .expect("compiled native metadata field read");
+            code.instructions[access] = (code.instructions[access] & 0xff00) | opcode;
+            vm.apk.dex[0].classes[class].methods[method].code = Some(code);
+            vm.apk.dex[0].fields[field].ty = ty.into();
+            let error = vm.invoke(read.clone(), vec![], false).unwrap_err();
+            assert!(format!("{error:#}").contains(diagnostic));
+            assert_eq!(vm.stack_depth(), 0);
+            vm.collect();
+            vm.apk.dex[0].classes[class].methods[method].code = Some(original_code);
+            vm.apk.dex[0].fields[field].ty = original_type.into();
+            assert_eq!(
+                vm.invoke(read.clone(), vec![], false).unwrap(),
+                vec![first],
+                "native final field changed after rejected access"
+            );
+        }
     }
+    // Exercise a subclass-owned DEX reference even if D8 canonicalizes source aliases.
+    let mut vm = Runtime::new(
+        Apk::parse(include_bytes!("../../../fixtures/generated/reflection.apk")).unwrap(),
+    )
+    .unwrap();
+    vm.apk.dex[0]
+        .fields
+        .iter_mut()
+        .find(|f| f.class == "Landroid/os/Build$VERSION;" && f.name == "SDK_INT")
+        .unwrap()
+        .class = "Lorg/droidless/reflection/MainActivity$ApiAlias;".into();
+    vm.launch().unwrap();
+    assert_eq!(vm.snapshot().unwrap().view.text, "Reflection passed");
+    let mut apk = Apk::parse(include_bytes!("../../../fixtures/generated/reflection.apk")).unwrap();
+    apk.dex[0]
+        .classes
+        .iter_mut()
+        .find(|c| c.name == "Lorg/droidless/reflection/MainActivity$ApiAlias;")
+        .unwrap()
+        .name = "Landroid/os/Build$VERSION;".into();
+    assert!(
+        Runtime::new(apk)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("redefinition of native Build.VERSION")
+    );
 }

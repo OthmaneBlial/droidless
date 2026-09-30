@@ -34,6 +34,11 @@ raises IllegalAccessException. This is metadata support, not general boxing for
 these classes. Static/instance/type mismatches retain field faults; writes to
 native final TYPE raise IllegalAccessError.
 
+The compiled framework check also reads the fixed native SDK_INT profile, resolves
+inherited aliases without initializing a subclass and rejects final writes,
+wrong-kind and wrong-type references. This is separate from the desktop Java
+contracts. [Virtual API profile](framework.md#virtual-api-profile).
+
 This is a narrow API subset, not complete reflection or a full Java verifier.
 Custom class loaders, external DEX loading, three-argument forName, reflective
 method/field invocation, annotation/nest access rules and Class.toString remain

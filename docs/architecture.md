@@ -67,3 +67,14 @@ migrate across executor threads while all guest objects remain in one heap.
 Serial execution avoids shared mutable heap races and makes deterministic tests
 possible. Parallel CPU execution and a persistent executor are deferred; the
 scope and current blocking/native bridge limits are explicit in [threading.md](threading.md).
+
+## ADR 006: a fixed virtual API profile
+
+Build.VERSION.SDK_INT reads 21 for every APK and host. The initial branch profile
+uses the API-21 baseline of the authored fixtures; it does not measure framework
+coverage or promise a complete Android 5.0 environment. Do not vary it to bypass
+an app's startup code or derive it from the APK's target SDK. Native final-field
+checks and rejection of guest VERSION redefinition keep APK code from replacing
+the profile. Other system metadata and
+selectable profiles will follow real execution needs with consistent values and
+branch-specific tests. [Exact current surface](framework.md#virtual-api-profile).

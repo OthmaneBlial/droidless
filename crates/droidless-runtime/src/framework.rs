@@ -4,9 +4,12 @@ use crate::{
 };
 use anyhow::{Context, Result, bail, ensure};
 use droidless_formats::{
-    dex::Method,
+    dex::{Field, Method},
     xml::{Element, Value},
 };
+
+// Fixed virtual API branch profile, independent of the APK and host OS.
+pub(crate) const SDK_INT: i32 = 21;
 
 pub(crate) fn known_class(class: &str) -> bool {
     crate::ui::View::for_class(class).is_some()
@@ -24,6 +27,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/os/Message;",
             "Landroid/os/Looper;",
             "Landroid/os/SystemClock;",
+            "Landroid/os/Build$VERSION;",
             "Ljava/util/HashSet;",
             "Ljava/util/HashMap;",
             "Ljava/util/ArrayList;",
@@ -35,6 +39,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/RuntimeException;",
             "Landroid/app/Activity;",
             "Landroid/app/Application;",
+            "Landroid/app/Application$ActivityLifecycleCallbacks;",
             "Landroid/content/res/Resources;",
             "Landroid/util/DisplayMetrics;",
             "Landroid/view/WindowManager;",
@@ -46,6 +51,11 @@ pub(crate) fn known_class(class: &str) -> bool {
         .contains(&class)
 }
 impl Runtime {
+    pub(crate) fn sdk_field(&self, field: &Field) -> bool {
+        field.class == "Landroid/os/Build$VERSION;"
+            && field.name == "SDK_INT"
+            && self.class_location(&field.class).is_none()
+    }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
         if method.class.starts_with("Landroid/view/")
             || method.class.starts_with("Landroid/widget/")
@@ -409,11 +419,22 @@ impl Runtime {
             }
             ("Landroid/app/Activity;", "onCreate(Landroid/os/Bundle;)V")
             | ("Landroid/app/Activity;", "onStart()V")
-            | ("Landroid/app/Activity;", "onRestart()V")
             | ("Landroid/app/Activity;", "onResume()V")
             | ("Landroid/app/Activity;", "onPause()V")
             | ("Landroid/app/Activity;", "onStop()V")
-            | ("Landroid/app/Activity;", "onDestroy()V")
+            | ("Landroid/app/Activity;", "onDestroy()V") => {
+                self.heap.get(receiver)?;
+                let callback = match method.name.as_str() {
+                    "onCreate" => "onActivityCreated",
+                    "onStart" => "onActivityStarted",
+                    "onResume" => "onActivityResumed",
+                    "onPause" => "onActivityPaused",
+                    "onStop" => "onActivityStopped",
+                    _ => "onActivityDestroyed",
+                };
+                self.dispatch_activity_callback(callback, args)?;
+            }
+            ("Landroid/app/Activity;", "onRestart()V")
             | ("Landroid/app/Application;", "onCreate()V") => {
                 self.heap.get(receiver)?;
             }

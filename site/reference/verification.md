@@ -491,3 +491,61 @@ checks produce Collections passed, Worker result: kept-consumer:payload and
 Timer done: 3. This increment changes runtime collection behavior and documentation;
 the previously verified neutral native calculator capture remains the showcase.
 GitHub Actions remain disabled, and the v0.1.0 archive retains its earlier scope.
+
+## Current source: API profile and Application observers
+
+Verified on 2026-10-01, macOS ARM64. Build.VERSION.SDK_INT reads the fixed API-21
+branch profile across GC and inherited aliases. The compiled Reflection fixture
+checks canonical VERSION class lookup and avoids subclass initialization for an
+inherited static read. Rust mutation checks reject writes, instance access and
+wrong types without changing the native value or leaving frames behind. The
+profile is independent of APK min/target SDK and host OS; it does not imply full
+API-21 support. A regression also rejects APK redefinition of the native VERSION
+class. This framework check is not a desktop Java differential run.
+
+The authored Intents APK now registers Application lifecycle observers. The
+compiled test checks delivery at Activity super calls, Application identity,
+six event types, order and navigation/Back/close. An observer unregisters itself
+and a later observer, registers a replacement and collects: the current snapshot
+still delivers the removed observer, and later events deliver the replacement.
+Registered observers survive GC; unregistered ones become collectible. A throwing
+observer removes itself and collects before raising an exception; the fault
+propagates, frames unwind and temporary snapshot roots are released.
+
+Collecting inside callbacks initially reproduced two transition failures: a
+popped pending Intent was unrooted during onPause, and an outgoing Activity could
+be unrooted between lifecycle calls. Active navigation actions now remain rooted
+until processing ends, including error cleanup; all registered Screen Activities
+remain rooted until their Screen is removed. Existing navigation regressions and
+the new observer check pass with collection at each observer event.
+
+```sh
+cargo test -p droidless-runtime --test reflection --test intents --locked
+sh tools/macos-app.sh
+artifacts/DROIDLESS.app/Contents/MacOS/DROIDLESS run --ephemeral --size 420x500 --trace-lifecycle --trace-methods fixtures/generated/intents.apk
+```
+
+Native accessibility editing set Home input to Observer-safe navigation. Clicking
+Open detail displayed Original extras; native Escape returned to Home resume 2
+with that input preserved. Native close completed with status 0. The method trace
+records 33 observer interface calls: 5 created, 6 started, 6 resumed, 6 paused,
+6 stopped and 4 destroyed. No Android reference run, saved-state recreation or
+independent multi-screen Notes workflow is claimed.
+
+The unchanged Notepad release retains SHA-256
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+It passes SDK checks and observer registration, then stops at FileInputStream:
+
+```text
+App.onCreate PC 0x0056 -> com/b/a/a/e.a() PC 0x000a -> e.b() PC 0x0006
+unsupported class Ljava/io/FileInputStream;
+```
+
+Disassembly shows that Stetho's process-name helper opens /proc/self/cmdline.
+No initializer or bundled code is skipped. This remains before Activity/UI
+creation and successful independent worker execution.
+
+Full local CI passes 41 Rust tests, warning-free Clippy, release build and 4,096
+seeded parser mutations. All 17 original calculator scenarios pass. The neutral
+showcase is retained. GitHub Actions remain disabled; v0.1.0 retains its earlier
+archive scope, and the 50% everyday-app checkpoint remains ahead.

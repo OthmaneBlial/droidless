@@ -14,7 +14,8 @@ The following are objectives, not completed capability claims.
    and live read-only Set/List views pass compiled conformance. Native map bulk
    copying and primitive Class metadata now complete more DBFlow setup in the
    unmodified Notepad. Snapshot CopyOnWriteArrayList construction now resolves;
-   startup stops at Build.VERSION.SDK_INT in Application.onCreate before Activity
+   the fixed API-21 profile and lifecycle-observer registration resolve too.
+   Startup stops at FileInputStream in Stetho's process-name lookup before Activity
    creation. APK-local lookup/reflective
    construction and inherited fields also resolve. The neutral public calculator proves boxed Double
    execution through native clicks. Follow that failure, then the actual storage/
@@ -28,7 +29,7 @@ The following are objectives, not completed capability claims.
    priorities and join/sleep remain ahead. Notepad passes deferred Thread.start;
    independently completed transaction execution remains unproven.
    Gate: a real APK completes its queued transactions and posts UI results.
-5. Virtual system metadata, lists/images/SQLite/network: follow first failures in substantial third-party
+5. Isolated file/process APIs, lists/images/SQLite/network: follow first failures in substantial third-party
    apps, with host capabilities explicit and tested.
 6. Linux native backend: common VM/View model, real Linux builds/render/input.
 7. Kotlin/AndroidX, then fragments/Compose/JNI/foreign libraries: major subsequent

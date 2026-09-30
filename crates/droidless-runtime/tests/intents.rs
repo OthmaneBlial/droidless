@@ -6,9 +6,12 @@ fn runtime() -> Runtime {
         .unwrap()
 }
 fn call(vm: &mut Runtime, name: &str, returns: &str) -> Vec<Word> {
+    call_class(vm, "MainActivity", name, returns)
+}
+fn call_class(vm: &mut Runtime, class: &str, name: &str, returns: &str) -> Vec<Word> {
     vm.invoke(
         Method {
-            class: "Lorg/droidless/intents/MainActivity;".into(),
+            class: format!("Lorg/droidless/intents/{class};"),
             name: name.into(),
             parameters: vec![],
             returns: returns.into(),
@@ -17,6 +20,106 @@ fn call(vm: &mut Runtime, name: &str, returns: &str) -> Vec<Word> {
         false,
     )
     .unwrap()
+}
+
+#[test]
+fn application_observers_snapshot_navigation_gc_and_fault_cleanup() {
+    let mut vm = runtime();
+    vm.launch().unwrap();
+    let mut expected =
+        String::from("mutator:home:create;removed:home:create;permanent:home:create;");
+    let transitions = [
+        ("home", "start"),
+        ("home", "resume"),
+        ("home", "pause"),
+        ("detail", "create"),
+        ("detail", "start"),
+        ("detail", "resume"),
+        ("home", "stop"),
+        ("detail", "pause"),
+        ("home", "start"),
+        ("home", "resume"),
+        ("detail", "stop"),
+        ("detail", "destroy"),
+        ("home", "pause"),
+        ("home", "stop"),
+        ("home", "destroy"),
+    ];
+    vm.click_text("Open detail").unwrap();
+    vm.collect();
+    vm.back().unwrap();
+    let observer = call_class(
+        &mut vm,
+        "ProbeApplication",
+        "registerTransient",
+        "Ljava/lang/Object;",
+    )[0];
+    vm.collect();
+    assert!(
+        vm.heap.get(observer).is_ok(),
+        "registered observer was collected"
+    );
+    let app = call_class(
+        &mut vm,
+        "ProbeApplication",
+        "application",
+        "Landroid/app/Application;",
+    )[0];
+    let unregister = Method {
+        class: "Landroid/app/Application;".into(),
+        name: "unregisterActivityLifecycleCallbacks".into(),
+        parameters: vec!["Landroid/app/Application$ActivityLifecycleCallbacks;".into()],
+        returns: "V".into(),
+    };
+    vm.invoke(unregister, vec![app, observer], true).unwrap();
+    vm.collect();
+    assert!(
+        vm.heap.get(observer).is_err(),
+        "unregistered observer retained a root"
+    );
+    vm.close().unwrap();
+    for (screen, event) in transitions {
+        for observer in ["permanent", "late"] {
+            expected.push_str(&format!("{observer}:{screen}:{event};"));
+        }
+    }
+    let log = call_class(
+        &mut vm,
+        "ProbeApplication",
+        "eventLog",
+        "Ljava/lang/String;",
+    )[0];
+    assert_eq!(vm.heap.text(log).unwrap(), expected);
+
+    let mut vm = runtime();
+    vm.launch().unwrap();
+    let observer = call_class(
+        &mut vm,
+        "ProbeApplication",
+        "registerFault",
+        "Ljava/lang/Object;",
+    )[0];
+    let activity = vm.activity.unwrap();
+    let error = vm
+        .invoke(
+            Method {
+                class: "Landroid/app/Activity;".into(),
+                name: "onStart".into(),
+                parameters: vec![],
+                returns: "V".into(),
+            },
+            vec![activity],
+            false,
+        )
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("observer failed"));
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(observer).is_err(),
+        "failed dispatch retained its snapshot"
+    );
+    vm.close().unwrap();
 }
 
 #[test]
