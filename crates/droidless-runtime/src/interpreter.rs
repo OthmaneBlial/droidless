@@ -256,12 +256,7 @@ impl Runtime {
                     .get(usize::from(u!(1)))
                     .context("invalid const-class type")?
                     .clone();
-                let v = self.heap.instance("Ljava/lang/Class;")?;
-                let name = self.intern(class)?;
-                self.heap
-                    .get_mut(v)?
-                    .fields
-                    .insert("name".into(), vec![name]);
+                let v = self.class_object(&class)?;
                 put!(a, v);
                 next = 2;
             }

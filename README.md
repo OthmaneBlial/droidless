@@ -124,9 +124,10 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🖱️ Input | Native calculator mouse callbacks, Counter text/key callbacks and clean close |
 | 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish and lifecycle — current source |
 | 📓 Persistent preferences | Typed SharedPreferences, isolated package data, native authored-note save/restart/clear — current source |
-| 🛠️ Next up | General app files, collections, lists, images and timers; a substantial unmodified notes/todo APK |
+| 🗂️ Java collections | Bounded HashSet/HashMap, guest equality, Set iterators and live read-only Set views — current source |
+| 🛠️ Next up | Dynamic class loading, general app files, lists, images and timers; a substantial unmodified notes/todo APK |
 
-The published **v0.1.0 archive predates navigation and persistence**. Current source capability
+The published **v0.1.0 archive predates navigation, persistence and collections**. Current source capability
 is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
 and games remain future compatibility work. [Exact limits](docs/compatibility.md).
 
@@ -139,7 +140,8 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Counter | [Authored Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks, resources and VM conformance |
 | Intents | [Authored Java/XML fixture](examples/intents/MainActivity.java) | Native screen transitions, retained text/title, Back override, extras and lifecycle/GC checks |
 | Preferences | [Authored Java/XML fixture](examples/preferences/MainActivity.java) | Native UTF-8 paste, save/restart/clear, typed values and package/path isolation |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Parsed; application startup stops at unsupported HashSet. No UI or working-notes claim |
+| Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless guest equality, nulls, iteration, live read-only views, Class keys, GC and entry limits |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Collection setup resolves; DBFlow startup stops at Class.forName. No UI or working-notes claim |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).

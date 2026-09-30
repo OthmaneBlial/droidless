@@ -396,6 +396,20 @@ impl Runtime {
         self.interned.insert(text, word);
         Ok(word)
     }
+    pub(crate) fn class_object(&mut self, class: &str) -> Result<Word> {
+        let key = format!("droidless:class:{class}");
+        if let Some(word) = self.statics.get(&key).and_then(|v| v.first()) {
+            return Ok(*word);
+        }
+        let object = self.heap.instance("Ljava/lang/Class;")?;
+        let name = self.intern(class.to_owned())?;
+        self.heap
+            .get_mut(object)?
+            .fields
+            .insert("name".into(), vec![name]);
+        self.statics.insert(key, vec![object]);
+        Ok(object)
+    }
     pub(crate) fn class_location(&self, class: &str) -> Option<(usize, usize)> {
         self.apk.dex.iter().enumerate().find_map(|(d, dex)| {
             dex.classes
@@ -412,6 +426,9 @@ impl Runtime {
             return Some(parent.into());
         }
         let parent = match class {
+            "Ljava/util/HashSet;" => "Ljava/util/AbstractSet;",
+            "Ljava/util/HashMap;" => "Ljava/util/AbstractMap;",
+            "Ljava/util/AbstractSet;" => "Ljava/util/AbstractCollection;",
             "Landroid/widget/Button;" | "Landroid/widget/EditText;" => "Landroid/widget/TextView;",
             "Landroid/widget/TextView;" | "Landroid/view/ViewGroup;" => "Landroid/view/View;",
             "Landroid/widget/LinearLayout;" | "Landroid/widget/FrameLayout;" => {
@@ -467,6 +484,42 @@ impl Runtime {
             if current == "Ljava/lang/String;" || current == "Ljava/lang/StringBuilder;" {
                 work.push("Ljava/lang/CharSequence;".into());
                 work.push("Ljava/io/Serializable;".into());
+            }
+            if current == "Ljava/util/HashSet;" {
+                work.extend(
+                    [
+                        "Ljava/util/Set;",
+                        "Ljava/util/Collection;",
+                        "Ljava/lang/Iterable;",
+                        "Ljava/lang/Cloneable;",
+                        "Ljava/io/Serializable;",
+                    ]
+                    .map(String::from),
+                );
+            }
+            if current == "Ldroidless/runtime/SetIterator;" {
+                work.push("Ljava/util/Iterator;".into());
+            }
+            if current == "Ldroidless/runtime/UnmodifiableSet;" {
+                work.extend(
+                    [
+                        "Ljava/util/Set;",
+                        "Ljava/util/Collection;",
+                        "Ljava/lang/Iterable;",
+                        "Ljava/io/Serializable;",
+                    ]
+                    .map(String::from),
+                );
+            }
+            if current == "Ljava/util/HashMap;" {
+                work.extend(
+                    [
+                        "Ljava/util/Map;",
+                        "Ljava/lang/Cloneable;",
+                        "Ljava/io/Serializable;",
+                    ]
+                    .map(String::from),
+                );
             }
             if let Some(parent) = self.parent(&current) {
                 work.push(parent);

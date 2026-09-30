@@ -63,6 +63,15 @@
       "notes": "Authored fixture: typed/staged preferences, native save/restart/clear and package/path/link isolation. Apply is synchronous. Not independent notes-app evidence."
     },
     {
+      "package": "org.droidless.collections",
+      "origin": "droidless-fixture",
+      "status": "ui-created",
+      "native_ui": false,
+      "headless_conformance_verified": true,
+      "source": "examples/collections",
+      "notes": "Authored compiled fixture: guest equals/nulls, Set/Map operations, iterator exceptions, live read-only views, Class identity/package metadata, GC retention and bounded entries. No native interaction or independent notes-app evidence."
+    },
+    {
       "package": "ir.cafebazaar.notepad",
       "version": "1.0",
       "origin": "third-party",
@@ -70,8 +79,8 @@
       "sha256": "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f",
       "status": "startup-blocked",
       "native_ui": false,
-      "first_failure": "unsupported class Ljava/util/HashSet; in DBFlow initialization at PC 0x0003",
-      "notes": "Parsed; Application.getApplicationContext resolves. No Activity/UI or notes workflow reached. Original release APK unmodified and not redistributed.",
+      "first_failure": "unsupported method Ljava/lang/Class;->forName(Ljava/lang/String;)Ljava/lang/Class; in DBFlow FlowManager.a at PC 0x0004 (Application.onCreate PC 0x0016)",
+      "notes": "Parsed; application context, HashSet/HashMap setup and package metadata resolve. No Activity/UI or notes workflow reached. Original release APK unmodified and not redistributed.",
       "release_tag": "v1.0.0"
     }
   ]

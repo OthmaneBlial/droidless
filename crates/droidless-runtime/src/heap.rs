@@ -24,6 +24,10 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         | "Ljava/lang/NegativeArraySizeException;"
         | "Ljava/lang/ArrayStoreException;"
         | "Ljava/lang/IllegalArgumentException;"
+        | "Ljava/lang/IllegalStateException;"
+        | "Ljava/lang/UnsupportedOperationException;"
+        | "Ljava/util/NoSuchElementException;"
+        | "Ljava/util/ConcurrentModificationException;"
         | "Ljava/lang/IndexOutOfBoundsException;" => "Ljava/lang/RuntimeException;",
         "Ljava/lang/NumberFormatException;" => "Ljava/lang/IllegalArgumentException;",
         "Ljava/lang/ArrayIndexOutOfBoundsException;"
@@ -95,6 +99,14 @@ pub enum Data {
         values: Vec<Vec<Word>>,
     },
     Bundle(BTreeMap<String, (String, Vec<Word>)>),
+    Collection {
+        values: Vec<Word>,
+        version: u32,
+    },
+    Map {
+        entries: Vec<(Word, Word)>,
+        version: u32,
+    },
 }
 #[derive(Clone, Debug)]
 pub struct Object {
@@ -186,6 +198,12 @@ impl Heap {
             }
             if let Data::Bundle(values) = &object.data {
                 work.extend(values.values().flat_map(|(_, words)| words).copied());
+            }
+            if let Data::Collection { values, .. } = &object.data {
+                work.extend(values.iter().copied());
+            }
+            if let Data::Map { entries, .. } = &object.data {
+                work.extend(entries.iter().flat_map(|(key, value)| [*key, *value]));
             }
             if let Some(view) = &object.view {
                 work.extend(view.children.iter().copied());

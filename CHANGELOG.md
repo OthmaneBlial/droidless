@@ -2,14 +2,20 @@
 
 ## Unreleased
 
+- Bounded HashSet/HashMap with guest equals, Set iterators, live unmodifiable Set
+  views, GC retention and explicit unsupported methods. Compiled conformance
+  and capacity/error regressions bring local CI to 24 Rust tests.
+- Canonical Class literal identity and basic package metadata. Unmodified Notepad
+  now passes collection setup and stops at Class.forName in DBFlow; no UI claim.
+
 - Isolated typed SharedPreferences with staged editors, atomic persistent writes,
   package/case/link checks and explicit storage ceilings. `--data-dir`,
   `--ephemeral` and headless `--input` controls.
 - Authored preferences APK verifies native UTF-8 paste/save/restart/clear and
   five persistence/error/isolation regressions. Standard AppKit Edit menu fixes
   native paste; apply remains synchronous pending scheduling support.
-- Unmodified Notepad 1.0.0 startup reaches DBFlow and stops at unsupported HashSet;
-  this is a diagnosed failure, not working notes-app compatibility.
+- At the storage checkpoint, Notepad 1.0.0 reached DBFlow and stopped at HashSet;
+  the collections increment above records its current diagnosed startup failure.
 
 - Playful lime/ink identity, custom SVG robot/banner/runtime diagram, refreshed
   README and portable website with self-hosted OFL fonts and accessible motion.

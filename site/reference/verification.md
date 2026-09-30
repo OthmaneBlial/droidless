@@ -113,4 +113,27 @@ now resolves; DBFlow initialization then fails in
 `Lcom/raizlabs/android/dbflow/config/h;-><init>(Landroid/content/Context;)V`,
 PC `0x0003`, on unsupported `Ljava/util/HashSet;`. No Activity/UI or notes workflow
 was reached. The APK was neither changed nor redistributed. Next work follows
-generic Java collections and the actual subsequent failures.
+generic Java collections and the actual subsequent failures. This records the
+first storage checkpoint; the following increment moves that startup boundary.
+
+## Current source: Java collections
+
+The authored Collections APK executes its own conformance code and emits
+`Collections passed` in the headless View snapshot. It checks null/String/custom
+guest equality, Set and Map returns, iterator removal/exhaustion/fail-fast errors,
+live read-only views, mutation during equals callbacks, and canonical Class keys/
+package metadata. Rust integration checks retain iterator owners and Map keys/
+values across GC, and enforce 16,384-entry limits without changing the store.
+No native collection-fixture interaction is claimed.
+
+Full local CI passes 24 Rust tests, 4,096 parser mutations, warning-free Clippy/
+release build and all ten unchanged KasCalc scenarios.
+
+The same unmodified Notepad APK and SHA-256 were retried with the release build.
+HashSet/HashMap setup and package metadata now resolve. Application.onCreate
+reaches `Lcom/raizlabs/android/dbflow/config/FlowManager;->a(Lcom/raizlabs/android/dbflow/config/g;)V`,
+PC `0x0004`, and fails on
+`Ljava/lang/Class;->forName(Ljava/lang/String;)Ljava/lang/Class;`.
+The parent Application method is at PC `0x0016`. No Activity/UI or working notes
+workflow was reached. Dynamic class loading is the next observed blocker; the
+APK remains unchanged and is not redistributed.

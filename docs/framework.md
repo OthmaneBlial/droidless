@@ -33,6 +33,15 @@ disk persistence is confined to host-selected per-package directories. Apply is
 currently synchronous. MODE_PRIVATE only; listeners/String sets/files/SQLite remain
 unsupported. [Exact storage semantics and boundaries](storage.md).
 
+## Java collections subset
+
+HashSet/HashMap provide bounded storage, nulls and guest virtual equals. Set
+iteration supports removal and catchable invalid-state/exhaustion/concurrent-change
+errors. Collections.unmodifiableSet is a live read-only view, including its
+iterator. Class literals have stable identity; Class.getPackage/Package.getName
+expose basic metadata. Bulk operations, Map views and dynamic class loading remain
+unsupported. [Exact methods and ceilings](collections.md).
+
 Exact method signatures map to DROIDLESS behavior. setContentView accepts a View
 or layout resource; findViewById searches the guest graph. Widget mutations alter
 objects read by rendering. Window metrics use the logical host dimensions and

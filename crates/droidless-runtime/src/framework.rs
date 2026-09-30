@@ -16,6 +16,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/StringBuilder;",
             "Ljava/lang/String;",
             "Ljava/lang/Class;",
+            "Ljava/util/HashSet;",
+            "Ljava/util/HashMap;",
             "Ljava/lang/Throwable;",
             "Ljava/lang/Exception;",
             "Ljava/lang/RuntimeException;",
@@ -42,12 +44,61 @@ impl Runtime {
         if let Some(result) = self.preference_native(method, args)? {
             return Ok(Some(result));
         }
+        if let Some(result) = self.collection_native(method, args)? {
+            return Ok(Some(result));
+        }
         let signature = method.signature();
         let arg =
             |n| -> Result<Word> { args.get(n).copied().context("framework argument missing") };
         let receiver = args.first().copied().unwrap_or(Word::ZERO);
         let mut result = vec![];
         match (method.class.as_str(), signature.as_str()) {
+            ("Ljava/lang/Class;", "getPackage()Ljava/lang/Package;") => {
+                ensure!(
+                    self.heap.get(receiver)?.class == "Ljava/lang/Class;",
+                    "invalid Class receiver"
+                );
+                let name = *self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("name")
+                    .and_then(|v| v.first())
+                    .context("Class has no descriptor")?;
+                let descriptor = self.heap.text(name)?;
+                let package = descriptor
+                    .strip_prefix('L')
+                    .and_then(|s| s.strip_suffix(';'))
+                    .and_then(|s| s.rsplit_once('/'))
+                    .map(|(p, _)| p.replace('/', "."));
+                let object = if let Some(package) = package {
+                    let key = format!("droidless:package:{package}");
+                    if let Some(object) = self.statics.get(&key).and_then(|v| v.first()) {
+                        *object
+                    } else {
+                        let object = self.heap.instance("Ljava/lang/Package;")?;
+                        let name = self.heap.string(package)?;
+                        self.heap
+                            .get_mut(object)?
+                            .fields
+                            .insert("name".into(), vec![name]);
+                        self.statics.insert(key, vec![object]);
+                        object
+                    }
+                } else {
+                    Word::ZERO
+                };
+                result.push(object);
+            }
+            ("Ljava/lang/Package;", "getName()Ljava/lang/String;") => result.push(
+                *self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("name")
+                    .and_then(|v| v.first())
+                    .context("uninitialized Package")?,
+            ),
             ("Landroid/view/KeyEvent;", "getAction()I") => {
                 result = self
                     .heap
