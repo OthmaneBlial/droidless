@@ -39,7 +39,8 @@ public class MainActivity extends Activity {
         }
     }
     public static int contract() {
-        if (ListContract.contract() != 1 || ListContract.mutationContract() != 1) return 0;
+        if (ListContract.contract() != 1 || ListContract.mutationContract() != 1
+            || QueueContract.contract() != 1) return 0;
         if (MainActivity.class != MainActivity.class || MainActivity.class == (Object) Key.class) return 0;
         if (!"org.droidless.collections".equals(MainActivity.class.getPackage().getName()) || String[].class.getPackage() != null) return 0;
         Map<Class<?>,String> classes = new HashMap<Class<?>,String>();

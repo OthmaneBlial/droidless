@@ -37,6 +37,7 @@ fn guest_equality_nulls_iteration_live_readonly_views_and_gc() {
     assert_eq!(vm.snapshot().unwrap().view.text, "Collections passed");
     call(&mut vm, "retain", "V");
     call_class(&mut vm, "ListContract", "retain", "V");
+    call_class(&mut vm, "QueueContract", "retain", "V");
     vm.collect();
     let next = call(&mut vm, "nextRetained", "Ljava/lang/String;")[0];
     assert_eq!(vm.heap.text(next).unwrap(), "iterator keeps its owner");
@@ -49,6 +50,13 @@ fn guest_equality_nulls_iteration_live_readonly_views_and_gc() {
         "Ljava/lang/String;",
     )[0];
     assert_eq!(vm.heap.text(next).unwrap(), "list iterator keeps its owner");
+    let next = call_class(
+        &mut vm,
+        "QueueContract",
+        "pollRetained",
+        "Ljava/lang/String;",
+    )[0];
+    assert_eq!(vm.heap.text(next).unwrap(), "queue retains its element");
 }
 
 #[test]

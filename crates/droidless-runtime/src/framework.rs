@@ -28,6 +28,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/util/HashMap;",
             "Ljava/util/ArrayList;",
             "Ljava/util/LinkedHashMap;",
+            "Ljava/util/concurrent/LinkedBlockingQueue;",
             "Ljava/lang/Throwable;",
             "Ljava/lang/Exception;",
             "Ljava/lang/RuntimeException;",
@@ -55,6 +56,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.collection_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.queue_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.reflection_native(method, args)? {

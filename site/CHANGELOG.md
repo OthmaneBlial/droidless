@@ -2,13 +2,21 @@
 
 ## Unreleased
 
+- Immediate LinkedBlockingQueue FIFO operations with declared capacity, duplicates,
+  null rejection, guest equality, inherited override dispatch and GC retention.
+  The same immediate contract passes in compiled DEX and desktop Java. Waiting
+  and workers remain unsupported. Local CI passes 33 Rust tests, 4,096 mutations
+  and 17 original calculator scenarios.
+- Unmodified Notepad resolves queue construction and now stops at Thread.start in
+  DBFlow startup, before Activity/UI creation. No initializer is skipped.
+
 - Main Handler/Looper/Message queue with deferred/delayed APK callbacks, identity
   cancellation, virtual dispatch, GC roots and bounded clock/queue execution.
   Native authored timer, cancellation and delayed finish verified; deterministic
   `--advance-ms` replay and unstarted Thread metadata/manual run support.
   Thread.start and blocking queues remain unsupported. Local CI passes 32 Rust
   tests, 4,096 parser mutations and 17 original calculator scenarios.
-- Unmodified Notepad now passes Thread(String) construction and stops at
+- At the scheduling checkpoint unmodified Notepad passed Thread(String) and stopped at
   LinkedBlockingQueue in DBFlow startup, before Activity/UI creation.
 
 - Bounded ArrayList with ordered duplicates/nulls, indexed operations, guest

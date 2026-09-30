@@ -6,6 +6,7 @@ mod framework;
 pub mod heap;
 mod interpreter;
 mod preferences;
+mod queues;
 mod reflection;
 mod scheduling;
 mod storage;

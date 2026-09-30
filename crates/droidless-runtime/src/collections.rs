@@ -11,7 +11,7 @@ const READ_ONLY_SET: &str = "Ldroidless/runtime/UnmodifiableSet;";
 const LIMIT: usize = 16_384;
 
 impl Runtime {
-    fn object_equal(&mut self, key: Word, value: Word, identity: bool) -> Result<bool> {
+    pub(crate) fn object_equal(&mut self, key: Word, value: Word, identity: bool) -> Result<bool> {
         key.reference()?;
         value.reference()?;
         if key == value && (identity || key == Word::ZERO) {
@@ -36,13 +36,13 @@ impl Runtime {
             .int()?
             != 0)
     }
-    fn collection(&self, owner: Word) -> Result<(&[Word], u32)> {
+    pub(crate) fn collection(&self, owner: Word) -> Result<(&[Word], u32)> {
         let Data::Collection { values, version } = &self.heap.get(owner)?.data else {
             bail!("uninitialized collection");
         };
         Ok((values, *version))
     }
-    fn change_collection(&mut self, owner: Word, values: Vec<Word>) -> Result<()> {
+    pub(crate) fn change_collection(&mut self, owner: Word, values: Vec<Word>) -> Result<()> {
         ensure!(
             values.len() <= LIMIT,
             "collection entry limit reached ({LIMIT})"

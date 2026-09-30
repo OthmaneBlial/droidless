@@ -12,14 +12,15 @@ The following are objectives, not completed capability claims.
    authored native fixture. Isolated SharedPreferences save/restart/clear are also
    proven in an authored native fixture. Basic HashSet/ArrayList/HashMap/LinkedHashMap
    and live read-only Set views pass compiled conformance. Unmodified Notepad
-   startup now reaches LinkedBlockingQueue in DBFlow after Thread(String) and
-   collection constructors,
+   startup now reaches Thread.start in DBFlow after LinkedBlockingQueue and
+   Thread(String) construction, collections,
    APK-local lookup/reflective construction and inherited
    field resolution. The new neutral public calculator also proves boxed Double
    execution through native clicks. Follow that failure, then the actual storage/
    UI needs of a real notes/todo APK with restart/persistence tests.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
-   callbacks are proven. Follow Notepad's blocking-queue requirement with actual
+   callbacks are proven. Immediate FIFO queue operations also pass compiled and
+   desktop Java conformance. Follow Notepad's Thread.start requirement with actual
    guest worker execution; do not replace Thread.start with inline execution.
    Gate: a real APK completes its queued transactions and posts UI results.
 5. Lists/images/SQLite/network: follow first failures in substantial third-party

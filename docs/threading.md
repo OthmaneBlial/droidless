@@ -3,7 +3,8 @@
 Current source owns a bounded main-thread message queue. Handler callbacks execute
 the APK's DEX in the same interpreter as lifecycle and input callbacks. Posting
 does not run the callback inline. This is a main Looper subset; background guest
-execution and blocking queues remain unsupported.
+execution and blocking waits remain unsupported. LinkedBlockingQueue now has an
+[immediate FIFO subset](collections.md#immediate-fifo-queues), without take/put or waiting.
 
 ## Supported surface
 
@@ -53,7 +54,7 @@ stable identity, and unstarted Threads have names and unique IDs. Calling run()
 manually is ordinary synchronous execution. **Thread.start fails explicitly**;
 it does not substitute a synchronous run. Thread priority, sleep/join/interrupt,
 worker Loopers, HandlerThread, synchronization barriers, java.util.Timer,
-executors and blocking queues are outside this subset.
+executors and blocking queue waits are outside this subset.
 
 ## Evidence and reproduction
 
@@ -80,11 +81,12 @@ emitted onPause/onStop/onDestroy, exiting with status 0.
 
 ![Actual authored Scheduling APK after three native timer callbacks](assets/scheduling-native.png)
 
-The unchanged Notepad v1.0.0 release now passes Thread(String) construction and
-stops at `Ljava/util/concurrent/LinkedBlockingQueue;`, in DBFlow's
-`f/b/a/b.<init>(String)` at PC `0x0006`, under Application.onCreate PC `0x0016`.
-It still reaches no Activity/UI or notes workflow. Blocking transactions and real
-worker execution are the next diagnosed requirements. The 50% checkpoint remains
+At this scheduling checkpoint the unchanged Notepad v1.0.0 release passed
+Thread(String) construction and stopped at LinkedBlockingQueue construction.
+The immediate-queue increment now resolves that constructor and stops at
+Thread.start, in DBFlow's `f/b/a/b.a()` at PC `0x0007`, under Application.onCreate
+PC `0x0016`. It still reaches no Activity/UI or notes workflow. Blocking transactions
+and real worker execution are the next diagnosed requirements. The 50% checkpoint remains
 ahead; the v0.1.0 release archive predates this scheduling support.
 
 API references: [Android Handler](https://developer.android.com/reference/android/os/Handler),

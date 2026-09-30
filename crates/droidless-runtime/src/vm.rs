@@ -502,9 +502,10 @@ impl Runtime {
             "Ljava/util/HashMap;" => "Ljava/util/AbstractMap;",
             "Ljava/util/LinkedHashMap;" => "Ljava/util/HashMap;",
             "Ljava/util/ArrayList;" => "Ljava/util/AbstractList;",
-            "Ljava/util/AbstractSet;" | "Ljava/util/AbstractList;" => {
-                "Ljava/util/AbstractCollection;"
-            }
+            "Ljava/util/concurrent/LinkedBlockingQueue;" => "Ljava/util/AbstractQueue;",
+            "Ljava/util/AbstractSet;"
+            | "Ljava/util/AbstractList;"
+            | "Ljava/util/AbstractQueue;" => "Ljava/util/AbstractCollection;",
             "Landroid/widget/Button;" | "Landroid/widget/EditText;" => "Landroid/widget/TextView;",
             "Landroid/widget/TextView;" | "Landroid/view/ViewGroup;" => "Landroid/view/View;",
             "Landroid/widget/LinearLayout;" | "Landroid/widget/FrameLayout;" => {
@@ -564,6 +565,18 @@ impl Runtime {
             }
             if current == "Ljava/lang/Thread;" {
                 work.push("Ljava/lang/Runnable;".into());
+            }
+            if current == "Ljava/util/concurrent/LinkedBlockingQueue;" {
+                work.extend(
+                    [
+                        "Ljava/util/concurrent/BlockingQueue;",
+                        "Ljava/util/Queue;",
+                        "Ljava/util/Collection;",
+                        "Ljava/lang/Iterable;",
+                        "Ljava/io/Serializable;",
+                    ]
+                    .map(String::from),
+                );
             }
             if current == "Ljava/util/HashSet;" {
                 work.extend(

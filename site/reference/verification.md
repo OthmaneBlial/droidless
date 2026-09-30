@@ -245,7 +245,7 @@ also rechecked after the event-loop change with native 7 + 5 = 12 and clean clos
 
 The unchanged Notepad release still has SHA-256
 `2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
-Thread(String) now resolves. Its first failure is unsupported class
+At the scheduling checkpoint Thread(String) resolved. Its first failure was unsupported class
 `Ljava/util/concurrent/LinkedBlockingQueue;`, in
 `Lcom/raizlabs/android/dbflow/f/b/a/b;-><init>(Ljava/lang/String;)V` at PC `0x0006`,
 under Application.onCreate PC `0x0016`. No Activity/UI or notes workflow is reached.
@@ -255,3 +255,33 @@ Full local CI passes 32 Rust tests, 4,096 seeded parser mutations, warning-free
 Clippy and release build. All 17 original calculator scenarios pass. GitHub
 Actions stay disabled. This is current-source support; the v0.1.0 archive retains
 its older scope. The 50% everyday-app checkpoint has not been achieved.
+
+## Current source: immediate FIFO queue operations
+
+The authored Collections APK additionally executes QueueContract: default/fixed
+capacity, invalid capacity faults, FIFO order and duplicates, null insertion
+rejection, empty/full behavior, head versus removal methods, first equal removal,
+guest equals even on identical references and original equality exceptions.
+Inherited add/element/remove/isEmpty dispatch APK offer/peek/poll/size overrides.
+The same immediate contract passes on Java 17.0.19 with Java 8 source/target.
+Its equals callbacks invoke System.gc; retained queue elements also survive an
+explicit runtime collection before later removal. [Exact queue scope](collections.md#immediate-fifo-queues).
+
+A separate regression checks the 16,384-entry resource ceiling without changing
+values/version, rejection of take/put/iterator/toString without consuming data,
+and explicit rejection of structural mutation during guest equals with clean
+frames. These guards are implementation limits, not Java differential claims.
+No blocking/concurrent queue execution or Android reference run is claimed.
+
+The original Notepad release was retried with the new release build, retaining
+SHA-256 `2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+LinkedBlockingQueue construction now resolves. Startup reaches the DBFlow worker
+start path, then stops at `unsupported Thread.start: background guest execution
+is not implemented`, from `f/b/a/b.a()` at PC `0x0007`, called by `d/c.<init>` at
+PC `0x000e`, under Application.onCreate PC `0x0016`. No Activity/UI or notes
+workflow is reached; there is no synchronous worker substitute or skipped initializer.
+
+Full local CI passes 33 Rust tests, 4,096 seeded parser mutations, warning-free
+Clippy and release build. The 17 original calculator cases still pass. The new
+queue subset is current-source support; v0.1.0 retains its older scope. The 50%
+everyday-app checkpoint remains ahead and the goal stays active.

@@ -47,6 +47,9 @@ Set/List iterators
 support removal and fail-fast next/remove. Collections.unmodifiableSet stays live
 and rejects mutation. Canonical Class literals work as Map keys, with basic package
 metadata. [Collections methods, evidence and ceilings](collections.md).
+LinkedBlockingQueue supports an immediate FIFO subset with fixed/default capacity,
+duplicates, null rejection and inherited override dispatch. take/put, timed waits
+and concurrency remain unsupported. [Queue limits](collections.md#immediate-fifo-queues).
 
 APK-local Class.forName(String), getName/getClass and no-argument construction
 execute guest code. Field opcodes canonicalize inherited declaring owners.
@@ -69,7 +72,7 @@ unsupported. [Exact scheduling methods, clocks and limits](threading.md).
 - Java float string scientific-notation edge cases differ from Rust formatting.
 - Failed class initialization is sticky and retains causes; concurrent initialization
   is unsupported. Instruction/field/method checks are not a complete Java type verifier.
-- No background guest threads/blocking queues/worker Loopers/general Java timers.
+- No background guest threads/blocking waits/worker Loopers/general Java timers.
 - No bulk collections/Map views/custom class loaders/method or field reflection/general file I/O/SQLite/images/networking/JNI/JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.
