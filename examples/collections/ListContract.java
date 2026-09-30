@@ -4,6 +4,7 @@ import java.io.Serializable;
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -16,6 +17,7 @@ public class ListContract {
     static List<Object> mutating;
     static List<Object> replacing;
     static Iterator<Object> retained;
+    static List<Object> retainedView;
     static class Key {
         final int value;
         Key(int value) { this.value = value; }
@@ -38,6 +40,17 @@ public class ListContract {
         static int removals;
         public Object remove(int index) { removals++; return super.remove(index); }
     }
+    static class ReadList extends ChildList {
+        static int reads;
+        public Object get(int index) { reads++; System.gc(); return super.get(index); }
+    }
+    static class SharedIteratorList extends ArrayList<Object> {
+        Iterator<Object> shared;
+        public Iterator<Object> iterator() {
+            if (shared == null) shared = super.iterator();
+            return shared;
+        }
+    }
     static class EvictingMap extends LinkedHashMap<Object,Object> {
         protected boolean removeEldestEntry(Map.Entry<Object,Object> eldest) { return true; }
     }
@@ -45,6 +58,7 @@ public class ListContract {
         if (!condition) throw new IllegalStateException(message);
     }
     public static int contract() {
+        check(readOnlyContract() == 1, "read-only list contract");
         try { new ArrayList<Object>(-1); return 0; } catch (IllegalArgumentException expected) {}
         List<Object> list = new ChildList();
         check(list instanceof AbstractList && list instanceof RandomAccess
@@ -102,6 +116,49 @@ public class ListContract {
         map.clear(); check(map.isEmpty(), "linked map clear");
         return 1;
     }
+    public static int readOnlyContract() {
+        List<Object> backing = new ReadList();
+        backing.add("first"); backing.add(null); backing.add("first");
+        List<Object> view = Collections.unmodifiableList(backing);
+        check(view instanceof RandomAccess && view instanceof Serializable
+            && !(view instanceof Cloneable), "read-only hierarchy");
+        ReadList.reads = 0;
+        check("first".equals(view.get(0)) && ReadList.reads == 1, "virtual read and GC");
+        check(view.size() == 3 && !view.isEmpty() && view.contains(null)
+            && view.indexOf("first") == 0 && view.lastIndexOf("first") == 2, "read-only searches");
+        backing.set(0, "changed"); backing.add("last");
+        check(view.size() == 4 && "changed".equals(view.get(0)), "live backing view");
+        view = Collections.unmodifiableList(view);
+        check(view instanceof RandomAccess && view.get(1) == null, "nested view");
+        Iterator<Object> iterator = view.iterator();
+        try { iterator.remove(); return 0; } catch (UnsupportedOperationException expected) {}
+        check("changed".equals(iterator.next()), "read-only iteration");
+        try { iterator.remove(); return 0; } catch (UnsupportedOperationException expected) {}
+        ChildList.removals = 0;
+        try { view.add("bad"); return 0; } catch (UnsupportedOperationException expected) {}
+        try { view.add(-1,"bad"); return 0; } catch (UnsupportedOperationException expected) {}
+        try { view.set(-1,"bad"); return 0; } catch (UnsupportedOperationException expected) {}
+        try { view.remove(-1); return 0; } catch (UnsupportedOperationException expected) {}
+        try { view.remove("absent"); return 0; } catch (UnsupportedOperationException expected) {}
+        try { view.clear(); return 0; } catch (UnsupportedOperationException expected) {}
+        try { view.addAll(new ArrayList<Object>()); return 0; } catch (UnsupportedOperationException expected) {}
+        try { view.addAll(-1,null); return 0; } catch (UnsupportedOperationException expected) {}
+        try { view.removeAll(null); return 0; } catch (UnsupportedOperationException expected) {}
+        try { view.retainAll(null); return 0; } catch (UnsupportedOperationException expected) {}
+        check(backing.size() == 4 && ChildList.removals == 0, "mutations leave backing intact");
+        backing.add("structural change");
+        try { iterator.next(); return 0; } catch (ConcurrentModificationException expected) {}
+        try { Collections.unmodifiableList(null); return 0; } catch (NullPointerException expected) {}
+        try { view.get(-1); return 0; } catch (IndexOutOfBoundsException expected) {}
+        List<Object> shared = new SharedIteratorList(); shared.add("shared");
+        Iterator<Object> mutable = shared.iterator();
+        Iterator<Object> readOnly = Collections.unmodifiableList(shared).iterator();
+        check("shared".equals(readOnly.next()), "read-only delegates the shared cursor");
+        try { readOnly.remove(); return 0; } catch (UnsupportedOperationException expected) {}
+        mutable.remove();
+        check(shared.isEmpty(), "read-only view leaves mutable alias writable");
+        return 1;
+    }
     public static int mutationContract() {
         mutating = new ArrayList<Object>(); mutating.add("seed");
         try { mutating.contains(new MutatingKey()); return 0; }
@@ -111,9 +168,11 @@ public class ListContract {
     public static void retain() {
         List<Object> list = new ArrayList<Object>();
         list.add(new StringBuilder().append("list iterator keeps its owner").toString());
-        retained = list.iterator();
+        retainedView = Collections.unmodifiableList(list);
+        retained = retainedView.iterator();
     }
     public static String nextRetained() { return (String) retained.next(); }
+    public static String retainedViewValue() { return (String) retainedView.get(0); }
     public static void main(String[] args) {
         check(contract() == 1, "list contract failed");
         System.out.println("List contract passed");

@@ -43,16 +43,18 @@ and isolated persistence are verified. Apply is synchronous; preference listener
 String sets and general file APIs remain unsupported. [Storage limits](storage.md).
 HashSet/ArrayList/HashMap and basic LinkedHashMap add bounded operations using
 guest equals; lists preserve duplicates/order and support indexed operations.
+Native HashMap/LinkedHashMap putAll copies bounded entries with snapshot GC roots.
 Set/List iterators
-support removal and fail-fast next/remove. Collections.unmodifiableSet stays live
-and rejects mutation. Canonical Class literals work as Map keys, with basic package
+support removal and fail-fast next/remove. Collections.unmodifiableSet/unmodifiableList stay live
+and reject mutation. Canonical Class literals work as Map keys, with basic package
 metadata. [Collections methods, evidence and ceilings](collections.md).
 LinkedBlockingQueue supports an immediate FIFO subset with fixed/default capacity,
 duplicates, null rejection and inherited override dispatch. Worker take/put waits
 retain managed frames; timed waits and parallel execution remain unsupported. [Queue limits](collections.md#immediate-fifo-queues).
 
 APK-local Class.forName(String), getName/getClass and no-argument construction
-execute guest code. Field opcodes canonicalize inherited declaring owners.
+execute guest code. Field opcodes canonicalize inherited declaring owners. Native wrapper TYPE fields
+supply canonical primitive Class metadata, with final-write and wrong-kind faults.
 [Reflection scope and evidence](reflection.md).
 
 Main Handler/Looper/Message scheduling runs deferred and delayed guest callbacks,
@@ -60,7 +62,7 @@ honors dispatch overrides, cancels by identity and retains pending/active payloa
 through GC. Native timers and headless manual time are verified in an authored
 fixture. Deferred workers execute DEX on a serial shared-heap host executor;
 queue/monitor waits, interruption and worker-to-main result posting pass headless
-checks. Native worker interaction remains unverified. [Exact scheduling methods, clocks and limits](threading.md).
+checks. The authored native Start worker action also delivers its main-thread result and closes cleanly. [Exact scheduling methods, clocks and limits](threading.md).
 
 ## Known ceilings
 
@@ -75,7 +77,9 @@ checks. Native worker interaction remains unverified. [Exact scheduling methods,
   is unsupported. Instruction/field/method checks are not a complete Java type verifier.
 - Main waits, blocking native-bridge callbacks/initializers, sleep/join, wait/notify,
   worker Looper delivery/priority, parallel execution and general Java timers are unsupported.
-- No bulk collections/Map views/custom class loaders/method or field reflection/general file I/O/SQLite/images/networking/JNI/JIT,
+- Other bulk collections, custom Map copies/views, snapshot CopyOnWriteArrayList,
+  ListIterator/subList, custom class loaders, method/field reflection, general file I/O,
+  SQLite, images, networking, JNI, JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.
 

@@ -111,8 +111,11 @@ with Java 8 source/target; it covers metadata/manual run. WorkerContract separat
 passes desktop Java and compiled DEX for identity, queue waits, interruption,
 reentrant locks and contention. Headless tests verify worker-to-main UI posting,
 GC across waits, rejected direct UI access, native-bridge suspension guards, faults,
-capacity, bounded spinning and shutdown. No Android reference differential run,
-fresh native worker interaction or independent asynchronous workflow is claimed.
+capacity, bounded spinning and shutdown. The latest native Scheduling check
+clicked Start worker and delivered Worker result: kept-consumer:payload in the
+native accessibility text, followed by close/teardown and status 0. The long label
+clips at the 360×340 viewport; complete layout fidelity is not claimed. No Android
+reference differential run or independent asynchronous workflow is claimed.
 
 ```sh
 cargo build --release --locked
@@ -131,9 +134,10 @@ emitted onPause/onStop/onDestroy, exiting with status 0.
 
 The earlier scheduling and immediate-queue checkpoints diagnosed Notepad's
 LinkedBlockingQueue constructor and then Thread.start. Current source resolves
-both: the unchanged release now advances through deferred Thread.start and stops
-at Integer.TYPE in DBFlow's generated Notepad adapter `d/n.<init>` at PC `0x0007`,
-under DBFlow config `a.<init>` PC `0x005c` and Application.onCreate PC `0x0016`.
+both. Primitive metadata, native map copying and read-only List construction also
+resolve. The unchanged release now stops at CopyOnWriteArrayList in bundled
+`com/b/a/c/d/a/a.<init>` PC `0x0012`, under `<clinit>` PC `0x0002` and
+Application.onCreate PC `0x001e`.
 This is still before Activity/UI creation; the independent worker/notes workflow
 has not executed successfully. The 50% checkpoint remains ahead. The v0.1.0 release
 archive predates scheduling and workers.

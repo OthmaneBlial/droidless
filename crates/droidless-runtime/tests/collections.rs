@@ -50,6 +50,16 @@ fn guest_equality_nulls_iteration_live_readonly_views_and_gc() {
         "Ljava/lang/String;",
     )[0];
     assert_eq!(vm.heap.text(next).unwrap(), "list iterator keeps its owner");
+    let value = call_class(
+        &mut vm,
+        "ListContract",
+        "retainedViewValue",
+        "Ljava/lang/String;",
+    )[0];
+    assert_eq!(
+        vm.heap.text(value).unwrap(),
+        "list iterator keeps its owner"
+    );
     let next = call_class(
         &mut vm,
         "QueueContract",
@@ -57,6 +67,38 @@ fn guest_equality_nulls_iteration_live_readonly_views_and_gc() {
         "Ljava/lang/String;",
     )[0];
     assert_eq!(vm.heap.text(next).unwrap(), "queue retains its element");
+}
+
+#[test]
+fn bulk_copy_roots_snapshots_and_releases_them_after_guest_mutation() {
+    let mut vm = runtime();
+    let key = call_class(
+        &mut vm,
+        "MapCopyContract",
+        "prepareMutation",
+        "Ljava/lang/Object;",
+    )[0];
+    let copy = Method {
+        class: "Lorg/droidless/collections/MapCopyContract;".into(),
+        name: "copyMutation".into(),
+        parameters: vec![],
+        returns: "V".into(),
+    };
+    let error = vm.invoke(copy, vec![], false).unwrap_err();
+    assert!(format!("{error:#}").contains("unsupported source Map mutation during putAll"));
+    assert_eq!(vm.stack_depth(), 0);
+    let value = call_class(
+        &mut vm,
+        "MapCopyContract",
+        "afterMutation",
+        "Ljava/lang/String;",
+    )[0];
+    assert_eq!(vm.heap.text(value).unwrap(), "snapshot stays alive");
+    vm.collect();
+    assert!(
+        vm.heap.get(key).is_err(),
+        "temporary native snapshot leaked a root"
+    );
 }
 
 #[test]
@@ -147,6 +189,33 @@ fn collection_limits_and_unsupported_overrides_fail_without_mutation() {
             .iter()
             .all(|(key, value)| *key != new_key && *value == Word::ZERO)
     );
+    // Bulk copies retain earlier writes if a later entry hits the native map limit.
+    let existing = entries[0].0;
+    let source = vm.heap.instance("Ljava/util/LinkedHashMap;").unwrap();
+    vm.heap.get_mut(source).unwrap().data = Data::Map {
+        entries: vec![(existing, new_key), (new_key, Word::ZERO)],
+        version: 0,
+    };
+    let copy = Method {
+        class: "Ljava/util/Map;".into(),
+        name: "putAll".into(),
+        parameters: vec!["Ljava/util/Map;".into()],
+        returns: "V".into(),
+    };
+    assert!(
+        format!(
+            "{:#}",
+            vm.invoke(copy, vec![map, source], true).unwrap_err()
+        )
+        .contains("entry limit")
+    );
+    let Data::Map { entries, version } = &vm.heap.get(map).unwrap().data else {
+        panic!("map lost");
+    };
+    assert_eq!(entries.len(), 16_384);
+    assert_eq!(entries[0], (existing, new_key));
+    assert_eq!(*version, 0);
+    assert!(entries.iter().all(|(key, _)| *key != new_key));
     for object in [set, list, map] {
         let to_string = Method {
             class: "Ljava/lang/Object;".into(),
@@ -176,5 +245,14 @@ fn collection_limits_and_unsupported_overrides_fail_without_mutation() {
             vm.invoke(constructor, vec![object], false).unwrap_err()
         )
         .contains("eviction hooks are unsupported")
+    );
+    vm.collect();
+    assert!(
+        vm.heap.get(source).is_err(),
+        "failed bulk copy retained its source"
+    );
+    assert!(
+        vm.heap.get(map).is_err(),
+        "failed bulk copy retained its target"
     );
 }

@@ -89,10 +89,12 @@
       "native_ui": false,
       "headless_conformance_verified": true,
       "source": "examples/collections",
-      "notes": "Authored compiled fixture: ordered/indexed lists, immediate FIFO queues, duplicate/null/capacity behavior, guest equals, Set/Map operations, iterator and inherited queue override dispatch, live read-only views, GC retention, limits and rejected eviction hooks. Same ListContract and immediate QueueContract pass on desktop Java 17 with Java 8 source/target. Queue waits/workers are covered by the separate Scheduling fixture; queue iterators remain unsupported. No native interaction or independent notes-app evidence.",
+      "notes": "Authored compiled fixture: ordered/indexed lists, immediate FIFO queues, duplicate/null/capacity behavior, guest equals, Set/Map operations, iterator and inherited queue override dispatch, live read-only views, GC retention, limits and rejected eviction hooks. Native map copying, live/nested read-only List views, shared iterator aliases, snapshot GC roots and error cleanup are checked. Same ListContract, MapCopyContract and immediate QueueContract pass on desktop Java 17 with Java 8 source/target. Queue waits/workers are covered by the separate Scheduling fixture; queue iterators remain unsupported. No native interaction or independent notes-app evidence.",
       "desktop_java_list_differential_verified": true,
       "desktop_java_immediate_queue_differential_verified": true,
-      "android_reference_verified": false
+      "android_reference_verified": false,
+      "desktop_java_map_copy_differential_verified": true,
+      "headless_readonly_list_verified": true
     },
     {
       "package": "org.droidless.reflection",
@@ -103,7 +105,8 @@
       "desktop_java_differential_verified": true,
       "android_reference_verified": false,
       "source": "examples/reflection",
-      "notes": "Authored compiled APK: class lookup/construction, initialization/access faults, arrays and inherited field aliases; GC and missing/wrong-kind regressions. Same pure-Java contract passes on Java 17 with Java 8 source/target."
+      "notes": "Authored compiled APK: class lookup/construction, initialization/access faults, arrays, inherited field aliases and all nine native wrapper TYPE identities; GC, wrong-kind/type and rejected final-write regressions. Same ReflectionContract and PrimitiveContract pass on Java 17 with Java 8 source/target. Primitive metadata does not imply general boxing support.",
+      "desktop_java_primitive_differential_verified": true
     },
     {
       "package": "org.droidless.scheduling",
@@ -119,10 +122,11 @@
       "desktop_java_thread_metadata_differential_verified": true,
       "android_reference_verified": false,
       "source": "examples/scheduling",
-      "notes": "Earlier native timer/cancellation/delayed finish evidence. Current compiled headless checks also cover deferred workers, independent identities, queue/monitor waits, interrupt, main Handler result delivery, GC, bounded spinning, faults, capacity and shutdown. Same pure WorkerContract passes on desktop Java 17. Serial shared-heap host executor; no parallel CPU execution. Main/native-bridge waits, worker Looper delivery, priority and sleep/join remain unsupported. No fresh native worker or independent asynchronous workflow claim.",
+      "notes": "Earlier native timer/cancellation/delayed finish evidence. Current compiled headless checks also cover deferred workers, independent identities, queue/monitor waits, interrupt, main Handler result delivery, GC, bounded spinning, faults, capacity and shutdown. Same pure WorkerContract passes on desktop Java 17. Serial shared-heap host executor; no parallel CPU execution. Main/native-bridge waits, worker Looper delivery, priority and sleep/join remain unsupported. Fresh native Start worker delivers the complete result in accessibility state and closes with status 0; its long visible label clips at 360x340. No independent asynchronous workflow claim.",
       "headless_worker_verified": true,
-      "native_worker_verified": false,
-      "desktop_java_worker_differential_verified": true
+      "native_worker_verified": true,
+      "desktop_java_worker_differential_verified": true,
+      "native_worker_close_exit_zero": true
     },
     {
       "package": "ir.cafebazaar.notepad",
@@ -132,8 +136,8 @@
       "sha256": "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f",
       "status": "startup-blocked",
       "native_ui": false,
-      "first_failure": "unsupported framework field Ljava/lang/Integer;->TYPE:Ljava/lang/Class; in generated DBFlow d/n.<init> at PC 0x0007, config a.<init> PC 0x005c (Application.onCreate PC 0x0016)",
-      "notes": "Parsed; DBFlow collections, reflection, inherited fields and deferred Thread.start now resolve. Startup advances to Integer.TYPE. No Activity/UI or independently working notes/worker workflow reached. Original release APK unmodified and not redistributed.",
+      "first_failure": "unsupported class Ljava/util/concurrent/CopyOnWriteArrayList; in Lcom/b/a/c/d/a/a;-><init>()V at PC 0x0012, <clinit> PC 0x0002 (Application.onCreate PC 0x001e)",
+      "notes": "Parsed; DBFlow collections, reflection, inherited fields, deferred Thread.start, primitive TYPE metadata and native map copying resolve. Read-only List construction also resolves; startup advances to CopyOnWriteArrayList. No Activity/UI or independently working notes/worker workflow reached. Original release APK unmodified and not redistributed.",
       "release_tag": "v1.0.0"
     }
   ]

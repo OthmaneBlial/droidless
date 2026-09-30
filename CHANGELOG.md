@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Canonical primitive Class metadata from all nine wrapper TYPE fields; wrapper
+  lookup, constructor faults and rejected native final-field writes. The compiled
+  PrimitiveContract also passes on desktop Java.
+- Native HashMap/LinkedHashMap putAll with guest equality and GC-rooted snapshots;
+  live unmodifiableList views reuse the read-only collection bridge. Read-only
+  iterators now delegate without disabling a mutable alias. Compiled contracts
+  also pass on desktop Java. Other bulk APIs, custom Map copying and ListIterator/
+  subList remain unsupported.
+
+- Unmodified Notepad now passes primitive metadata, native map copying and
+  unmodifiableList setup, then stops at CopyOnWriteArrayList before Activity/UI
+  creation. No initializer is skipped and the original APK remains unchanged.
+
 - Deferred guest Thread.start execution on a serial host worker executor, retaining
   shared-heap DEX frames across LinkedBlockingQueue take/put and reentrant monitor
   waits. Stable identities, start-once faults, interrupt delivery, GC roots, bounded
@@ -14,21 +27,22 @@
   unwinding. Compiled checks pause/resume nested calls and collect after each step;
   reference/wide results, catch/finally, diagnostics and stack limits remain intact.
   The normal FrameContract also passes on desktop Java. Native bridges/class
-  initialization remain synchronous; Thread.start/waits are still unsupported.
+  initialization remain synchronous; Thread.start/waits were unsupported at that
+  checkpoint.
 - Immediate LinkedBlockingQueue FIFO operations with declared capacity, duplicates,
   null rejection, guest equality, inherited override dispatch and GC retention.
   The same immediate contract passes in compiled DEX and desktop Java. Waiting
-  and workers remain unsupported. Local CI passes 33 Rust tests, 4,096 mutations
-  and 17 original calculator scenarios.
-- Unmodified Notepad resolves queue construction and now stops at Thread.start in
-  DBFlow startup, before Activity/UI creation. No initializer is skipped.
+  and workers were unsupported at that checkpoint. Local CI passed 33 Rust tests,
+  4,096 mutations and 17 original calculator scenarios.
+- At the immediate-queue checkpoint, unmodified Notepad resolved construction
+  and stopped at Thread.start in DBFlow startup, before Activity/UI creation. No initializer is skipped.
 
 - Main Handler/Looper/Message queue with deferred/delayed APK callbacks, identity
   cancellation, virtual dispatch, GC roots and bounded clock/queue execution.
   Native authored timer, cancellation and delayed finish verified; deterministic
   `--advance-ms` replay and unstarted Thread metadata/manual run support.
-  Thread.start and blocking queues remain unsupported. Local CI passes 32 Rust
-  tests, 4,096 parser mutations and 17 original calculator scenarios.
+  Thread.start and blocking queues were unsupported at that checkpoint. Local CI
+  passed 32 Rust tests, 4,096 parser mutations and 17 original calculator scenarios.
 - At the scheduling checkpoint unmodified Notepad passed Thread(String) and stopped at
   LinkedBlockingQueue in DBFlow startup, before Activity/UI creation.
 

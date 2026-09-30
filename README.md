@@ -131,11 +131,11 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🖱️ Input | Native calculator mouse callbacks, Counter text/key callbacks and clean close |
 | 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish and lifecycle — current source |
 | 📓 Persistent preferences | Typed SharedPreferences, isolated package data, native authored-note save/restart/clear — current source |
-| 🗂️ Java collections | Bounded HashSet/ArrayList/HashMap/basic LinkedHashMap, immediate FIFO queues, indexed lists, guest equality, Set/List iterators and live read-only Set views — current source |
-| 🔎 APK classes | APK-local Class lookup, no-argument construction, initialization/access faults and inherited field resolution — current source |
+| 🗂️ Java collections | Bounded HashSet/ArrayList/HashMap/basic LinkedHashMap, immediate FIFO queues, indexed lists, guest equality, Set/List iterators, native map copying and live read-only Set/List views — current source |
+| 🔎 APK classes | APK-local Class lookup, no-argument construction, initialization/access faults, primitive TYPE metadata and inherited field resolution — current source |
 | ⏱️ Scheduled callbacks | Main Handler/Looper/Message queue, delayed APK callbacks, cancellation and GC retention; native authored timer verified — current source |
-| 🧵 Guest workers | Deferred DEX execution on a serial shared-heap host executor; queue/monitor waits, interrupt and main Handler results pass headless checks — current source |
-| 🛠️ Next up | Blocking waits and guest workers, general app files, list widgets and images; a substantial unmodified notes/todo APK |
+| 🧵 Guest workers | Deferred DEX execution on a serial shared-heap host executor; queue/monitor waits/interrupt pass headless checks; main Handler results also verified natively — current source |
+| 🛠️ Next up | Main waits, snapshot collections, general app files, list widgets and images; a substantial unmodified notes/todo APK |
 
 The published **v0.1.0 archive predates navigation, persistence, collections, scheduling and the new calculator demo**. Current source capability
 is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
@@ -151,10 +151,10 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Counter | [Authored Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks, resources and VM conformance; nested FrameContract also passes on desktop Java |
 | Intents | [Authored Java/XML fixture](examples/intents/MainActivity.java) | Native screen transitions, retained text/title, Back override, extras and lifecycle/GC checks |
 | Preferences | [Authored Java/XML fixture](examples/preferences/MainActivity.java) | Native UTF-8 paste, save/restart/clear, typed values and package/path isolation |
-| Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, guest equality, null/capacity behavior, iteration, read-only views, GC and limits; same list and immediate queue contracts pass on desktop Java |
-| Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, guest faults and inherited fields; same contract passes on desktop Java |
-| Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native delayed timer/cancellation/finish; headless ordering, Message overrides, worker waits/interrupt/results, GC, errors and limits. [Exact scheduling scope](docs/threading.md) |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Collection/reflection setup and deferred Thread.start resolve; DBFlow startup stops at Integer.TYPE. No UI or working-notes claim |
+| Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, guest equality, null/capacity behavior, iteration, read-only views, GC and limits; same list, read-only view, map-copy and immediate queue contracts pass on desktop Java |
+| Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, primitive TYPE identities, guest faults and inherited fields; same contracts pass on desktop Java |
+| Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native delayed timer/cancellation/finish and worker-to-main results; headless ordering, Message overrides, worker waits/interrupt, GC, errors and limits. [Exact scheduling scope](docs/threading.md) |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | DBFlow setup passes primitive TYPE metadata and native map copying; startup now stops at CopyOnWriteArrayList. No UI or working-notes claim |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).
@@ -166,7 +166,7 @@ sh tools/fetch-kascalc.sh # Earlier calculator regression APK
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 37 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 39 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

@@ -77,6 +77,7 @@ pub struct Runtime {
     pub(crate) queue: crate::scheduling::MainQueue,
     pub(crate) workers: crate::workers::Workers,
     pub(crate) sync_depth: usize,
+    pub(crate) native_roots: Vec<Word>,
 }
 impl Runtime {
     pub(crate) fn reset_budget(&mut self) {
@@ -137,6 +138,7 @@ impl Runtime {
             queue: crate::scheduling::MainQueue::default(),
             workers: crate::workers::Workers::default(),
             sync_depth: 0,
+            native_roots: vec![],
         })
     }
     /// Enable disk storage below a host-approved apps root; `new` is ephemeral.
@@ -412,6 +414,7 @@ impl Runtime {
             .chain(self.queue.active)
             .chain(self.interned.values().copied())
             .chain(self.failed_classes.values().flatten().copied())
+            .chain(self.native_roots.iter().copied())
             .chain(self.frames.iter().flat_map(Frame::roots))
             .chain(self.workers.roots());
         self.heap.collect(roots)
@@ -447,6 +450,21 @@ impl Runtime {
         })
     }
     pub(crate) fn resolve_field(&self, field: &Field, static_field: bool) -> Result<Field> {
+        if field.name == "TYPE"
+            && self.class_location(&field.class).is_none()
+            && crate::reflection::primitive_wrapper(&field.class).is_some()
+        {
+            if field.ty != "Ljava/lang/Class;" {
+                return Err(fault("Ljava/lang/NoSuchFieldError;", field.key()));
+            }
+            if !static_field {
+                return Err(fault(
+                    "Ljava/lang/IncompatibleClassChangeError;",
+                    field.key(),
+                ));
+            }
+            return Ok(field.clone());
+        }
         ensure!(
             self.class_location(&field.class).is_some()
                 || (!static_field
@@ -525,6 +543,9 @@ impl Runtime {
             "Ljava/util/HashMap;" => "Ljava/util/AbstractMap;",
             "Ljava/util/LinkedHashMap;" => "Ljava/util/HashMap;",
             "Ljava/util/ArrayList;" => "Ljava/util/AbstractList;",
+            "Ldroidless/runtime/UnmodifiableRandomAccessList;" => {
+                "Ldroidless/runtime/UnmodifiableList;"
+            }
             "Ljava/util/concurrent/LinkedBlockingQueue;" => "Ljava/util/AbstractQueue;",
             "Ljava/util/AbstractSet;"
             | "Ljava/util/AbstractList;"
@@ -626,7 +647,9 @@ impl Runtime {
                     .map(String::from),
                 );
             }
-            if current == "Ldroidless/runtime/CollectionIterator;" {
+            if current == "Ldroidless/runtime/CollectionIterator;"
+                || current == "Ldroidless/runtime/UnmodifiableIterator;"
+            {
                 work.push("Ljava/util/Iterator;".into());
             }
             if current == "Ldroidless/runtime/UnmodifiableSet;" {
@@ -639,6 +662,20 @@ impl Runtime {
                     ]
                     .map(String::from),
                 );
+            }
+            if current == "Ldroidless/runtime/UnmodifiableList;" {
+                work.extend(
+                    [
+                        "Ljava/util/List;",
+                        "Ljava/util/Collection;",
+                        "Ljava/lang/Iterable;",
+                        "Ljava/io/Serializable;",
+                    ]
+                    .map(String::from),
+                );
+            }
+            if current == "Ldroidless/runtime/UnmodifiableRandomAccessList;" {
+                work.push("Ljava/util/RandomAccess;".into());
             }
             if current == "Ljava/util/HashMap;" {
                 work.extend(

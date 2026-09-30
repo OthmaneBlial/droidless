@@ -24,6 +24,16 @@ Inherited aliases share storage; shadowed fields remain separate. Static reads
 initialize the declaring owner. Missing fields and static/instance mismatches
 raise NoSuchFieldError and IncompatibleClassChangeError.
 
+The nine native wrapper TYPE fields (Void, Boolean, Byte, Character, Short,
+Integer, Long, Float and Double) return canonical primitive Class objects.
+Primitive getName returns the Java name; Class.forName resolves wrapper binary
+names but rejects primitive names. Primitive/array newInstance raises
+InstantiationException. Native wrappers have no zero-argument public constructor;
+newInstance raises InstantiationException, except Void's inaccessible constructor
+raises IllegalAccessException. This is metadata support, not general boxing for
+these classes. Static/instance/type mismatches retain field faults; writes to
+native final TYPE raise IllegalAccessError.
+
 This is a narrow API subset, not complete reflection or a full Java verifier.
 Custom class loaders, external DEX loading, three-argument forName, reflective
 method/field invocation, annotation/nest access rules and Class.toString remain
@@ -34,11 +44,21 @@ cargo test -p droidless-runtime --test reflection --locked
 target/release/droidless run --headless --ephemeral fixtures/generated/reflection.apk
 ```
 
-The authored APK executes ReflectionContract and displays `Reflection passed`.
+The authored APK executes ReflectionContract and PrimitiveContract and displays
+`Reflection passed`.
 The same pure-Java contract passes on desktop Java 17 after compiling for Java 8.
 It covers lookup, initialization/access faults, unwrapped constructor failures,
 arrays, inherited object/int/wide/static fields and shadowing. Rust tests add GC
-identity, malformed-name bounds and missing/wrong-kind field regressions.
+identity, malformed-name bounds, missing/wrong-kind field regressions and rejected
+TYPE writes. PrimitiveContract checks all nine TYPE identities, wrapper lookup,
+constructor faults, Class-key maps, primitive arrays and GC; it also passes on
+desktop Java 17 with Java 8 source/target.
 This is desktop Java differential evidence; no Android reference run is claimed.
 
 Reference contract: [Java 8 Class API](https://docs.oracle.com/javase/8/docs/api/java/lang/Class.html).
+
+```sh
+mkdir -p artifacts/primitive-java-contract
+javac -source 8 -target 8 -Xlint:-options -d artifacts/primitive-java-contract examples/reflection/PrimitiveContract.java
+java -cp artifacts/primitive-java-contract org.droidless.reflection.PrimitiveContract
+```

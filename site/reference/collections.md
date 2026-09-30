@@ -10,14 +10,15 @@ Queues reject null elements. There is no host Java runtime.
 |---|---|
 | HashSet | Empty/int-capacity constructors; size, isEmpty, add, contains, remove, clear, iterator |
 | ArrayList | Empty/int-capacity constructors; size, isEmpty, add, contains, remove, clear, iterator; indexed get/set/add/remove; indexOf/lastIndexOf |
-| HashMap / LinkedHashMap | Empty/int-capacity constructors; size, isEmpty, containsKey, containsValue, get, put, remove, clear |
-| LinkedBlockingQueue | Empty/fixed-capacity constructors; size, isEmpty, remainingCapacity, add/offer, peek/element, poll/remove, contains, remove(Object), clear; immediate operations only |
+| HashMap / LinkedHashMap | Empty/int-capacity constructors; size, isEmpty, containsKey, containsValue, get, put, remove, clear; putAll between native maps |
+| LinkedBlockingQueue | Empty/fixed-capacity constructors; size, isEmpty, remainingCapacity, add/offer, peek/element, poll/remove, contains, remove(Object), clear; immediate operations and worker take/put waits |
 | Set / List iterator | hasNext, next, remove; exhaustion, invalid remove and structural-change exceptions |
-| Collections | unmodifiableSet: live backing view; mutation and iterator.remove throw UnsupportedOperationException |
+| Collections | unmodifiableSet / unmodifiableList: live backing views; supported mutations and iterator.remove throw UnsupportedOperationException |
 
 All stores allow at most 16,384 entries. Negative Set/List/Map initial capacity raises a
 catchable IllegalArgumentException. Capacity is a hint; it does not preallocate
-guest storage. New entries exceeding the limit fail without modifying the store.
+guest storage. A single insertion exceeding the limit fails without modifying the store. A bulk
+map copy preserves earlier writes if a later entry reaches the limit.
 Membership uses linear scans; hash buckets are deferred until profiling justifies
 them. Ordering and performance do not reproduce a Java hash-table implementation.
 List insertion/removal currently copies the bounded backing vector; Java's
@@ -73,7 +74,7 @@ version. Structural changes from a guest equals callback are detected before
 using a saved index. List iterator removal dispatches an APK subclass's remove(int)
 override. Iterators, wrappers, keys and values retain their GC roots.
 
-Bulk operations, Collection/Map-copy constructors, arrays, ListIterator/subList,
+Other bulk operations, Collection/Map-copy constructors, arrays, ListIterator/subList,
 Map views/iterators, cloning, serialization and collection equals/hashCode/toString
 remain unsupported. LinkedHashMap load-factor/access-order constructors and
 subclasses/eviction hooks are rejected; inherited put does not silently skip a
@@ -84,6 +85,29 @@ Map keys; Class.getPackage and Package.getName provide basic package metadata.
 APK-local class lookup and no-argument construction have a separate
 [reflection subset](reflection.md). Custom loaders and method/field reflection
 remain unsupported.
+
+## Native map copying and read-only lists
+
+putAll copies between exact native HashMap/LinkedHashMap instances. Guest key
+comparison, existing-key replacement, null keys/values, empty and self copies
+reuse the existing put path. Null source raises NullPointerException. Native
+snapshot roots retain keys and values through guest equality callbacks and GC,
+and are released on success or error. Custom Map implementations and subclasses
+are rejected before copying; entrySet traversal and eviction hooks remain unsupported.
+Source mutation during an equality callback is an explicit terminal diagnostic,
+not Java differential evidence. Earlier writes and callback effects remain in place;
+bulk copying is not an atomic transaction.
+
+unmodifiableList forwards supported reads to the live backing List, including
+APK overrides of get. get/indexOf/lastIndexOf, size/isEmpty/contains and native
+iteration are checked. Nested views work. The wrapper preserves RandomAccess
+when its backing type has that marker, and retains the backing List through GC.
+Indexed and collection mutators raise UnsupportedOperationException before
+changing the backing List. Read-only iterators wrap the backing iterator without
+changing its mutation permissions: shared cursors still delegate, and a separate mutable alias remains
+writable. Iterator.remove rejects mutation through the wrapper; backing
+structural changes retain the native iterator's fail-fast behavior. ListIterator,
+subList, arrays and collection equals/hashCode/toString remain unsupported.
 
 ## Reproduce the compiled conformance check
 
@@ -98,6 +122,10 @@ java -cp artifacts/list-java-contract org.droidless.collections.ListContract
 mkdir -p artifacts/queue-java-contract
 javac -source 8 -target 8 -Xlint:-options -d artifacts/queue-java-contract examples/collections/QueueContract.java
 java -cp artifacts/queue-java-contract org.droidless.collections.QueueContract
+# Desktop comparison for native map bulk copying:
+mkdir -p artifacts/map-java-contract
+javac -source 8 -target 8 -Xlint:-options -d artifacts/map-java-contract examples/collections/MapCopyContract.java
+java -cp artifacts/map-java-contract org.droidless.collections.MapCopyContract
 ```
 
 The authored APK displays `Collections passed` in its headless View snapshot. It
@@ -105,8 +133,11 @@ checks guest equality, nulls, duplicates/order, indexed operations, iterator
 override dispatch, returns, exceptions, live read-only behavior and class identity.
 The same APK now also executes QueueContract: FIFO/duplicates, empty/full behavior,
 null rejection, declared capacity, guest equality/faults and inherited override
-dispatch. Rust checks additionally cover GC retention, entry ceilings and rejected eviction
-hooks. The same ListContract passes on Java 17 with Java 8 source/target; the
+dispatch. ListContract also checks live/nested read-only List views, virtual reads, nulls,
+mutation faults and iterator behavior. MapCopyContract checks native map copies
+with guest equality and GC. Rust checks additionally cover snapshot retention/
+release, source-mutation diagnostics, partial copies at entry ceilings and rejected
+eviction hooks. The same ListContract passes on Java 17 with Java 8 source/target; the
 runtime's extra reentrant-mutation guard is checked separately in guest DEX.
 QueueContract also passes on Java 17 with Java 8 source/target; its mutation/waiting
 limitations are tested separately and are not presented as Java differential evidence.
@@ -117,3 +148,5 @@ Contract references: [Android ArrayList](https://developer.android.com/reference
 [Java 8 ArrayList](https://docs.oracle.com/javase/8/docs/api/java/util/ArrayList.html)
 and [Java 8 LinkedHashMap](https://docs.oracle.com/javase/8/docs/api/java/util/LinkedHashMap.html).
 Queue semantics: [Java 8 LinkedBlockingQueue](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/LinkedBlockingQueue.html).
+
+Bulk-copy and read-only view contracts: [Java 8 HashMap](https://docs.oracle.com/javase/8/docs/api/java/util/HashMap.html) and [Java 8 Collections](https://docs.oracle.com/javase/8/docs/api/java/util/Collections.html).

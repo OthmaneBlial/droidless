@@ -89,3 +89,65 @@ fn inherited_field_resolution_rejects_missing_and_wrong_kind_members() {
         assert_eq!(vm.stack_depth(), 0);
     }
 }
+
+#[test]
+fn primitive_type_fields_keep_identity_and_reject_wrong_kind_type_and_writes() {
+    let read = Method {
+        class: "Lorg/droidless/reflection/PrimitiveContract;".into(),
+        name: "readInt".into(),
+        parameters: vec![],
+        returns: "Ljava/lang/Class;".into(),
+    };
+    for (opcode, ty, diagnostic) in [
+        (0x69, "Ljava/lang/Class;", "IllegalAccessError"),
+        (0x54, "Ljava/lang/Class;", "IncompatibleClassChangeError"),
+        (0x62, "I", "NoSuchFieldError"),
+    ] {
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/reflection.apk")).unwrap(),
+        )
+        .unwrap();
+        let first = vm.invoke(read.clone(), vec![], false).unwrap()[0];
+        vm.collect();
+        assert_eq!(vm.invoke(read.clone(), vec![], false).unwrap(), vec![first]);
+        let field = vm.apk.dex[0]
+            .fields
+            .iter()
+            .position(|f| f.class == "Ljava/lang/Integer;" && f.name == "TYPE")
+            .unwrap();
+        let class = vm.apk.dex[0]
+            .classes
+            .iter()
+            .position(|c| c.name == read.class)
+            .unwrap();
+        let method = vm.apk.dex[0].classes[class]
+            .methods
+            .iter()
+            .position(|m| vm.apk.dex[0].methods[m.index].name == "readInt")
+            .unwrap();
+        let original_code = vm.apk.dex[0].classes[class].methods[method]
+            .code
+            .clone()
+            .unwrap();
+        let mut code = original_code.clone();
+        let access = code
+            .instructions
+            .windows(2)
+            .position(|words| words[0] & 0xff == 0x62 && usize::from(words[1]) == field)
+            .expect("compiled TYPE sget-object");
+        code.instructions[access] = (code.instructions[access] & 0xff00) | opcode;
+        vm.apk.dex[0].classes[class].methods[method].code = Some(code);
+        vm.apk.dex[0].fields[field].ty = ty.into();
+        let error = vm.invoke(read.clone(), vec![], false).unwrap_err();
+        assert!(format!("{error:#}").contains(diagnostic));
+        assert_eq!(vm.stack_depth(), 0);
+        vm.collect();
+        vm.apk.dex[0].classes[class].methods[method].code = Some(original_code);
+        vm.apk.dex[0].fields[field].ty = "Ljava/lang/Class;".into();
+        assert_eq!(
+            vm.invoke(read.clone(), vec![], false).unwrap(),
+            vec![first],
+            "native final TYPE changed after rejected access"
+        );
+    }
+}

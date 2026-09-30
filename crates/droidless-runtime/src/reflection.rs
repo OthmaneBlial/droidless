@@ -4,7 +4,22 @@ use crate::{
     vm::Runtime,
 };
 use anyhow::{Context, Result, bail, ensure};
-use droidless_formats::dex::Method;
+use droidless_formats::dex::{Field, Method};
+
+pub(crate) fn primitive_wrapper(class: &str) -> Option<&'static str> {
+    Some(match class {
+        "Ljava/lang/Void;" => "V",
+        "Ljava/lang/Boolean;" => "Z",
+        "Ljava/lang/Byte;" => "B",
+        "Ljava/lang/Character;" => "C",
+        "Ljava/lang/Short;" => "S",
+        "Ljava/lang/Integer;" => "I",
+        "Ljava/lang/Long;" => "J",
+        "Ljava/lang/Float;" => "F",
+        "Ljava/lang/Double;" => "D",
+        _ => return None,
+    })
+}
 
 fn binary_descriptor(name: &str) -> Option<String> {
     if name.is_empty() || name.contains(['/', '\0']) {
@@ -51,6 +66,16 @@ fn class_name(descriptor: &str) -> String {
 }
 
 impl Runtime {
+    pub(crate) fn primitive_field(&self, field: &Field) -> Option<&'static str> {
+        if field.name == "TYPE"
+            && field.ty == "Ljava/lang/Class;"
+            && self.class_location(&field.class).is_none()
+        {
+            primitive_wrapper(&field.class)
+        } else {
+            None
+        }
+    }
     fn reflected_class(&self, object: Word) -> Result<String> {
         let object = self.heap.get(object)?;
         ensure!(
@@ -80,6 +105,7 @@ impl Runtime {
                     (class.starts_with('[') && element.len() == 1)
                         || self.class_location(element).is_some()
                         || crate::framework::known_class(element)
+                        || primitive_wrapper(element).is_some()
                 });
                 if !exists {
                     return Err(fault("Ljava/lang/ClassNotFoundException;", name));
@@ -108,6 +134,16 @@ impl Runtime {
                 if !class.starts_with('L') {
                     return Err(fault(
                         "Ljava/lang/InstantiationException;",
+                        class_name(&class),
+                    ));
+                }
+                if self.class_location(&class).is_none() && primitive_wrapper(&class).is_some() {
+                    return Err(fault(
+                        if class == "Ljava/lang/Void;" {
+                            "Ljava/lang/IllegalAccessException;"
+                        } else {
+                            "Ljava/lang/InstantiationException;"
+                        },
                         class_name(&class),
                     ));
                 }

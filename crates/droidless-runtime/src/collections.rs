@@ -7,7 +7,10 @@ use anyhow::{Context, Result, bail, ensure};
 use droidless_formats::dex::Method;
 
 const ITERATOR: &str = "Ldroidless/runtime/CollectionIterator;";
+const READ_ONLY_ITERATOR: &str = "Ldroidless/runtime/UnmodifiableIterator;";
 const READ_ONLY_SET: &str = "Ldroidless/runtime/UnmodifiableSet;";
+const READ_ONLY_LIST: &str = "Ldroidless/runtime/UnmodifiableList;";
+const READ_ONLY_RANDOM_LIST: &str = "Ldroidless/runtime/UnmodifiableRandomAccessList;";
 const LIMIT: usize = 16_384;
 
 impl Runtime {
@@ -94,24 +97,70 @@ impl Runtime {
         method: &Method,
         args: &[Word],
     ) -> Result<Option<Vec<Word>>> {
-        if method.class == "Ljava/util/Collections;"
-            && method.signature() == "unmodifiableSet(Ljava/util/Set;)Ljava/util/Set;"
-        {
-            let owner = *args.first().context("set argument missing")?;
+        let signature = method.signature();
+        if method.class == READ_ONLY_ITERATOR {
+            if signature == "remove()V" {
+                return Err(fault(
+                    "Ljava/lang/UnsupportedOperationException;",
+                    "unmodifiable iterator",
+                ));
+            }
+            if !["hasNext()Z", "next()Ljava/lang/Object;"].contains(&signature.as_str()) {
+                return Ok(None);
+            }
+            let wrapper = *args.first().context("iterator receiver missing")?;
+            let owner = self
+                .heap
+                .get(wrapper)?
+                .fields
+                .get("owner")
+                .and_then(|v| v.first())
+                .copied()
+                .context("uninitialized iterator view")?;
+            return Ok(Some(self.invoke(
+                Method {
+                    class: "Ljava/util/Iterator;".into(),
+                    ..method.clone()
+                },
+                vec![owner],
+                true,
+            )?));
+        }
+        if method.class == "Ljava/util/Collections;" {
+            let (interface, wrapper_class) = match signature.as_str() {
+                "unmodifiableSet(Ljava/util/Set;)Ljava/util/Set;" => {
+                    ("Ljava/util/Set;", READ_ONLY_SET)
+                }
+                "unmodifiableList(Ljava/util/List;)Ljava/util/List;" => {
+                    ("Ljava/util/List;", READ_ONLY_LIST)
+                }
+                _ => return Ok(None),
+            };
+            let owner = *args.first().context("collection argument missing")?;
+            let class = &self.heap.get(owner)?.class;
             ensure!(
-                self.is_a(&self.heap.get(owner)?.class, "Ljava/util/Set;"),
-                "unmodifiableSet requires a Set"
+                self.is_a(class, interface),
+                "unmodifiable view requires {interface}"
             );
-            let wrapper = self.heap.instance(READ_ONLY_SET)?;
+            let wrapper_class = if wrapper_class == READ_ONLY_LIST
+                && self.is_a(class, "Ljava/util/RandomAccess;")
+            {
+                READ_ONLY_RANDOM_LIST
+            } else {
+                wrapper_class
+            };
+            let wrapper = self.heap.instance(wrapper_class)?;
             self.heap
                 .get_mut(wrapper)?
                 .fields
                 .insert("owner".into(), vec![owner]);
             return Ok(Some(vec![wrapper]));
         }
-        if method.class == READ_ONLY_SET {
-            let wrapper = *args.first().context("set receiver missing")?;
-            let sig = method.signature();
+        let read_only_list =
+            method.class == READ_ONLY_LIST || method.class == READ_ONLY_RANDOM_LIST;
+        if method.class == READ_ONLY_SET || read_only_list {
+            let wrapper = *args.first().context("collection receiver missing")?;
+            let sig = signature;
             if [
                 "add(Ljava/lang/Object;)Z",
                 "remove(Ljava/lang/Object;)Z",
@@ -121,13 +170,21 @@ impl Runtime {
                 "retainAll(Ljava/util/Collection;)Z",
             ]
             .contains(&sig.as_str())
+                || (read_only_list
+                    && [
+                        "set(ILjava/lang/Object;)Ljava/lang/Object;",
+                        "add(ILjava/lang/Object;)V",
+                        "remove(I)Ljava/lang/Object;",
+                        "addAll(ILjava/util/Collection;)Z",
+                    ]
+                    .contains(&sig.as_str()))
             {
                 return Err(fault(
                     "Ljava/lang/UnsupportedOperationException;",
-                    "unmodifiable set",
+                    "unmodifiable collection",
                 ));
             }
-            if ![
+            let read = [
                 "size()I",
                 "isEmpty()Z",
                 "contains(Ljava/lang/Object;)Z",
@@ -140,7 +197,14 @@ impl Runtime {
                 "toString()Ljava/lang/String;",
             ]
             .contains(&sig.as_str())
-            {
+                || (read_only_list
+                    && [
+                        "get(I)Ljava/lang/Object;",
+                        "indexOf(Ljava/lang/Object;)I",
+                        "lastIndexOf(Ljava/lang/Object;)I",
+                    ]
+                    .contains(&sig.as_str()));
+            if !read {
                 return Ok(None);
             }
             let owner = self
@@ -150,12 +214,17 @@ impl Runtime {
                 .get("owner")
                 .and_then(|v| v.first())
                 .copied()
-                .context("uninitialized set view")?;
+                .context("uninitialized collection view")?;
             let mut forwarded = args.to_vec();
             forwarded[0] = owner;
             let result = self.invoke(
                 Method {
-                    class: "Ljava/util/Set;".into(),
+                    class: if read_only_list {
+                        "Ljava/util/List;"
+                    } else {
+                        "Ljava/util/Set;"
+                    }
+                    .into(),
                     ..method.clone()
                 },
                 forwarded,
@@ -164,13 +233,16 @@ impl Runtime {
             if sig == "iterator()Ljava/util/Iterator;" {
                 let iterator = *result.first().context("iterator returned no value")?;
                 ensure!(
-                    self.heap.get(iterator)?.class == ITERATOR,
-                    "unmodifiable iterator for this Set is unsupported"
+                    [ITERATOR, READ_ONLY_ITERATOR]
+                        .contains(&self.heap.get(iterator)?.class.as_str()),
+                    "unmodifiable iterator for this collection is unsupported"
                 );
+                let view = self.heap.instance(READ_ONLY_ITERATOR)?;
                 self.heap
-                    .get_mut(iterator)?
+                    .get_mut(view)?
                     .fields
-                    .insert("readOnly".into(), vec![Word::from(1)]);
+                    .insert("owner".into(), vec![iterator]);
+                return Ok(Some(vec![view]));
             }
             return Ok(Some(result));
         }
@@ -187,18 +259,6 @@ impl Runtime {
         let mut result = vec![];
         if method.class == ITERATOR {
             let object = self.heap.get(receiver)?;
-            if sig == "remove()V"
-                && object
-                    .fields
-                    .get("readOnly")
-                    .and_then(|v| v.first())
-                    .is_some_and(|w| w.truth())
-            {
-                return Err(fault(
-                    "Ljava/lang/UnsupportedOperationException;",
-                    "unmodifiable iterator",
-                ));
-            }
             let field = |name: &str| {
                 object
                     .fields
@@ -437,6 +497,47 @@ impl Runtime {
                     Some(i) => self.map(owner)?.0[i].1,
                     None => Word::ZERO,
                 });
+            }
+            "putAll(Ljava/util/Map;)V" => {
+                let source = arg(1)?;
+                for map in [owner, source] {
+                    ensure!(
+                        matches!(
+                            self.heap.get(map)?.class.as_str(),
+                            "Ljava/util/HashMap;" | "Ljava/util/LinkedHashMap;"
+                        ),
+                        "unsupported putAll with custom Map implementations or subclass hooks"
+                    );
+                }
+                let (entries, version) = self.map(source)?;
+                let entries = entries.to_vec();
+                // A key's guest equals may mutate a source and collect its old values.
+                // Keep the native snapshot alive until every copy/error path has returned.
+                let roots = self.native_roots.len();
+                self.native_roots.extend([owner, source]);
+                self.native_roots
+                    .extend(entries.iter().flat_map(|(k, v)| [*k, *v]));
+                let put = Method {
+                    class: method.class.clone(),
+                    name: "put".into(),
+                    parameters: vec!["Ljava/lang/Object;".into(); 2],
+                    returns: "Ljava/lang/Object;".into(),
+                };
+                let copied = (|| -> Result<()> {
+                    for (key, value) in &entries {
+                        self.map_native(&put, &[owner, *key, *value])?;
+                        if owner != source {
+                            let (current, current_version) = self.map(source)?;
+                            ensure!(
+                                current_version == version && current == entries.as_slice(),
+                                "unsupported source Map mutation during putAll"
+                            );
+                        }
+                    }
+                    Ok(())
+                })();
+                self.native_roots.truncate(roots);
+                copied?;
             }
             "put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;" => {
                 arg(2)?.reference()?;

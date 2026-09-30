@@ -703,7 +703,9 @@ impl Runtime {
                     );
                 }
                 if get {
-                    let value = if static_field {
+                    let value = if let Some(primitive) = self.primitive_field(&field) {
+                        vec![self.class_object(primitive)?]
+                    } else if static_field {
                         self.statics
                             .get(&key)
                             .cloned()
@@ -718,6 +720,12 @@ impl Runtime {
                     };
                     self.put(f, dest, &value)?;
                 } else {
+                    if self.primitive_field(&field).is_some() {
+                        return Err(fault(
+                            "Ljava/lang/IllegalAccessError;",
+                            format!("cannot write final field {key}"),
+                        ));
+                    }
                     let value = if field.ty == "J" || field.ty == "D" {
                         vec![r!(dest), r!(dest + 1)]
                     } else {

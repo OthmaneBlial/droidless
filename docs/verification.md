@@ -356,7 +356,7 @@ target/release/droidless run --headless --ephemeral fixtures/generated/schedulin
 Full local CI passes 37 Rust tests, 4,096 seeded parser mutations, warning-free
 Clippy and release build. All 17 original calculator cases pass; the timer replay
 still reaches Timer done: 3. The original Notepad release SHA-256 matches its
-catalog pin. Startup now passes deferred Thread.start and fails at
+catalog pin. At the worker checkpoint startup passed deferred Thread.start and failed at
 `Integer.TYPE:Class` in generated DBFlow `d/n.<init>` PC `0x0007`, under config
 `a.<init>` PC `0x005c` and Application.onCreate PC `0x0016`. No Activity/UI or
 independently working notes/worker workflow has been reached.
@@ -370,3 +370,70 @@ captures remain historical evidence.
 Main waits, native-bridge/initializer suspension, sleep/join, wait/notify, worker
 Looper delivery/priority, executors and parallel execution remain unsupported.
 The v0.1.0 archive retains its older scope; the 50% checkpoint remains active.
+
+## Current source: primitive metadata, map copying and read-only lists
+
+Verified on 2026-10-01, macOS ARM64. PrimitiveContract executes all nine native
+wrapper TYPE fields in compiled DEX, checking canonical primitive identity,
+Java names, wrapper lookup, constructor faults, primitive arrays, Class-key maps
+and GC. Rust regressions reject final writes, wrong-kind and wrong-type field
+references without changing cached metadata or leaving frames behind. The same
+normal contract passes on desktop Java 17 with Java 8 source/target.
+
+MapCopyContract checks HashMap/LinkedHashMap copies in both directions, guest
+equality callbacks with GC, replacement, null keys/values, empty and self copies.
+It also passes on desktop Java. A separate guest-mutation regression clears the
+source inside equals and collects it: the native snapshot retains copied values,
+then releases temporary roots on the terminal diagnostic. A capacity regression
+confirms that bulk copying retains earlier replacements when a later insertion
+hits the 16,384-entry ceiling. Custom Map copying remains unsupported.
+
+ListContract now checks live/nested unmodifiableList views, RandomAccess metadata,
+virtual get with GC, null/search behavior, mutation rejection and fail-fast native
+iteration. Read-only iterators delegate rather than changing their backing
+iterator's permissions; a separately held mutable alias stays writable. Wrapper
+and iterator owners survive collection. This normal contract also passes on
+desktop Java. No Android reference differential run is claimed.
+
+```sh
+cargo test -p droidless-runtime --test collections --test reflection --locked
+mkdir -p artifacts/java-metadata-map
+javac -source 8 -target 8 -Xlint:-options -d artifacts/java-metadata-map examples/collections/ListContract.java examples/collections/MapCopyContract.java examples/reflection/PrimitiveContract.java
+java -cp artifacts/java-metadata-map org.droidless.collections.ListContract
+java -cp artifacts/java-metadata-map org.droidless.collections.MapCopyContract
+java -cp artifacts/java-metadata-map org.droidless.reflection.PrimitiveContract
+```
+
+The original Notepad APK retains SHA-256
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+DBFlow's primitive metadata and native map copying now resolve, followed by
+unmodifiableList construction. The fresh release build stops at unsupported
+`Ljava/util/concurrent/CopyOnWriteArrayList;`, in bundled
+`Lcom/b/a/c/d/a/a;-><init>()V` PC `0x0012`, under its `<clinit>` PC `0x0002`
+and Application.onCreate PC `0x001e`. No Activity/UI or working-notes workflow is
+reached. No initializer is skipped and the original APK is unchanged.
+
+Full local CI passes 39 Rust tests, 4,096 seeded parser mutations, warning-free
+Clippy and release build. All 17 original calculator scenarios pass. Headless
+worker delivery and timer replay still produce `Worker result: kept-consumer:payload`
+and `Timer done: 3`.
+
+Browser/native automation became available again for this increment. The fresh
+unsigned development bundle was checked through native Simple Calculator clicks:
+7 + 5 = 12, 8 × 8 = 64 and 9 / 3 = 3. Native close emitted onPause/onStop/onDestroy
+and exited with status 0. The existing white/charcoal showcase capture is retained.
+A native Scheduling click on Start worker also delivered the full accessibility
+text `Worker result: kept-consumer:payload`; the long visible label clips at the
+360×340 test viewport. Native close emitted the same teardown and status 0.
+This supplies authored native worker-to-main evidence; it does not establish an
+independently working asynchronous notes app. Earlier automation failures above
+remain the record of those checkpoints.
+
+The portable site was verified over local HTTP: all 29 files match source bytes,
+relative links/fragments resolve and downloaded documentation matches the repo.
+Desktop and 390×844 mobile browser review confirm the neutral showcase and no
+horizontal page overflow. Copy build commands was checked through a real native
+Chrome paste of the expected command block.
+
+GitHub Actions remain disabled; CI runs locally. v0.1.0 keeps its earlier archive
+scope. The 50% everyday-app checkpoint remains active and has not been achieved.

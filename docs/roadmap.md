@@ -11,11 +11,11 @@ The following are objectives, not completed capability claims.
 3. Multi-screen/persistence: explicit Intents/Bundle/back stack are proven in an
    authored native fixture. Isolated SharedPreferences save/restart/clear are also
    proven in an authored native fixture. Basic HashSet/ArrayList/HashMap/LinkedHashMap
-   and live read-only Set views pass compiled conformance. Unmodified Notepad
-   startup now reaches Thread.start in DBFlow after LinkedBlockingQueue and
-   Thread(String) construction, collections,
-   APK-local lookup/reflective construction and inherited
-   field resolution. The new neutral public calculator also proves boxed Double
+   and live read-only Set/List views pass compiled conformance. Native map bulk
+   copying and primitive Class metadata now complete more DBFlow setup in the
+   unmodified Notepad. Startup reaches the bundled class com/b/a/c/d/a/a and stops
+   at CopyOnWriteArrayList before Activity creation. APK-local lookup/reflective
+   construction and inherited fields also resolve. The neutral public calculator proves boxed Double
    execution through native clicks. Follow that failure, then the actual storage/
    UI needs of a real notes/todo APK with restart/persistence tests.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
@@ -24,10 +24,10 @@ The following are objectives, not completed capability claims.
    GC and exception checks. Bounded deferred workers now execute on a serial shared-heap
    host executor, with queue/monitor waits and main Handler result checks. Native
    bridges/class initialization remain synchronous; main waits, worker delivery,
-   priorities and join/sleep remain ahead. Notepad now passes Thread.start and
-   stops at Integer.TYPE in its generated DBFlow adapter.
+   priorities and join/sleep remain ahead. Notepad passes deferred Thread.start;
+   independently completed transaction execution remains unproven.
    Gate: a real APK completes its queued transactions and posts UI results.
-5. Lists/images/SQLite/network: follow first failures in substantial third-party
+5. Snapshot collections, lists/images/SQLite/network: follow first failures in substantial third-party
    apps, with host capabilities explicit and tested.
 6. Linux native backend: common VM/View model, real Linux builds/render/input.
 7. Kotlin/AndroidX, then fragments/Compose/JNI/foreign libraries: major subsequent
