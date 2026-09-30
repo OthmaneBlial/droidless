@@ -3,7 +3,7 @@ use crate::{
     heap::{Word, bits64, fault, wide},
     vm::Runtime,
 };
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use droidless_formats::dex::Method;
 use std::{collections::BTreeMap, time::Instant};
 
@@ -21,7 +21,7 @@ pub(crate) struct MainQueue {
     time: u64,
     epoch: Option<Instant>,
     sequence: u64,
-    closed: bool,
+    pub closed: bool,
     thread_id: u64,
 }
 impl Runtime {
@@ -68,6 +68,8 @@ impl Runtime {
             "reentrant message dispatch"
         );
         self.reset_budget();
+        let mut worker_slices = 64;
+        self.poll_workers(&mut worker_slices)?;
         let mut count = 0;
         while let Some((&key, &message)) = self.queue.pending.first_key_value() {
             if key.0 > self.uptime_ms() || self.queue.closed {
@@ -95,6 +97,7 @@ impl Runtime {
             result.with_context(|| format!("dispatching main-thread message at {} ms", key.0))?;
             self.drain_navigation()?;
             count += 1;
+            self.poll_workers(&mut worker_slices)?;
         }
         if count > 0 {
             self.collect();
@@ -103,6 +106,7 @@ impl Runtime {
     }
     pub(crate) fn stop_messages(&mut self) -> Result<()> {
         self.queue.closed = true;
+        self.stop_workers()?;
         if let Some(thread) = self
             .statics
             .get("droidless:mainThread")
@@ -216,7 +220,7 @@ impl Runtime {
             .insert("droidless:mainLooper".into(), vec![looper]);
         Ok(looper)
     }
-    fn main_thread(&mut self) -> Result<Word> {
+    pub(crate) fn main_thread(&mut self) -> Result<Word> {
         if let Some(word) = self
             .statics
             .get("droidless:mainThread")
@@ -229,6 +233,7 @@ impl Runtime {
         let fields = &mut self.heap.get_mut(thread)?.fields;
         fields.insert("name".into(), vec![name]);
         fields.insert("id".into(), wide(1));
+        fields.insert("started".into(), vec![Word::from(1)]);
         fields.insert(
             "alive".into(),
             vec![Word::from(i32::from(!self.queue.closed))],
@@ -254,19 +259,47 @@ impl Runtime {
             ("Landroid/os/SystemClock;", "uptimeMillis()J" | "elapsedRealtime()J") => {
                 result = wide(self.uptime_ms())
             }
-            (LOOPER, "getMainLooper()Landroid/os/Looper;" | "myLooper()Landroid/os/Looper;") => {
-                result.push(self.main_looper()?)
+            (LOOPER, "getMainLooper()Landroid/os/Looper;") => result.push(self.main_looper()?),
+            (LOOPER, "myLooper()Landroid/os/Looper;") => {
+                result.push(match self.workers.current {
+                    Some(thread) => self.thread_word(thread, "looper")?,
+                    None => self.main_looper()?,
+                });
+            }
+            (LOOPER, "prepare()V") => {
+                let thread = self.current_thread()?;
+                if self.workers.current.is_none()
+                    || self.thread_word(thread, "looper")? != Word::ZERO
+                {
+                    return Err(fault(
+                        "Ljava/lang/RuntimeException;",
+                        "Only one Looper may be created per thread",
+                    ));
+                }
+                let looper = self.heap.instance(LOOPER)?;
+                self.heap
+                    .get_mut(looper)?
+                    .fields
+                    .insert("thread".into(), vec![thread]);
+                self.heap
+                    .get_mut(thread)?
+                    .fields
+                    .insert("looper".into(), vec![looper]);
             }
             (LOOPER, "getThread()Ljava/lang/Thread;") => {
                 result.push(self.message_word(receiver, "thread")?)
             }
             (LOOPER, "quit()V" | "quitSafely()V") => {
+                ensure!(
+                    receiver == self.main_looper()?,
+                    "unsupported worker Looper quit/delivery"
+                );
                 return Err(fault(
                     "Ljava/lang/IllegalStateException;",
                     "the main Looper cannot quit",
                 ));
             }
-            (THREAD, "currentThread()Ljava/lang/Thread;") => result.push(self.main_thread()?),
+            (THREAD, "currentThread()Ljava/lang/Thread;") => result.push(self.current_thread()?),
             (
                 THREAD,
                 "<init>(Ljava/lang/String;)V" | "<init>(Ljava/lang/Runnable;Ljava/lang/String;)V",
@@ -296,6 +329,7 @@ impl Runtime {
                 fields.insert("target".into(), vec![target]);
                 fields.insert("id".into(), wide(id));
                 fields.insert("alive".into(), vec![Word::ZERO]);
+                fields.insert("started".into(), vec![Word::ZERO]);
                 self.queue.thread_id = id;
             }
             (THREAD, "getName()Ljava/lang/String;" | "getId()J" | "isAlive()Z") => {
@@ -336,7 +370,28 @@ impl Runtime {
                 }
             }
             (THREAD, "start()V") => {
-                bail!("unsupported Thread.start: background guest execution is not implemented")
+                self.start_worker(receiver)?;
+            }
+            (THREAD, "interrupt()V") => {
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("interrupted".into(), vec![Word::from(1)]);
+            }
+            (THREAD, "isInterrupted()Z") => result.push(self.thread_word(receiver, "interrupted")?),
+            (THREAD, "interrupted()Z") => {
+                result.push(Word::from(i32::from(self.take_interrupt()?)))
+            }
+            (THREAD, "holdsLock(Ljava/lang/Object;)Z") => {
+                let object = arg(0)?;
+                self.heap.get(object)?;
+                let thread = self.current_thread()?;
+                result.push(Word::from(i32::from(
+                    self.workers
+                        .monitors
+                        .get(&object.reference()?)
+                        .is_some_and(|(owner, _)| *owner == thread),
+                )));
             }
             (MESSAGE, "<init>()V") => {
                 self.heap.get(receiver)?;
@@ -377,6 +432,11 @@ impl Runtime {
                 if method.parameters.first().is_some_and(|p| p == LOOPER) {
                     self.heap.get(arg(1)?)?;
                     ensure!(arg(1)? == looper, "only the main Looper is supported");
+                } else {
+                    ensure!(
+                        self.workers.current.is_none(),
+                        "unsupported implicit worker Handler; use the main Looper explicitly"
+                    );
                 }
                 let callback = if method
                     .parameters

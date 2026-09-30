@@ -12,4 +12,5 @@ mod scheduling;
 mod storage;
 pub mod ui;
 mod vm;
+mod workers;
 pub use vm::{Runtime, Trace};

@@ -123,6 +123,14 @@ impl Runtime {
             let flow = match flow {
                 Ok(flow) => flow,
                 Err(error) => {
+                    if let Some(waiting) = error.downcast_ref::<crate::workers::Waiting>() {
+                        if base == 0 && self.sync_depth == 0 && self.workers.current.is_some() {
+                            self.workers.waiting = Some(*waiting);
+                            return Ok(None);
+                        }
+                        self.unwind_frames(base, anyhow::anyhow!("unsupported worker suspension across a synchronous native bridge or class initializer: {waiting}"))?;
+                        continue;
+                    }
                     self.unwind_frames(base, error)?;
                     continue;
                 }
@@ -134,6 +142,13 @@ impl Runtime {
                     debug_assert_eq!(self.frames.len(), f + 2);
                 }
                 Flow::Return(words) => {
+                    if !self.frames[f].monitors.is_empty() {
+                        self.unwind_frames(
+                            base,
+                            anyhow::anyhow!("unbalanced DEX monitors at method return"),
+                        )?;
+                        continue;
+                    }
                     let finished = self.frames.pop().context("frame stack underflow")?;
                     if f == base {
                         return Ok(Some(words));
@@ -181,6 +196,7 @@ impl Runtime {
                 }
             }
             let finished = self.frames.pop().context("frame stack underflow")?;
+            self.release_frame_monitors(&finished)?;
             error = error.context(finished.location());
             if f == base {
                 return Err(error);
@@ -311,7 +327,25 @@ impl Runtime {
                 next = 2;
             }
             0x1d | 0x1e => {
-                self.heap.get(r!(a))?; /* Single guest thread: monitor ownership is implicit. */
+                let object = r!(a);
+                if op == 0x1d {
+                    self.enter_monitor(object)?;
+                    self.frames[f].monitors.push(object);
+                } else {
+                    self.heap.get(object)?;
+                    let index = self.frames[f]
+                        .monitors
+                        .iter()
+                        .rposition(|w| *w == object)
+                        .ok_or_else(|| {
+                            fault(
+                                "Ljava/lang/IllegalMonitorStateException;",
+                                "DEX monitor not acquired by this frame",
+                            )
+                        })?;
+                    self.exit_monitor(object)?;
+                    self.frames[f].monitors.remove(index);
+                }
             }
             0x1f | 0x20 => {
                 let ty = self.apk.dex[d]

@@ -89,7 +89,7 @@
       "native_ui": false,
       "headless_conformance_verified": true,
       "source": "examples/collections",
-      "notes": "Authored compiled fixture: ordered/indexed lists, immediate FIFO queues, duplicate/null/capacity behavior, guest equals, Set/Map operations, iterator and inherited queue override dispatch, live read-only views, GC retention, limits and rejected eviction hooks. Same ListContract and immediate QueueContract pass on desktop Java 17 with Java 8 source/target. Queue waits/workers/iterators unsupported. No native interaction or independent notes-app evidence.",
+      "notes": "Authored compiled fixture: ordered/indexed lists, immediate FIFO queues, duplicate/null/capacity behavior, guest equals, Set/Map operations, iterator and inherited queue override dispatch, live read-only views, GC retention, limits and rejected eviction hooks. Same ListContract and immediate QueueContract pass on desktop Java 17 with Java 8 source/target. Queue waits/workers are covered by the separate Scheduling fixture; queue iterators remain unsupported. No native interaction or independent notes-app evidence.",
       "desktop_java_list_differential_verified": true,
       "desktop_java_immediate_queue_differential_verified": true,
       "android_reference_verified": false
@@ -119,7 +119,10 @@
       "desktop_java_thread_metadata_differential_verified": true,
       "android_reference_verified": false,
       "source": "examples/scheduling",
-      "notes": "Current source: authored main-thread Handler/Looper/Message timer, cancellation and delayed finish. Compiled ordering/dispatch/token identity/GC/limits/errors/shutdown checks. Desktop Java comparison covers unstarted Thread metadata/manual run only. Thread.start, workers and blocking waits unsupported; no independent asynchronous APK workflow evidence."
+      "notes": "Earlier native timer/cancellation/delayed finish evidence. Current compiled headless checks also cover deferred workers, independent identities, queue/monitor waits, interrupt, main Handler result delivery, GC, bounded spinning, faults, capacity and shutdown. Same pure WorkerContract passes on desktop Java 17. Serial shared-heap host executor; no parallel CPU execution. Main/native-bridge waits, worker Looper delivery, priority and sleep/join remain unsupported. No fresh native worker or independent asynchronous workflow claim.",
+      "headless_worker_verified": true,
+      "native_worker_verified": false,
+      "desktop_java_worker_differential_verified": true
     },
     {
       "package": "ir.cafebazaar.notepad",
@@ -129,8 +132,8 @@
       "sha256": "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f",
       "status": "startup-blocked",
       "native_ui": false,
-      "first_failure": "unsupported Thread.start: background guest execution is not implemented, in DBFlow f/b/a/b.a() at PC 0x0007 (Application.onCreate PC 0x0016)",
-      "notes": "Parsed; DBFlow ArrayList/LinkedHashMap/Thread(String)/LinkedBlockingQueue constructors, APK-local reflection and inherited fields resolve. No Activity/UI or notes workflow reached. Real workers/blocking waits remain required. Original release APK unmodified and not redistributed.",
+      "first_failure": "unsupported framework field Ljava/lang/Integer;->TYPE:Ljava/lang/Class; in generated DBFlow d/n.<init> at PC 0x0007, config a.<init> PC 0x005c (Application.onCreate PC 0x0016)",
+      "notes": "Parsed; DBFlow collections, reflection, inherited fields and deferred Thread.start now resolve. Startup advances to Integer.TYPE. No Activity/UI or independently working notes/worker workflow reached. Original release APK unmodified and not redistributed.",
       "release_tag": "v1.0.0"
     }
   ]

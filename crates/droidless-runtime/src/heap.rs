@@ -25,11 +25,14 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         | "Ljava/lang/ArrayStoreException;"
         | "Ljava/lang/IllegalArgumentException;"
         | "Ljava/lang/IllegalStateException;"
+        | "Ljava/lang/IllegalMonitorStateException;"
         | "Ljava/lang/UnsupportedOperationException;"
         | "Ljava/util/NoSuchElementException;"
         | "Ljava/util/ConcurrentModificationException;"
         | "Ljava/lang/IndexOutOfBoundsException;" => "Ljava/lang/RuntimeException;",
         "Ljava/lang/NumberFormatException;" => "Ljava/lang/IllegalArgumentException;",
+        "Ljava/lang/IllegalThreadStateException;" => "Ljava/lang/IllegalArgumentException;",
+        "Ljava/lang/InterruptedException;" => "Ljava/lang/Exception;",
         "Ljava/lang/ArrayIndexOutOfBoundsException;"
         | "Ljava/lang/StringIndexOutOfBoundsException;" => "Ljava/lang/IndexOutOfBoundsException;",
         "Ljava/lang/RuntimeException;" => "Ljava/lang/Exception;",

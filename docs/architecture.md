@@ -45,8 +45,9 @@ its return PC; exception unwinding keeps the caller at the invoke PC. Instructio
 slices retain the same registers/results/exceptions and existing GC traversal.
 This removes Rust recursion from DEX-to-DEX calls and supplies the continuation
 needed for future waiting workers. Native bridge callbacks and class initialization
-remain synchronous; Thread.start and blocking waits are still unsupported. Do not
-replace those waits with inline worker execution or clone isolated app heaps.
+remain synchronous. Bounded guest workers now use these continuations for queue
+and monitor waits; suspension across a native bridge/initializer stays unsupported.
+Do not replace those waits with inline execution or clone isolated app heaps.
 
 ## Dependencies
 
@@ -56,3 +57,13 @@ replace those waits with inline worker execution or clone isolated app heaps.
 preferences; `serde_json` also stores the bounded DROIDLESS preference format.
 None supplies Android execution, lifecycle, resources or the View model.
 Cargo.lock fixes the dependency versions.
+
+## ADR 005: shared-heap serial worker executor
+
+Workers have their own managed frame stack and stable guest Thread identity.
+A Rust scoped host executor receives the exclusive Runtime borrow for bounded
+slices; main Handler/UI execution resumes after it joins. Logical workers can
+migrate across executor threads while all guest objects remain in one heap.
+Serial execution avoids shared mutable heap races and makes deterministic tests
+possible. Parallel CPU execution and a persistent executor are deferred; the
+scope and current blocking/native bridge limits are explicit in [threading.md](threading.md).

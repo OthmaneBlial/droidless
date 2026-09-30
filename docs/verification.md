@@ -326,3 +326,47 @@ or native interaction claim is added here.
 Thread.start, waiting workers and blocking queue waits remain unsupported; the
 managed continuations are the first execution prerequisite, not a worker substitute.
 The v0.1.0 archive keeps its earlier scope and the 50% checkpoint remains active.
+
+## Current source: bounded guest workers and queue waits
+
+Thread.start now defers APK Thread.run/Runnable execution to a named Rust host
+worker executor, with a shared heap and independent managed frame stacks. Each
+poll joins the host executor before main Handler/UI work. Logical workers retain
+stable guest identities across executor migrations; execution remains serial,
+not parallel CPU execution. A host poll shares 64 slices of 1,024 top-level steps
+across worker/message dispatches, with at most 64 live workers. Synchronous native
+bridges/initializers still share the overall instruction budget within each step.
+
+The authored WorkerContract passes on desktop Java 17 and compiled DEX for worker
+identity, nested take, FIFO/capacity put, interrupt flag clearing, start-once faults,
+reentrant locks and monitor contention. DEX regressions collect across waits and
+verify retained local strings, main Handler result delivery, rejected direct UI
+mutation, worker faults/lock cleanup, native-bridge suspension diagnostics, bounded
+spinning, capacity preservation and shutdown. The headless Start worker action
+reaches `Worker result: kept-consumer:payload` through worker DEX and a main callback.
+
+```sh
+cargo test -p droidless-runtime --test workers --locked
+mkdir -p artifacts/worker-java-contract
+javac -source 8 -target 8 -Xlint:-options -d artifacts/worker-java-contract examples/scheduling/WorkerContract.java
+java -cp artifacts/worker-java-contract org.droidless.scheduling.WorkerContract
+target/release/droidless run --headless --ephemeral fixtures/generated/scheduling.apk --click "Start worker"
+```
+
+Full local CI passes 37 Rust tests, 4,096 seeded parser mutations, warning-free
+Clippy and release build. All 17 original calculator cases pass; the timer replay
+still reaches Timer done: 3. The original Notepad release SHA-256 matches its
+catalog pin. Startup now passes deferred Thread.start and fails at
+`Integer.TYPE:Class` in generated DBFlow `d/n.<init>` PC `0x0007`, under config
+`a.<init>` PC `0x005c` and Application.onCreate PC `0x0016`. No Activity/UI or
+independently working notes/worker workflow has been reached.
+
+The fresh unsigned bundle launched Scheduling and emitted onCreate/onStart/
+onResume. Native automation again reported `cgWindowNotFound`; the running test
+process was confirmed and then stopped with Ctrl-C. No fresh native worker
+interaction, screenshot or clean-close result is claimed. Earlier native timer
+captures remain historical evidence.
+
+Main waits, native-bridge/initializer suspension, sleep/join, wait/notify, worker
+Looper delivery/priority, executors and parallel execution remain unsupported.
+The v0.1.0 archive retains its older scope; the 50% checkpoint remains active.

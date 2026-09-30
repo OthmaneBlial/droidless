@@ -1,4 +1,4 @@
-//! Immediate FIFO operations. Waiting requires resumable guest execution and is unsupported.
+//! Immediate FIFO operations and resumable worker take/put.
 use crate::{
     heap::{Data, Word, fault},
     vm::Runtime,
@@ -9,7 +9,7 @@ use droidless_formats::dex::Method;
 const QUEUE: &str = "Ljava/util/concurrent/LinkedBlockingQueue;";
 
 impl Runtime {
-    fn queue_capacity(&self, owner: Word) -> Result<i32> {
+    pub(crate) fn queue_capacity(&self, owner: Word) -> Result<i32> {
         self.heap
             .get(owner)?
             .fields
@@ -80,6 +80,31 @@ impl Runtime {
             "remainingCapacity()I" => result.push(Word::from(
                 self.queue_capacity(owner)? - self.collection(owner)?.0.len() as i32,
             )),
+            "take()Ljava/lang/Object;" => {
+                self.check_interrupt()?;
+                let mut values = self.collection(owner)?.0.to_vec();
+                if values.is_empty() {
+                    self.wait_worker(crate::workers::Waiting::Take(owner))?;
+                }
+                result.push(values.remove(0));
+                self.change_collection(owner, values)?;
+            }
+            "put(Ljava/lang/Object;)V" => {
+                let value = arg(1)?;
+                if value.reference()? == 0 {
+                    return Err(fault(
+                        "Ljava/lang/NullPointerException;",
+                        "null queue element",
+                    ));
+                }
+                self.check_interrupt()?;
+                let mut values = self.collection(owner)?.0.to_vec();
+                if values.len() == self.queue_capacity(owner)? as usize {
+                    self.wait_worker(crate::workers::Waiting::Put(owner))?;
+                }
+                values.push(value);
+                self.change_collection(owner, values)?;
+            }
             "offer(Ljava/lang/Object;)Z" => {
                 let value = arg(1)?;
                 if value.reference()? == 0 {
@@ -182,7 +207,7 @@ mod tests {
     use droidless_formats::apk::Apk;
 
     #[test]
-    fn capacity_mutation_and_unsupported_waits_preserve_queue_state() {
+    fn capacity_mutation_and_unsupported_operations_preserve_queue_state() {
         let mut vm = Runtime::new(
             Apk::parse(include_bytes!(
                 "../../../fixtures/generated/collections.apk"
@@ -229,13 +254,6 @@ mod tests {
             .contains("entry limit")
         );
         for (name, args, parameters, returns) in [
-            ("take", vec![queue], vec![], "Ljava/lang/Object;"),
-            (
-                "put",
-                vec![queue, item],
-                vec!["Ljava/lang/Object;".into()],
-                "V",
-            ),
             ("iterator", vec![queue], vec![], "Ljava/util/Iterator;"),
             ("toString", vec![queue], vec![], "Ljava/lang/String;"),
         ] {
@@ -252,5 +270,43 @@ mod tests {
             assert_eq!(values, &before);
             assert_eq!(version, 0);
         }
+        let tiny = vm.heap.instance(QUEUE).unwrap();
+        let method = |name: &str, parameters: &[&str], returns: &str| Method {
+            class: QUEUE.into(),
+            name: name.into(),
+            parameters: parameters.iter().map(|s| (*s).into()).collect(),
+            returns: returns.into(),
+        };
+        vm.invoke(
+            method("<init>", &["I"], "V"),
+            vec![tiny, Word::from(1)],
+            false,
+        )
+        .unwrap();
+        vm.invoke(
+            method("put", &["Ljava/lang/Object;"], "V"),
+            vec![tiny, item],
+            true,
+        )
+        .unwrap();
+        let error = vm
+            .invoke(
+                method("put", &["Ljava/lang/Object;"], "V"),
+                vec![tiny, item],
+                true,
+            )
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("unsupported blocking wait on the main thread"));
+        assert_eq!(vm.collection(tiny).unwrap().0, &[item]);
+        assert_eq!(
+            vm.invoke(method("take", &[], "Ljava/lang/Object;"), vec![tiny], true)
+                .unwrap(),
+            vec![item]
+        );
+        let error = vm
+            .invoke(method("take", &[], "Ljava/lang/Object;"), vec![tiny], true)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("unsupported blocking wait on the main thread"));
+        assert!(vm.collection(tiny).unwrap().0.is_empty());
     }
 }

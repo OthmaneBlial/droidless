@@ -25,8 +25,17 @@ pub(crate) struct Frame {
     pub result: Vec<Word>,
     pub exception: Option<Word>,
     pub return_pc: Option<usize>,
+    pub monitors: Vec<Word>,
 }
 impl Frame {
+    pub(crate) fn roots(&self) -> impl Iterator<Item = Word> + '_ {
+        self.registers
+            .iter()
+            .chain(&self.result)
+            .chain(&self.monitors)
+            .copied()
+            .chain(self.exception)
+    }
     pub(crate) fn location(&self) -> String {
         format!(
             "at {} [classes{}.dex, PC 0x{:04x}]",
@@ -66,6 +75,8 @@ pub struct Runtime {
     pub(crate) storage: Option<crate::storage::Storage>,
     pub(crate) preferences: BTreeMap<String, Word>,
     pub(crate) queue: crate::scheduling::MainQueue,
+    pub(crate) workers: crate::workers::Workers,
+    pub(crate) sync_depth: usize,
 }
 impl Runtime {
     pub(crate) fn reset_budget(&mut self) {
@@ -124,6 +135,8 @@ impl Runtime {
             storage: None,
             preferences: BTreeMap::new(),
             queue: crate::scheduling::MainQueue::default(),
+            workers: crate::workers::Workers::default(),
+            sync_depth: 0,
         })
     }
     /// Enable disk storage below a host-approved apps root; `new` is ephemeral.
@@ -399,13 +412,8 @@ impl Runtime {
             .chain(self.queue.active)
             .chain(self.interned.values().copied())
             .chain(self.failed_classes.values().flatten().copied())
-            .chain(self.frames.iter().flat_map(|f| {
-                f.registers
-                    .iter()
-                    .chain(&f.result)
-                    .copied()
-                    .chain(f.exception)
-            }));
+            .chain(self.frames.iter().flat_map(Frame::roots))
+            .chain(self.workers.roots());
         self.heap.collect(roots)
     }
     pub(crate) fn intern(&mut self, text: String) -> Result<Word> {
@@ -758,10 +766,13 @@ impl Runtime {
         virtual_call: bool,
     ) -> Result<Vec<Word>> {
         let base = self.frames.len();
-        match self.begin_invoke(method, args, virtual_call)? {
+        self.sync_depth += 1;
+        let result = (|| match self.begin_invoke(method, args, virtual_call)? {
             Some(words) => Ok(words),
             None => self.execute(base),
-        }
+        })();
+        self.sync_depth -= 1;
+        result
     }
     /// Resolve a call: native words return immediately; a DEX call pushes one managed frame.
     pub(crate) fn begin_invoke(
@@ -818,6 +829,7 @@ impl Runtime {
                         result: vec![],
                         exception: None,
                         return_pc: None,
+                        monitors: vec![],
                     });
                     return Ok(None);
                 }

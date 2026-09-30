@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Deferred guest Thread.start execution on a serial host worker executor, retaining
+  shared-heap DEX frames across LinkedBlockingQueue take/put and reentrant monitor
+  waits. Stable identities, start-once faults, interrupt delivery, GC roots, bounded
+  slices and teardown are checked. Main Handler result delivery passes headless
+  replay; direct worker UI access is rejected. The pure Java WorkerContract also
+  passes on desktop Java. Main waits, native bridge/initializer suspension, worker
+  Looper delivery, priority, sleep/join and parallel CPU execution remain unsupported.
+
 - Iterative managed DEX calls with return continuations and cross-frame exception
   unwinding. Compiled checks pause/resume nested calls and collect after each step;
   reference/wide results, catch/finally, diagnostics and stack limits remain intact.

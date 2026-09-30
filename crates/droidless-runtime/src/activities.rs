@@ -97,6 +97,7 @@ impl Runtime {
         Ok(())
     }
     pub(crate) fn queue_navigation(&mut self, navigation: Navigation) -> Result<()> {
+        self.require_main_thread()?;
         ensure!(
             self.navigation.len() < 128,
             "pending navigation limit reached (128)"

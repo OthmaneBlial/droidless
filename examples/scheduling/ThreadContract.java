@@ -6,6 +6,7 @@ public class ThreadContract {
     public static int contract() {
         Thread main = Thread.currentThread();
         if (main != Thread.currentThread() || !main.isAlive() || main.getId() <= 0) return 0;
+        try { main.start(); return 0; } catch (IllegalThreadStateException expected) {}
         Thread first = new Thread("unstarted");
         Thread second = new Thread(new Runnable() { public void run() { calls++; } }, "manual");
         if (first.isAlive() || first.getId() == second.getId() || first.getId() == main.getId()) return 0;

@@ -56,6 +56,9 @@ public class MainActivity extends Activity {
     static class EqualToken {
         public boolean equals(Object other) { return other instanceof EqualToken; }
     }
+    public void startUnsafeWorker() {
+        WorkerContract.prepare(4, new Runnable() { public void run() { label.setText("Wrong worker UI"); } });
+    }
     public void onCreate(Bundle state) {
         super.onCreate(state);
         if (ThreadContract.contract() != 1) throw new IllegalStateException("thread metadata");
@@ -77,6 +80,24 @@ public class MainActivity extends Activity {
         finish.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
             timerHandler.postDelayed(new Runnable() { public void run() { MainActivity.this.finish(); } },20);
         }}); layout.addView(finish);
+        Button worker = new Button(this); worker.setText("Start worker");
+        worker.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            label.setText("Worker queued");
+            WorkerContract.prepare(0, new Runnable() { public void run() {
+                if (Looper.myLooper() != null || Thread.currentThread() == Looper.getMainLooper().getThread()) throw new IllegalStateException("worker Looper");
+                Looper.prepare();
+                if (Looper.myLooper().getThread() != Thread.currentThread()) throw new IllegalStateException("prepared Looper");
+                boolean rejected = false;
+                try { Looper.prepare(); } catch (RuntimeException expected) { rejected = true; }
+                if (!rejected) throw new IllegalStateException("second Looper allowed");
+                timerHandler.post(new Runnable() { public void run() {
+                    if (Thread.currentThread() != Looper.getMainLooper().getThread()) throw new IllegalStateException("worker result off main");
+                    label.setText("Worker result: " + WorkerContract.pollOutput());
+                    WorkerContract.interrupt();
+                }});
+            }});
+            try { WorkerContract.feed(); } catch (InterruptedException failure) { throw new IllegalStateException("main interrupted"); }
+        }}); layout.addView(worker);
         setContentView(layout);
     }
     public void onDestroy() { timerHandler.removeCallbacksAndMessages(null); super.onDestroy(); }

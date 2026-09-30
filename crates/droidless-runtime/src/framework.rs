@@ -46,6 +46,12 @@ pub(crate) fn known_class(class: &str) -> bool {
 }
 impl Runtime {
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+        if method.class.starts_with("Landroid/view/")
+            || method.class.starts_with("Landroid/widget/")
+            || method.class == "Landroid/app/Activity;"
+        {
+            self.require_main_thread()?;
+        }
         if self.trace.framework {
             eprintln!("framework: {} {args:?}", method.key());
         }

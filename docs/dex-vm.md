@@ -28,7 +28,8 @@ The internal evaluator can stop after an instruction quantum and resume the same
 frame stack. Zero steps execute nothing. Compiled tests pause after every DEX step
 and collect, checking nested calls, reference/wide returns and caught/uncaught
 exceptions. Native bridges and class initialization still execute synchronously
-within a step; this is not complete worker scheduling or a precise wall-time slice.
+within a step; worker queue/monitor waits now use the managed continuations, but native bridge
+suspension and precise wall-time slices remain unsupported.
 [Worker boundary](threading.md).
 
 Integer overflow wraps, shifts mask counts, float/double arithmetic uses IEEE
@@ -38,7 +39,11 @@ instructions rather than a parallel calculator implementation.
 
 Execution stops after five million instructions per launch/input/close transaction or message poll
 or 128 frames. Unsupported opcodes fail rather than acting as successful NOPs.
-Monitors are only meaningful under the current single guest thread.
+DEX monitors track reentrant guest Thread ownership, root locked objects, park
+contending workers and release locks on unwind. Unbalanced/cross-frame monitor
+operations fail explicitly. DEX-declared synchronized flags do not substitute for
+monitor instructions; native synchronized methods remain unsupported.
+[DEX access flags](https://source.android.com/docs/core/runtime/dex-format).
 
 ## Classes and objects
 

@@ -46,11 +46,14 @@ Structural mutation of this queue during guest equals is explicitly unsupported
 and reports a terminal diagnostic after the callback. It does not manufacture a
 ConcurrentModificationException or discard the callback's mutations.
 
-**Waiting and concurrent access are not implemented.** take, put, timed offer/poll,
-worker execution, iterators, drainTo, bulk/copy operations and queue toString remain
-unsupported. Existing queue values stay unchanged when unsupported calls fail.
-The class name does not imply a complete blocking queue or thread-safe VM.
-[Threading boundary](threading.md).
+Current source also supports take()/put(Object): ready operations execute directly;
+empty/full operations retain a worker's managed invocation until data/capacity or
+an interrupt is available. Interrupted waits throw InterruptedException and clear
+the flag. Shared queue mutation executes serially on the shared guest heap. Main
+blocking and suspension across synchronous native bridges remain explicit errors.
+Timed offer/poll, iterators, drainTo, bulk/copy operations and queue toString remain
+unsupported. Resource limits preserve existing values. The class name does not
+imply complete Java concurrency. [Threading boundary](threading.md).
 
 ## Sets, lists and maps
 

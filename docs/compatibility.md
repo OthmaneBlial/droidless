@@ -6,7 +6,7 @@
 |---|---|
 | 00–11 | NOP, move variants/results/exceptions, returns |
 | 12–1c | Numeric/wide/string/class constants |
-| 1d–27 | Single-thread monitors, casts/type tests, arrays/instances, explicit throw |
+| 1d–27 | Guest-owned reentrant monitors, casts/type tests, arrays/instances, explicit throw |
 | 28–3d | Goto, packed/sparse switches, numeric comparisons and conditions |
 | 44–6d | Array and instance/static field reads/writes |
 | 6e–72, 74–78 | Virtual/super/direct/static/interface calls and range forms |
@@ -48,8 +48,8 @@ support removal and fail-fast next/remove. Collections.unmodifiableSet stays liv
 and rejects mutation. Canonical Class literals work as Map keys, with basic package
 metadata. [Collections methods, evidence and ceilings](collections.md).
 LinkedBlockingQueue supports an immediate FIFO subset with fixed/default capacity,
-duplicates, null rejection and inherited override dispatch. take/put, timed waits
-and concurrency remain unsupported. [Queue limits](collections.md#immediate-fifo-queues).
+duplicates, null rejection and inherited override dispatch. Worker take/put waits
+retain managed frames; timed waits and parallel execution remain unsupported. [Queue limits](collections.md#immediate-fifo-queues).
 
 APK-local Class.forName(String), getName/getClass and no-argument construction
 execute guest code. Field opcodes canonicalize inherited declaring owners.
@@ -58,12 +58,13 @@ execute guest code. Field opcodes canonicalize inherited declaring owners.
 Main Handler/Looper/Message scheduling runs deferred and delayed guest callbacks,
 honors dispatch overrides, cancels by identity and retains pending/active payloads
 through GC. Native timers and headless manual time are verified in an authored
-fixture. Thread metadata/manual run are implemented; background execution is
-unsupported. [Exact scheduling methods, clocks and limits](threading.md).
+fixture. Deferred workers execute DEX on a serial shared-heap host executor;
+queue/monitor waits, interruption and worker-to-main result posting pass headless
+checks. Native worker interaction remains unverified. [Exact scheduling methods, clocks and limits](threading.md).
 
 ## Known ceilings
 
-- One foreground Activity with a bounded preserved back stack; single-threaded VM
+- One foreground Activity with a bounded preserved back stack; serial shared-heap VM with bounded guest workers
   and approximate layout/style/configuration. No saved-state recreation/tasks/
   launch modes/activity results/implicit or external Intents.
 - Explicit and common implicit Java exceptions are catchable; unsupported APIs,
@@ -72,7 +73,8 @@ unsupported. [Exact scheduling methods, clocks and limits](threading.md).
 - Java float string scientific-notation edge cases differ from Rust formatting.
 - Failed class initialization is sticky and retains causes; concurrent initialization
   is unsupported. Instruction/field/method checks are not a complete Java type verifier.
-- No background guest threads/blocking waits/worker Loopers/general Java timers.
+- Main waits, blocking native-bridge callbacks/initializers, sleep/join, wait/notify,
+  worker Looper delivery/priority, parallel execution and general Java timers are unsupported.
 - No bulk collections/Map views/custom class loaders/method or field reflection/general file I/O/SQLite/images/networking/JNI/JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.

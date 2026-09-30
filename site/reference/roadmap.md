@@ -21,9 +21,11 @@ The following are objectives, not completed capability claims.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
    callbacks are proven. Immediate FIFO queue operations also pass compiled and
    desktop Java conformance. Managed DEX call continuations now pause/resume with
-   GC and exception checks; native bridges/class initialization remain synchronous.
-   Follow Notepad's Thread.start requirement with actual
-   guest worker execution; do not replace Thread.start with inline execution.
+   GC and exception checks. Bounded deferred workers now execute on a serial shared-heap
+   host executor, with queue/monitor waits and main Handler result checks. Native
+   bridges/class initialization remain synchronous; main waits, worker delivery,
+   priorities and join/sleep remain ahead. Notepad now passes Thread.start and
+   stops at Integer.TYPE in its generated DBFlow adapter.
    Gate: a real APK completes its queued transactions and posts UI results.
 5. Lists/images/SQLite/network: follow first failures in substantial third-party
    apps, with host capabilities explicit and tested.
