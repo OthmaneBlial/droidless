@@ -2,12 +2,21 @@
 
 ## Unreleased
 
+- Main Handler/Looper/Message queue with deferred/delayed APK callbacks, identity
+  cancellation, virtual dispatch, GC roots and bounded clock/queue execution.
+  Native authored timer, cancellation and delayed finish verified; deterministic
+  `--advance-ms` replay and unstarted Thread metadata/manual run support.
+  Thread.start and blocking queues remain unsupported. Local CI passes 32 Rust
+  tests, 4,096 parser mutations and 17 original calculator scenarios.
+- Unmodified Notepad now passes Thread(String) construction and stops at
+  LinkedBlockingQueue in DBFlow startup, before Activity/UI creation.
+
 - Bounded ArrayList with ordered duplicates/nulls, indexed operations, guest
   equality and Set/List iterators; basic inherited LinkedHashMap operations.
-  The compiled list contract also passes on desktop Java. Local CI remains
+  The compiled list contract also passes on desktop Java. That checkpoint passed
   28 Rust tests, 4,096 parser mutations and 17 original calculator scenarios.
-- Unmodified Notepad passes DBFlow's collection constructors and now stops at
-  Thread(String). No Activity/UI reached; scheduling remains future work.
+- At the collections checkpoint, unmodified Notepad passed DBFlow's collection
+  constructors and stopped at Thread(String), before Activity/UI creation.
 
 - Replace the public README/site showcase with unmodified Simple Calculator 1.0,
   a real white/charcoal native capture and seven checked headless scenarios.

@@ -46,6 +46,14 @@ extern "C" fn event(context: *mut c_void, kind: u32, handle: usize, text: *const
     let context = unsafe { &mut *context.cast::<ContextData<'_>>() };
     let mut consumed = false;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<()> {
+        let dispatched = if kind == 6 {
+            context.runtime.poll_messages()?
+        } else {
+            0
+        };
+        if context.runtime.activity.is_none() {
+            return Ok(());
+        }
         match kind {
             1 => {
                 context.runtime.click(handle)?;
@@ -68,9 +76,10 @@ extern "C" fn event(context: *mut c_void, kind: u32, handle: usize, text: *const
                 context.runtime.back()?;
                 consumed = true;
             }
+            6 => {}
             _ => anyhow::bail!("unknown native event {kind}"),
         }
-        if context.runtime.activity.is_some() {
+        if context.runtime.activity.is_some() && (kind != 6 || dispatched > 0) {
             draw(context)?;
         }
         Ok(())
@@ -139,6 +148,7 @@ pub fn run(runtime: &mut Runtime) -> Result<()> {
     if runtime.activity.is_none() {
         return Ok(());
     }
+    runtime.use_realtime_clock()?;
     let title = CString::new(format!("{} — DROIDLESS", runtime.title.trim()))?;
     let mut context = ContextData {
         runtime,

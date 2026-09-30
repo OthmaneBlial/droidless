@@ -7,6 +7,7 @@ pub mod heap;
 mod interpreter;
 mod preferences;
 mod reflection;
+mod scheduling;
 mod storage;
 pub mod ui;
 mod vm;

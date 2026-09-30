@@ -103,6 +103,22 @@
       "notes": "Authored compiled APK: class lookup/construction, initialization/access faults, arrays and inherited field aliases; GC and missing/wrong-kind regressions. Same pure-Java contract passes on Java 17 with Java 8 source/target."
     },
     {
+      "package": "org.droidless.scheduling",
+      "origin": "droidless-fixture",
+      "status": "interactive-fixture",
+      "native_ui": true,
+      "native_mouse": true,
+      "native_timer_verified": true,
+      "native_cancellation_verified": true,
+      "native_delayed_finish_verified": true,
+      "native_close_exit_zero": true,
+      "headless_conformance_verified": true,
+      "desktop_java_thread_metadata_differential_verified": true,
+      "android_reference_verified": false,
+      "source": "examples/scheduling",
+      "notes": "Current source: authored main-thread Handler/Looper/Message timer, cancellation and delayed finish. Compiled ordering/dispatch/token identity/GC/limits/errors/shutdown checks. Desktop Java comparison covers unstarted Thread metadata/manual run only. Thread.start, workers and blocking queues unsupported; no independent asynchronous APK workflow evidence."
+    },
+    {
       "package": "ir.cafebazaar.notepad",
       "version": "1.0",
       "origin": "third-party",
@@ -110,8 +126,8 @@
       "sha256": "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f",
       "status": "startup-blocked",
       "native_ui": false,
-      "first_failure": "unsupported method Ljava/lang/Thread;-><init>(Ljava/lang/String;)V in DBFlow f/b/a/b.<init> at PC 0x0000 (Application.onCreate PC 0x0016)",
-      "notes": "Parsed; DBFlow ArrayList/LinkedHashMap constructors, APK-local reflection and inherited fields resolve. No Activity/UI or notes workflow reached. Original release APK unmodified and not redistributed.",
+      "first_failure": "unsupported class Ljava/util/concurrent/LinkedBlockingQueue; in DBFlow f/b/a/b.<init>(String) at PC 0x0006 (Application.onCreate PC 0x0016)",
+      "notes": "Parsed; DBFlow ArrayList/LinkedHashMap/Thread(String) constructors, APK-local reflection and inherited fields resolve. No Activity/UI or notes workflow reached. Real workers/blocking queues remain required. Original release APK unmodified and not redistributed.",
       "release_tag": "v1.0.0"
     }
   ]

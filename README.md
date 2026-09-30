@@ -90,6 +90,10 @@ target/release/droidless run --headless --size 192x400 artifacts/apks/SimpleCalc
 # Current source: authored multi-screen navigation fixture
 target/release/droidless run --headless fixtures/generated/intents.apk \
   --click "Open detail" --back
+
+# Current source: replay the authored timer without waiting
+target/release/droidless run --headless --ephemeral fixtures/generated/scheduling.apk \
+  --click "Start timer" --advance-ms 1500 --advance-ms 1500 --advance-ms 1500
 ```
 
 Use `--trace-bytecode`, `--trace-methods`, `--trace-framework` or
@@ -98,6 +102,7 @@ counters and timings. `--click`, `--key`, `--back`, `--headless` and `inspect-ui
 support repeatable experiments. `--size WIDTHxHEIGHT` selects a 128–4096 logical viewport on each axis (default 420×720). **Escape delivers Back** in the native window.
 Current source adds `--input TEXT` for the first visible EditText, per-package
 preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only runs.
+`--advance-ms MILLISECONDS` advances the deterministic clock for queued APK callbacks.
 
 </details>
 
@@ -128,9 +133,10 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 📓 Persistent preferences | Typed SharedPreferences, isolated package data, native authored-note save/restart/clear — current source |
 | 🗂️ Java collections | Bounded HashSet/ArrayList/HashMap/basic LinkedHashMap, indexed lists, guest equality, Set/List iterators and live read-only Set views — current source |
 | 🔎 APK classes | APK-local Class lookup, no-argument construction, initialization/access faults and inherited field resolution — current source |
-| 🛠️ Next up | Thread/Handler scheduling, general app files, list widgets, images and timers; a substantial unmodified notes/todo APK |
+| ⏱️ Scheduled callbacks | Main Handler/Looper/Message queue, delayed APK callbacks, cancellation and GC retention; native authored timer verified — current source |
+| 🛠️ Next up | Blocking queues and guest workers, general app files, list widgets and images; a substantial unmodified notes/todo APK |
 
-The published **v0.1.0 archive predates navigation, persistence, collections and the new calculator demo**. Current source capability
+The published **v0.1.0 archive predates navigation, persistence, collections, scheduling and the new calculator demo**. Current source capability
 is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
 and games remain future compatibility work. [Exact limits](docs/compatibility.md).
 
@@ -146,7 +152,8 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Preferences | [Authored Java/XML fixture](examples/preferences/MainActivity.java) | Native UTF-8 paste, save/restart/clear, typed values and package/path isolation |
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list ordering/indexes, guest equality, nulls, iteration, live read-only views, GC and limits; same list contract passes on desktop Java |
 | Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, guest faults and inherited fields; same contract passes on desktop Java |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Collection constructors and reflective setup resolve; DBFlow startup stops at Thread(String). No UI or working-notes claim |
+| Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native delayed timer/cancellation/finish; headless ordering, Message overrides, GC, errors and limits. [Exact scheduling scope](docs/threading.md) |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Collection/reflection/Thread(String) setup resolves; DBFlow startup stops at LinkedBlockingQueue. No UI or working-notes claim |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).
@@ -158,7 +165,7 @@ sh tools/fetch-kascalc.sh # Earlier calculator regression APK
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 32 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

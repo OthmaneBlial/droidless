@@ -18,6 +18,12 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/Class;",
             "Ljava/lang/Double;",
             "Ljava/lang/Number;",
+            "Ljava/lang/Thread;",
+            "Ljava/lang/System;",
+            "Landroid/os/Handler;",
+            "Landroid/os/Message;",
+            "Landroid/os/Looper;",
+            "Landroid/os/SystemClock;",
             "Ljava/util/HashSet;",
             "Ljava/util/HashMap;",
             "Ljava/util/ArrayList;",
@@ -52,6 +58,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.reflection_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.scheduling_native(method, args)? {
             return Ok(Some(result));
         }
         let signature = method.signature();

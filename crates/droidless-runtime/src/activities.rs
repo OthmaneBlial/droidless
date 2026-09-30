@@ -153,6 +153,7 @@ impl Runtime {
                         } else {
                             self.activity = None;
                             self.root = None;
+                            self.stop_messages()?;
                         }
                         self.lifecycle_call(activity, &class, "onStop", vec![])?;
                     }

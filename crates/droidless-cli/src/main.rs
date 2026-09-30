@@ -9,6 +9,7 @@ enum Action {
     Key(String),
     Input(String),
     Back,
+    Advance(u64),
 }
 
 fn main() {
@@ -21,7 +22,7 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
         println!(
-            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --key CHAR --input TEXT --back --stats\n             --data-dir APPS_ROOT | --ephemeral\n             --size WIDTHxHEIGHT (128..4096; default 420x720)\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText. Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
+            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --key CHAR --input TEXT --back --stats\n             --advance-ms MILLISECONDS (deterministic timer replay)\n             --data-dir APPS_ROOT | --ephemeral\n             --size WIDTHxHEIGHT (128..4096; default 420x720)\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText. Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
         );
         return Ok(());
     }
@@ -69,6 +70,18 @@ fn run() -> Result<()> {
                     ));
                 }
                 "--back" => actions.push(Action::Back),
+                "--advance-ms" => {
+                    i += 1;
+                    let milliseconds = args
+                        .get(i)
+                        .ok_or_else(|| anyhow::anyhow!("--advance-ms requires milliseconds"))?
+                        .parse::<u64>()?;
+                    anyhow::ensure!(
+                        milliseconds <= i64::MAX as u64,
+                        "time advance exceeds the monotonic clock limit"
+                    );
+                    actions.push(Action::Advance(milliseconds));
+                }
                 "--input" => {
                     i += 1;
                     actions.push(Action::Input(
@@ -125,6 +138,7 @@ fn run() -> Result<()> {
             runtime.height = height;
         }
         runtime.launch()?;
+        runtime.poll_messages()?;
         for action in actions {
             match action {
                 Action::Key(text) => {
@@ -141,7 +155,11 @@ fn run() -> Result<()> {
                 }
                 Action::Back => runtime.back()?,
                 Action::Input(text) => runtime.input(&text)?,
+                Action::Advance(milliseconds) => {
+                    runtime.advance_time(milliseconds)?;
+                }
             }
+            runtime.poll_messages()?;
         }
         if headless {
             let tree = runtime.activity.map(|_| runtime.snapshot()).transpose()?;

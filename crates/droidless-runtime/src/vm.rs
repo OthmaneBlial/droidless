@@ -50,6 +50,7 @@ pub struct Runtime {
     pub(crate) navigation: std::collections::VecDeque<crate::activities::Navigation>,
     pub(crate) storage: Option<crate::storage::Storage>,
     pub(crate) preferences: BTreeMap<String, Word>,
+    pub(crate) queue: crate::scheduling::MainQueue,
 }
 impl Runtime {
     pub(crate) fn reset_budget(&mut self) {
@@ -107,6 +108,7 @@ impl Runtime {
             navigation: std::collections::VecDeque::new(),
             storage: None,
             preferences: BTreeMap::new(),
+            queue: crate::scheduling::MainQueue::default(),
         })
     }
     /// Enable disk storage below a host-approved apps root; `new` is ephemeral.
@@ -183,6 +185,7 @@ impl Runtime {
     }
     pub fn close(&mut self) -> Result<()> {
         self.budget = 0;
+        self.stop_messages()?;
         for screen in self.screens.values_mut() {
             screen.finishing = true;
         }
@@ -377,6 +380,8 @@ impl Runtime {
             }))
             .chain(self.statics.values().flatten().copied())
             .chain(self.preferences.values().copied())
+            .chain(self.queue.pending.values().copied())
+            .chain(self.queue.active)
             .chain(self.interned.values().copied())
             .chain(self.failed_classes.values().flatten().copied())
             .chain(self.frames.iter().flat_map(|f| {
@@ -421,7 +426,9 @@ impl Runtime {
     pub(crate) fn resolve_field(&self, field: &Field, static_field: bool) -> Result<Field> {
         ensure!(
             self.class_location(&field.class).is_some()
-                || (!static_field && field.class == "Landroid/util/DisplayMetrics;"),
+                || (!static_field
+                    && ["Landroid/util/DisplayMetrics;", "Landroid/os/Message;"]
+                        .contains(&field.class.as_str())),
             "unsupported framework field {}",
             field.key()
         );
@@ -457,14 +464,22 @@ impl Runtime {
                     work.push(parent.clone());
                 }
                 work.extend(def.interfaces.iter().rev().cloned());
-            } else if class == "Landroid/util/DisplayMetrics;"
-                && !static_field
-                && [
-                    ("widthPixels", "I"),
-                    ("heightPixels", "I"),
-                    ("density", "F"),
-                ]
-                .contains(&(field.name.as_str(), field.ty.as_str()))
+            } else if !static_field
+                && ((class == "Landroid/util/DisplayMetrics;"
+                    && [
+                        ("widthPixels", "I"),
+                        ("heightPixels", "I"),
+                        ("density", "F"),
+                    ]
+                    .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/os/Message;"
+                        && [
+                            ("what", "I"),
+                            ("arg1", "I"),
+                            ("arg2", "I"),
+                            ("obj", "Ljava/lang/Object;"),
+                        ]
+                        .contains(&(field.name.as_str(), field.ty.as_str()))))
             {
                 return Ok(Field {
                     class,
@@ -546,6 +561,9 @@ impl Runtime {
             if current == "Ljava/lang/String;" || current == "Ljava/lang/StringBuilder;" {
                 work.push("Ljava/lang/CharSequence;".into());
                 work.push("Ljava/io/Serializable;".into());
+            }
+            if current == "Ljava/lang/Thread;" {
+                work.push("Ljava/lang/Runnable;".into());
             }
             if current == "Ljava/util/HashSet;" {
                 work.extend(

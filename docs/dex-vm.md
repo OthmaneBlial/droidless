@@ -23,7 +23,7 @@ operations and numeric conversions follow the current Rust/Java-compatible
 saturation rules. Arithmetic edge tests and compiled Java exercise actual D8
 instructions rather than a parallel calculator implementation.
 
-Execution stops after five million instructions per launch/input/close transaction
+Execution stops after five million instructions per launch/input/close transaction or message poll
 or 128 frames. Unsupported opcodes fail rather than acting as successful NOPs.
 Monitors are only meaningful under the current single guest thread.
 

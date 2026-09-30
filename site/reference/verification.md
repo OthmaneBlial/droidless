@@ -210,14 +210,48 @@ operations and eviction remain unsupported. [Exact collection limits](collection
 
 The unchanged Notepad v1.0.0 APK retains SHA-256
 `2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
-DBFlow now constructs ArrayList and LinkedHashMap. Startup's first unsupported
+At the ordered-list checkpoint DBFlow constructed ArrayList and LinkedHashMap. Its first unsupported
 call is `Ljava/lang/Thread;-><init>(Ljava/lang/String;)V`, from
 `Lcom/raizlabs/android/dbflow/f/b/a/b;-><init>(Ljava/lang/String;)V`, PC `0x0000`,
 under Application.onCreate PC `0x0016`. No Activity/UI or notes workflow is reached.
-The original APK is neither changed nor redistributed. Thread/queue scheduling
-is the next diagnosed boundary, rather than a skipped initializer.
+The original APK is neither changed nor redistributed. The scheduling increment
+below moves this diagnosed boundary forward without skipping initializers.
 
 Full local CI passes 28 Rust tests, 4,096 seeded parser mutations, warning-free
 Clippy and release build; all 17 scenarios in the two original calculator APKs
 still pass. The v0.1.0 archive keeps its older scope; this increment is current
 source evidence. The 50% checkpoint remains active and has not been achieved.
+
+## Current source: main-thread messages and native timers
+
+The authored Scheduling APK executes queued Handler callbacks in guest DEX.
+Compiled checks cover deferred/negative-delay/equal-deadline ordering,
+Handler.dispatchMessage and handleMessage overrides, Callback handling, public
+Message fields, cancellation identity, main Looper/Thread identity, monotonic
+clock bounds and pending/active GC retention. Errors retain the guest cause and
+leave clean frames; queue capacity, deadline overflow, self-posting and shutdown
+have regressions. ThreadContract's unstarted metadata/manual run checks also pass
+on Java 17.0.19 with Java 8 source/target. No background-thread or Android
+reference differential evidence is claimed. [Exact scope](threading.md).
+
+Actual native clicks at a 360×340 logical viewport displayed Waiting for timer,
+then Timer done: 3 through three 1,500-ms callbacks. Start followed by Cancel
+before the first deadline remained Timer cancelled after that deadline. Finish
+later closed through a queued guest callback, emitting onPause/onStop/onDestroy
+and exiting with status 0. The [native capture](assets/scheduling-native.png)
+is an unedited screenshot of this authored fixture. Headless `--advance-ms`
+replay independently produces Timer done: 3. The public Simple Calculator was
+also rechecked after the event-loop change with native 7 + 5 = 12 and clean close.
+
+The unchanged Notepad release still has SHA-256
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+Thread(String) now resolves. Its first failure is unsupported class
+`Ljava/util/concurrent/LinkedBlockingQueue;`, in
+`Lcom/raizlabs/android/dbflow/f/b/a/b;-><init>(Ljava/lang/String;)V` at PC `0x0006`,
+under Application.onCreate PC `0x0016`. No Activity/UI or notes workflow is reached.
+Real transaction workers and blocking queues remain required.
+
+Full local CI passes 32 Rust tests, 4,096 seeded parser mutations, warning-free
+Clippy and release build. All 17 original calculator scenarios pass. GitHub
+Actions stay disabled. This is current-source support; the v0.1.0 archive retains
+its older scope. The 50% everyday-app checkpoint has not been achieved.

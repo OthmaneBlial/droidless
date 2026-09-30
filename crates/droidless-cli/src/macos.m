@@ -155,6 +155,7 @@ void dl_run(void *opaque) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;
     while (host.running && host.window.visible) {
         @autoreleasepool {
+            if (!host.callback(host.context, 6, 0, NULL)) { host.running = NO; break; }
             NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:0.05] inMode:NSDefaultRunLoopMode dequeue:YES];
             if (event) {
                 int consumed = 0;

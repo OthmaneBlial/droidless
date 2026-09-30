@@ -35,7 +35,7 @@ are implemented for the fault paths covered by conformance tests.
 Current source adds explicit same-APK Intent constructors/setClass/setClassName,
 startActivity, getIntent, finish/isFinishing/onBackPressed, Bundle typed extras and
 back-stack lifecycle. This is authored-fixture evidence, not a third-party notes
-app claim; the v0.1.0 release predates navigation, persistence, collections and the new calculator demo.
+app claim; the v0.1.0 release predates navigation, persistence, collections, scheduling and the new calculator demo.
 SharedPreferences adds String/int/long/float/boolean reads and staged editors,
 commit/apply/remove/clear, MODE_PRIVATE stores, Activity.getPreferences and a
 minimal application-context singleton. Native authored-note save/restart/clear
@@ -52,6 +52,12 @@ APK-local Class.forName(String), getName/getClass and no-argument construction
 execute guest code. Field opcodes canonicalize inherited declaring owners.
 [Reflection scope and evidence](reflection.md).
 
+Main Handler/Looper/Message scheduling runs deferred and delayed guest callbacks,
+honors dispatch overrides, cancels by identity and retains pending/active payloads
+through GC. Native timers and headless manual time are verified in an authored
+fixture. Thread metadata/manual run are implemented; background execution is
+unsupported. [Exact scheduling methods, clocks and limits](threading.md).
+
 ## Known ceilings
 
 - One foreground Activity with a bounded preserved back stack; single-threaded VM
@@ -63,7 +69,8 @@ execute guest code. Field opcodes canonicalize inherited declaring owners.
 - Java float string scientific-notation edge cases differ from Rust formatting.
 - Failed class initialization is sticky and retains causes; concurrent initialization
   is unsupported. Instruction/field/method checks are not a complete Java type verifier.
-- No bulk collections/Map views/custom class loaders/method or field reflection/general file I/O/Handler/Looper/SQLite/images/networking/JNI/JIT,
+- No background guest threads/blocking queues/worker Loopers/general Java timers.
+- No bulk collections/Map views/custom class loaders/method or field reflection/general file I/O/SQLite/images/networking/JNI/JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.
 

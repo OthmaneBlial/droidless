@@ -44,6 +44,14 @@ iterator. Class literals have stable identity; Class.getPackage/Package.getName
 expose basic metadata. Bulk operations, Map views, access-order maps and eviction
 hooks remain unsupported. [Exact methods and ceilings](collections.md).
 
+## Main-thread scheduling subset
+
+Handler/Looper/Message queue deferred and delayed guest callbacks, with identity
+cancellation, virtual dispatch and GC retention. Native callbacks update Views;
+headless `--advance-ms` provides deterministic replay. Minimal Thread metadata
+and explicit manual run are supported; Thread.start and blocking queues fail
+explicitly. [Exact methods, clocks, limits and native evidence](threading.md).
+
 ## APK classes and Java numbers
 
 APK-local Class lookup and no-argument reflective construction execute guest
