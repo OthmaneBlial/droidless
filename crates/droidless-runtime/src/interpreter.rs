@@ -105,13 +105,7 @@ impl Runtime {
                 Ok(flow) => flow,
                 Err(mut error) => {
                     if let Some(fault) = error.downcast_ref::<GuestFault>() {
-                        let object = self.heap.instance(fault.0)?;
-                        let message = self.heap.string(fault.1.clone())?;
-                        self.heap
-                            .get_mut(object)?
-                            .fields
-                            .insert("message".into(), vec![message]);
-                        error = self.throw_reference(object)?;
+                        error = self.guest_exception(fault.0, fault.1.clone(), None)?;
                     }
                     if let Some(thrown) = error.downcast_ref::<Thrown>() {
                         let exception = thrown.0;

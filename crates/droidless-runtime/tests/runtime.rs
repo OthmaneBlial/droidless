@@ -95,6 +95,30 @@ fn implicit_java_faults_catch_finally_and_inherited_array_types() {
 }
 
 #[test]
+fn failed_class_initialization_is_sticky_and_retains_its_exception() {
+    let mut vm = runtime();
+    assert_eq!(
+        eval(&mut vm, "failedInit", &[], "I", vec![]),
+        vec![Word::from(1)]
+    );
+    vm.collect();
+    assert_eq!(
+        eval(&mut vm, "failedInit", &[], "I", vec![]),
+        vec![Word::from(2)]
+    );
+    assert_eq!(
+        eval(&mut vm, "failedInitError", &[], "I", vec![]),
+        vec![Word::from(1)]
+    );
+    vm.collect();
+    assert_eq!(
+        eval(&mut vm, "failedInitError", &[], "I", vec![]),
+        vec![Word::from(2)]
+    );
+    assert_eq!(vm.stack_depth(), 0);
+}
+
+#[test]
 fn lifecycle_xml_resources_and_dex_callbacks() {
     let mut vm = runtime();
     vm.launch().unwrap();

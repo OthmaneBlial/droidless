@@ -83,6 +83,18 @@ public class MainActivity extends Activity {
         RootWork w=new Derived(); Object array=new Derived[1];
         return w instanceof RootWork && array instanceof Base[] && array instanceof Object[] ? w.apply(4) : -1;
     }
+    static class Broken { static int value=divide(0); }
+    public static int failedInit() {
+        try { return Broken.value; }
+        catch (ExceptionInInitializerError e) { return e.getCause() instanceof ArithmeticException ? 1 : -1; }
+        catch (NoClassDefFoundError e) { return e.getCause() instanceof ExceptionInInitializerError && e.getCause().getCause() instanceof ArithmeticException ? 2 : -2; }
+    }
+    static class BrokenError { static int value; static { if (bias>0) throw new Error("failure"); } }
+    public static int failedInitError() {
+        try { return BrokenError.value; }
+        catch (NoClassDefFoundError e) { return 2; }
+        catch (Error e) { return e instanceof ExceptionInInitializerError ? -1 : 1; }
+    }
     interface RootWork { int apply(int x); }
     interface Work extends RootWork {}
     static class Base { public int apply(int x) { return x+2; } }

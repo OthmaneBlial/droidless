@@ -30,7 +30,7 @@ substring/concat/charAt; StringBuilder constructors/append/toString; Integer
 parseInt/toString; Double parseDouble/toString; Math sqrt/cbrt/sin/cos/tan/log/
 exp/abs/pow; Log d/i/w/e. The source's exact signature table is authoritative;
 other overloads remain unsupported.
-Throwable constructors/getMessage/toString and common runtime exception types
+Throwable constructors/getMessage/getCause/toString and common runtime exception types
 are implemented for the fault paths covered by conformance tests.
 
 ## Known ceilings
@@ -40,8 +40,8 @@ are implemented for the fault paths covered by conformance tests.
   malformed instructions and host resource ceilings remain terminal diagnostics.
 - UTF-16 lengths/substrings are honored; isolated surrogates are rejected by Rust.
 - Java float string scientific-notation edge cases differ from Rust formatting.
-- Class-init failure semantics and verification of all instruction boundaries
-  are incomplete; method/field verification is not a complete Java type verifier.
+- Failed class initialization is sticky and retains causes; concurrent initialization
+  is unsupported. Instruction/field/method checks are not a complete Java type verifier.
 - No collections/I/O/Intent/Handler/Looper/SQLite/images/networking/JNI/JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.

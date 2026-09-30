@@ -44,6 +44,8 @@ third-party Activity execution, arithmetic/wide values, fields/static initializa
 arrays/covariance, inherited interface dispatch, explicit/implicit exceptions,
 17 fault paths and catch-all/finally, GC reachability,
 lifecycle, DEX clicks and EditText copy.
+Failed class-initialization tests verify wrapping versus Error propagation,
+subsequent NoClassDefFoundError and cause retention across collection.
 Local CI also runs 4,096 seeded APK/DEX/XML/resource mutations without panics.
 This is deterministic smoke coverage, not a coverage-guided fuzz campaign.
 

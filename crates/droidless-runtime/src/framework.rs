@@ -77,6 +77,16 @@ impl Runtime {
                     .cloned()
                     .unwrap_or_else(|| vec![Word::ZERO]);
             }
+            ("Ljava/lang/Throwable;", "getCause()Ljava/lang/Throwable;")
+            | ("Ljava/lang/ExceptionInInitializerError;", "getException()Ljava/lang/Throwable;") => {
+                result = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("cause")
+                    .cloned()
+                    .unwrap_or_else(|| vec![Word::ZERO]);
+            }
             ("Ljava/lang/Throwable;", "toString()Ljava/lang/String;") => {
                 let object = self.heap.get(receiver)?;
                 let class = object

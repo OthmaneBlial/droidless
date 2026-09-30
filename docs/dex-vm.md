@@ -32,8 +32,13 @@ Monitors are only meaningful under the current single guest thread.
 Instances hold descriptor plus fields keyed by declaring class/name/type. Arrays
 retain component type and words. Static fields are independent roots, initialized
 from encoded values before `<clinit>`. A class is marked initializing to prevent
-recursive entry. A complete erroneous-class initialization state machine is
-pending. Inheritance/virtual/interface dispatch, inherited interface assignability
+recursive entry. Failed initialization persists: non-Error guest exceptions are
+wrapped in ExceptionInInitializerError, later accesses throw NoClassDefFoundError,
+and causes remain GC roots. Existing Error subclasses propagate without wrapping.
+The failure rules follow [JLS 12.4.2](https://docs.oracle.com/javase/specs/jls/se25/html/jls-12.html#jls-12.4.2).
+Initialization depth is bounded to 128; concurrent initialization is unsupported.
+Initialization of default-method superinterfaces is not yet implemented.
+Inheritance/virtual/interface dispatch, inherited interface assignability
 and reference array covariance are exercised by compiled Java tests. Array reads/
 writes validate opcode/component width and reference element assignability.
 

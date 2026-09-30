@@ -3,8 +3,7 @@
 The first third-party interactive calculator milestone is proven on macOS ARM64.
 The following are objectives, not completed capability claims.
 
-1. Continue VM verification: full field/method reference validation, failed class
-   initialization and instruction
+1. Continue VM verification: full field/method reference validation and instruction
    boundaries. Gate: compiled conformance/malformed-input regressions.
 2. Improve input/resources: native text/key evidence, full focus/IME, qualifier/
    style resolution, images/drawables and weighted measurement. Gate: native

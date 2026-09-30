@@ -40,6 +40,8 @@ pub struct Runtime {
     pub(crate) frames: Vec<Frame>,
     pub(crate) statics: BTreeMap<String, Vec<Word>>,
     initialized: BTreeSet<String>,
+    failed_classes: BTreeMap<String, Option<Word>>,
+    initializing_depth: usize,
     pub(crate) interned: BTreeMap<String, Word>,
     budget: u64,
 }
@@ -86,6 +88,8 @@ impl Runtime {
             frames: vec![],
             statics: BTreeMap::new(),
             initialized: BTreeSet::new(),
+            failed_classes: BTreeMap::new(),
+            initializing_depth: 0,
             interned: BTreeMap::new(),
             budget: 0,
         })
@@ -322,6 +326,7 @@ impl Runtime {
             .chain(self.root)
             .chain(self.statics.values().flatten().copied())
             .chain(self.interned.values().copied())
+            .chain(self.failed_classes.values().flatten().copied())
             .chain(self.frames.iter().flat_map(|f| {
                 f.registers
                     .iter()
@@ -398,8 +403,11 @@ impl Runtime {
             if current == target {
                 return true;
             }
-            if !visited.insert(current.clone()) || visited.len() > 128 {
+            if !visited.insert(current.clone()) {
                 continue;
+            }
+            if visited.len() > 128 {
+                return false;
             }
             if let Some((d, c)) = self.class_location(&current) {
                 work.extend(self.apk.dex[d].classes[c].interfaces.iter().cloned());
@@ -415,44 +423,99 @@ impl Runtime {
         false
     }
     pub(crate) fn initialize(&mut self, class: &str) -> Result<()> {
+        if let Some(cause) = self.failed_classes.get(class).copied() {
+            return Err(self.guest_exception(
+                "Ljava/lang/NoClassDefFoundError;",
+                format!("could not initialize {class}"),
+                cause,
+            )?);
+        }
         if self.initialized.contains(class) {
             return Ok(());
         }
+        ensure!(
+            self.initializing_depth < 128,
+            "class initialization depth limit reached"
+        );
+        self.initializing_depth += 1;
         self.initialized.insert(class.to_owned());
-        if let Some((d, c)) = self.class_location(class) {
-            let def = self.apk.dex[d].classes[c].clone();
-            if let Some(parent) = def.super_class {
-                self.initialize(&parent)?;
+        let result = (|| -> Result<()> {
+            if let Some((d, c)) = self.class_location(class) {
+                let def = self.apk.dex[d].classes[c].clone();
+                if let Some(parent) = def.super_class {
+                    self.initialize(&parent)?;
+                }
+                for (i, idx) in def.static_fields.iter().enumerate() {
+                    let field = self.apk.dex[d].fields[*idx].clone();
+                    let value = match def.static_values.get(i) {
+                        Some(EncodedValue::Bits(v)) if field.ty == "J" || field.ty == "D" => {
+                            wide(*v)
+                        }
+                        Some(EncodedValue::Bits(v)) => vec![Word::Bits(*v as u32)],
+                        Some(EncodedValue::String(s)) => vec![self.intern(s.clone())?],
+                        Some(EncodedValue::Null) | None => default_value(&field.ty),
+                        Some(v) => bail!("unsupported static initializer value {v:?}"),
+                    };
+                    self.statics.insert(field.key(), value);
+                }
+                if def
+                    .methods
+                    .iter()
+                    .any(|m| self.apk.dex[d].methods[m.index].name == "<clinit>")
+                {
+                    self.invoke(
+                        Method {
+                            class: class.into(),
+                            name: "<clinit>".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![],
+                        false,
+                    )?;
+                }
             }
-            for (i, idx) in def.static_fields.iter().enumerate() {
-                let field = self.apk.dex[d].fields[*idx].clone();
-                let value = match def.static_values.get(i) {
-                    Some(EncodedValue::Bits(v)) if field.ty == "J" || field.ty == "D" => wide(*v),
-                    Some(EncodedValue::Bits(v)) => vec![Word::Bits(*v as u32)],
-                    Some(EncodedValue::String(s)) => vec![self.intern(s.clone())?],
-                    Some(EncodedValue::Null) | None => default_value(&field.ty),
-                    Some(v) => bail!("unsupported static initializer value {v:?}"),
-                };
-                self.statics.insert(field.key(), value);
-            }
-            if def
-                .methods
-                .iter()
-                .any(|m| self.apk.dex[d].methods[m.index].name == "<clinit>")
+            Ok(())
+        })();
+        self.initializing_depth -= 1;
+        if let Err(error) = result {
+            let cause = error
+                .downcast_ref::<crate::interpreter::Thrown>()
+                .map(|e| e.0);
+            self.failed_classes.insert(class.into(), cause);
+            if let Some(cause) = cause
+                && !self.is_a(&self.heap.get(cause)?.class, "Ljava/lang/Error;")
             {
-                self.invoke(
-                    Method {
-                        class: class.into(),
-                        name: "<clinit>".into(),
-                        parameters: vec![],
-                        returns: "V".into(),
-                    },
-                    vec![],
-                    false,
+                let wrapped = self.guest_exception(
+                    "Ljava/lang/ExceptionInInitializerError;",
+                    format!("initialization failed for {class}"),
+                    Some(cause),
                 )?;
+                let object = wrapped
+                    .downcast_ref::<crate::interpreter::Thrown>()
+                    .context("missing initialization exception")?
+                    .0;
+                self.failed_classes.insert(class.into(), Some(object));
+                return Err(wrapped);
             }
+            return Err(error);
         }
         Ok(())
+    }
+    pub(crate) fn guest_exception(
+        &mut self,
+        class: &str,
+        message: String,
+        cause: Option<Word>,
+    ) -> Result<anyhow::Error> {
+        let object = self.heap.instance(class)?;
+        let message = self.heap.string(message)?;
+        let fields = &mut self.heap.get_mut(object)?.fields;
+        fields.insert("message".into(), vec![message]);
+        if let Some(cause) = cause {
+            fields.insert("cause".into(), vec![cause]);
+        }
+        self.throw_reference(object)
     }
     pub(crate) fn new_instance(&mut self, class: &str) -> Result<Word> {
         ensure!(

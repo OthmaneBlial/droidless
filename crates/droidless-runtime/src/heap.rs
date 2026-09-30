@@ -29,6 +29,11 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         "Ljava/lang/ArrayIndexOutOfBoundsException;"
         | "Ljava/lang/StringIndexOutOfBoundsException;" => "Ljava/lang/IndexOutOfBoundsException;",
         "Ljava/lang/RuntimeException;" => "Ljava/lang/Exception;",
+        "Ljava/lang/ExceptionInInitializerError;" | "Ljava/lang/NoClassDefFoundError;" => {
+            "Ljava/lang/LinkageError;"
+        }
+        "Ljava/lang/LinkageError;" => "Ljava/lang/Error;",
+        "Ljava/lang/Error;" => "Ljava/lang/Throwable;",
         "Ljava/lang/Exception;" => "Ljava/lang/Throwable;",
         "Ljava/lang/Throwable;" => "Ljava/lang/Object;",
         _ => return None,

@@ -10,6 +10,7 @@
   exact unsupported method/opcode diagnostics and local-only CI.
 - Catchable implicit Java faults, inherited interfaces and reference array
   covariance, verified by 17 compiled fault paths and catch-all/finally.
+- Persistent failed-class initialization, Java error wrapping and GC-rooted causes.
 
 ## 0.0.1 — inspection foundation
 
