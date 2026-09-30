@@ -125,7 +125,7 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 |---|---|
 | 📦 APK / manifest / resources | Real APKs and malformed-input checks; default resource configuration |
 | 🧠 DEX 035–040 | Headers, digests, IDs, classes, code and try handlers; annotations/debug partial |
-| ⚡ Own register interpreter | Arithmetic, wide values, branches, arrays, fields, dispatch and Java throw/catch |
+| ⚡ Own register interpreter | Arithmetic, wide values, branches, arrays, fields, dispatch, managed call continuations and Java throw/catch |
 | 🧹 Managed objects | Inheritance, strings, sticky class initialization and handle-based mark/sweep GC |
 | 🪟 Native widgets | TextView, Button, EditText, LinearLayout and FrameLayout; approximate layout/style |
 | 🖱️ Input | Native calculator mouse callbacks, Counter text/key callbacks and clean close |
@@ -147,7 +147,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Simple Calculator 1.0 | [Pinned independent APK](https://github.com/swiftugandan/Simple-Android-Calculator/tree/3ba860b281eba34f144e4e75115f0c0a06bced31) | Three native arithmetic cases; seven headless cases |
 | KasCalc 1.0 | [Independent release](https://github.com/KasRoudra/simplecalculator/releases/tag/v1.0) | Native calculations; ten headless arithmetic/input cases |
 | SmallestAPK | [Independent sample](https://github.com/krossovochkin/SmallestAPK) | Original signed APK executes its Activity and creates the expected TextView |
-| Counter | [Authored Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks, resources and VM conformance |
+| Counter | [Authored Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks, resources and VM conformance; nested FrameContract also passes on desktop Java |
 | Intents | [Authored Java/XML fixture](examples/intents/MainActivity.java) | Native screen transitions, retained text/title, Back override, extras and lifecycle/GC checks |
 | Preferences | [Authored Java/XML fixture](examples/preferences/MainActivity.java) | Native UTF-8 paste, save/restart/clear, typed values and package/path isolation |
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, guest equality, null/capacity behavior, iteration, read-only views, GC and limits; same list and immediate queue contracts pass on desktop Java |
@@ -165,7 +165,7 @@ sh tools/fetch-kascalc.sh # Earlier calculator regression APK
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 33 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 34 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

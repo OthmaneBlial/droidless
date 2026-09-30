@@ -16,6 +16,7 @@ enum Flow {
     Next(usize),
     Jump(usize),
     Return(Vec<Word>),
+    Call,
 }
 
 impl Runtime {
@@ -90,50 +91,99 @@ impl Runtime {
         );
         Ok(Flow::Jump(pc as usize))
     }
-    pub(crate) fn execute(&mut self, f: usize) -> Result<Vec<Word>> {
+    pub(crate) fn execute(&mut self, base: usize) -> Result<Vec<Word>> {
         loop {
-            self.tick()?;
-            if self.trace.bytecode {
-                eprintln!(
-                    "{} {:04x}: {:04x}",
-                    self.frames[f].method.key(),
-                    self.frames[f].pc,
-                    self.unit(f, 0)?
-                );
+            if let Some(words) = self.execute_slice(base, 1024)? {
+                return Ok(words);
             }
-            let flow = match self.step(f) {
+        }
+    }
+    /// Run a bounded slice, retaining every DEX caller/callee frame on pause.
+    /// Native bridges and class initialization remain synchronous within a step.
+    pub(crate) fn execute_slice(
+        &mut self,
+        base: usize,
+        quantum: usize,
+    ) -> Result<Option<Vec<Word>>> {
+        ensure!(base < self.frames.len(), "missing execution continuation");
+        for _ in 0..quantum {
+            let f = self.frames.len() - 1;
+            let flow = (|| {
+                self.tick()?;
+                if self.trace.bytecode {
+                    eprintln!(
+                        "{} {:04x}: {:04x}",
+                        self.frames[f].method.key(),
+                        self.frames[f].pc,
+                        self.unit(f, 0)?
+                    );
+                }
+                self.step(f)
+            })();
+            let flow = match flow {
                 Ok(flow) => flow,
-                Err(mut error) => {
-                    if let Some(fault) = error.downcast_ref::<GuestFault>() {
-                        error = self.guest_exception(fault.0, fault.1.clone(), None)?;
-                    }
-                    if let Some(thrown) = error.downcast_ref::<Thrown>() {
-                        let exception = thrown.0;
-                        let class = self.heap.get(exception)?.class.clone();
-                        let pc = self.frames[f].pc as u32;
-                        let target = self.frames[f]
-                            .code
-                            .handlers
-                            .iter()
-                            .filter(|h| pc >= h.start && pc < h.end)
-                            .flat_map(|h| &h.catches)
-                            .find(|(ty, _)| ty.as_ref().is_none_or(|ty| self.is_a(&class, ty)))
-                            .map(|(_, pc)| *pc);
-                        if let Some(pc) = target {
-                            self.frames[f].exception = Some(exception);
-                            Flow::Jump(pc as usize)
-                        } else {
-                            return Err(error);
-                        }
-                    } else {
-                        return Err(error);
-                    }
+                Err(error) => {
+                    self.unwind_frames(base, error)?;
+                    continue;
                 }
             };
             match flow {
                 Flow::Next(n) => self.frames[f].pc += n,
                 Flow::Jump(pc) => self.frames[f].pc = pc,
-                Flow::Return(v) => return Ok(v),
+                Flow::Call => {
+                    debug_assert_eq!(self.frames.len(), f + 2);
+                }
+                Flow::Return(words) => {
+                    let finished = self.frames.pop().context("frame stack underflow")?;
+                    if f == base {
+                        return Ok(Some(words));
+                    }
+                    let caller = &mut self.frames[f - 1];
+                    caller.result = words;
+                    caller.pc = finished
+                        .return_pc
+                        .context("missing DEX return continuation")?;
+                }
+            }
+        }
+        Ok(None)
+    }
+    fn unwind_frames(&mut self, base: usize, mut error: anyhow::Error) -> Result<()> {
+        if let Some(fault) = error.downcast_ref::<GuestFault>() {
+            error = self
+                .guest_exception(fault.0, fault.1.clone(), None)
+                .unwrap_or_else(|e| e);
+        }
+        loop {
+            let f = self.frames.len() - 1;
+            if let Some(thrown) = error.downcast_ref::<Thrown>() {
+                let exception = thrown.0;
+                match self.heap.get(exception) {
+                    Ok(object) => {
+                        let class = &object.class;
+                        let frame = &self.frames[f];
+                        let pc = frame.pc as u32;
+                        let target = frame
+                            .code
+                            .handlers
+                            .iter()
+                            .filter(|h| pc >= h.start && pc < h.end)
+                            .flat_map(|h| &h.catches)
+                            .find(|(ty, _)| ty.as_ref().is_none_or(|ty| self.is_a(class, ty)))
+                            .map(|(_, pc)| *pc);
+                        if let Some(pc) = target {
+                            self.frames[f].exception = Some(exception);
+                            self.frames[f].pc = pc as usize;
+                            return Ok(());
+                        }
+                    }
+                    Err(invalid) => error = invalid,
+                }
+            }
+            let finished = self.frames.pop().context("frame stack underflow")?;
+            error = error.context(finished.location());
+            if f == base {
+                return Err(error);
             }
         }
     }
@@ -658,8 +708,17 @@ impl Runtime {
                     .iter()
                     .map(|n| self.reg(f, *n))
                     .collect::<Result<Vec<_>>>()?;
-                let result = self.invoke(method, args, matches!(op, 0x6e | 0x72 | 0x74 | 0x78))?;
-                self.frames[f].result = result;
+                match self.begin_invoke(method, args, matches!(op, 0x6e | 0x72 | 0x74 | 0x78))? {
+                    Some(words) => self.frames[f].result = words,
+                    None => {
+                        let return_pc = self.frames[f].pc + 3;
+                        self.frames
+                            .last_mut()
+                            .context("missing invoked frame")?
+                            .return_pc = Some(return_pc);
+                        return Ok(Flow::Call);
+                    }
+                }
                 next = 3;
             }
             0x7b..=0x8f => {
@@ -857,6 +916,89 @@ fn double_op(op: u8, x: f64, y: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use droidless_formats::{apk::Apk, dex::Method};
+
+    #[test]
+    fn sliced_calls_returns_exceptions_gc_and_terminal_unwinding() {
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
+        )
+        .unwrap();
+        let method = |name: &str, parameters: &[&str], returns: &str| Method {
+            class: "Lorg/droidless/counter/FrameContract;".into(),
+            name: name.into(),
+            parameters: parameters.iter().map(|s| (*s).into()).collect(),
+            returns: returns.into(),
+        };
+        fn sliced(vm: &mut Runtime, method: Method, args: Vec<Word>) -> Result<Vec<Word>> {
+            assert!(vm.begin_invoke(method, args, false)?.is_none());
+            let before = vm.instructions;
+            assert!(vm.execute_slice(0, 0)?.is_none());
+            assert_eq!(vm.instructions, before);
+            let mut nested = false;
+            for _ in 0..10_000 {
+                if let Some(words) = vm.execute_slice(0, 1)? {
+                    assert!(nested, "compiled method never entered its callee");
+                    assert_eq!(vm.stack_depth(), 0);
+                    return Ok(words);
+                }
+                nested |= vm.stack_depth() > 1;
+                vm.collect();
+            }
+            panic!("authored frame contract did not terminate");
+        }
+        let value = vm.heap.string("slice".into()).unwrap();
+        let words = sliced(
+            &mut vm,
+            method("nested", &["I", "Ljava/lang/String;"], "Ljava/lang/String;"),
+            vec![Word::from(3), value],
+        )
+        .unwrap();
+        assert_eq!(vm.heap.text(words[0]).unwrap(), "slice/leaf!!!");
+        let mut args = vec![Word::from(4)];
+        args.extend(wide(100));
+        assert_eq!(
+            bits64(&sliced(&mut vm, method("wide", &["I", "J"], "J"), args).unwrap()).unwrap(),
+            114
+        );
+        let words = sliced(&mut vm, method("caught", &[], "Ljava/lang/String;"), vec![]).unwrap();
+        assert_eq!(vm.heap.text(words[0]).unwrap(), "stack failure");
+        let error = sliced(
+            &mut vm,
+            method("throwNested", &["I"], "V"),
+            vec![Word::from(4)],
+        )
+        .unwrap_err();
+        assert!(format!("{error:#}").contains("stack failure"));
+        assert_eq!(vm.stack_depth(), 0);
+        let error = sliced(
+            &mut vm,
+            method("unsupported", &["I"], "V"),
+            vec![Word::from(4)],
+        )
+        .unwrap_err();
+        let message = format!("{error:#}");
+        assert!(message.contains("System;->exit"));
+        assert_eq!(
+            message
+                .matches("FrameContract;->unsupported(I)V [classes.dex, PC")
+                .count(),
+            5
+        );
+        assert_eq!(vm.stack_depth(), 0);
+        let error = sliced(
+            &mut vm,
+            method("wide", &["I", "J"], "J"),
+            vec![Word::from(200), Word::ZERO, Word::ZERO],
+        )
+        .unwrap_err();
+        assert!(format!("{error:#}").contains("guest call stack limit"));
+        assert_eq!(vm.stack_depth(), 0);
+        let words = vm
+            .invoke(method("contract", &[], "I"), vec![], false)
+            .unwrap();
+        assert_eq!(words, vec![Word::from(1)]);
+    }
     #[test]
     fn dalvik_arithmetic_edges() {
         assert_eq!(int_op(0, i32::MAX, 1).unwrap(), i32::MIN);

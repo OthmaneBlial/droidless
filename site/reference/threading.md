@@ -58,6 +58,13 @@ executors and blocking queue waits are outside this subset.
 
 ## Evidence and reproduction
 
+DEX-to-DEX calls now use a managed continuation stack. The internal evaluator
+can pause/resume at instruction boundaries; tests collect between each step and
+retain nested call arguments, reference/wide results and caught exceptions.
+Native bridges and class initialization remain synchronous within a step.
+This is a prerequisite for waiting workers, **not Thread.start support**.
+[Frame semantics and limits](dex-vm.md#frame-and-value-semantics).
+
 The authored [Scheduling fixture](../examples/scheduling/MainActivity.java)
 checks deferred execution, equal-time ordering, callback overrides, cancellation
 identity, Message fields, main-thread identity, clock boundaries and GC retention.

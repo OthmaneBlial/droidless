@@ -18,6 +18,19 @@ two adjacent low/high words, including in argument lists. Input registers occupy
 the final `ins_size` positions in `registers_size`. Each call has its own PC,
 register file, invoke result and pending exception. Errors retain method/DEX/PC.
 
+DEX-to-DEX calls now push managed frames into an iterative evaluator rather than
+recurse through the Rust interpreter. The caller stays at the invoke PC until
+its callee returns; the callee carries the caller's next PC. Returned words become
+the caller's rooted invoke result before move-result. Exceptions search handlers
+at each faulting/calling PC while unwinding, retaining method/DEX/PC context.
+
+The internal evaluator can stop after an instruction quantum and resume the same
+frame stack. Zero steps execute nothing. Compiled tests pause after every DEX step
+and collect, checking nested calls, reference/wide returns and caught/uncaught
+exceptions. Native bridges and class initialization still execute synchronously
+within a step; this is not complete worker scheduling or a precise wall-time slice.
+[Worker boundary](threading.md).
+
 Integer overflow wraps, shifts mask counts, float/double arithmetic uses IEEE
 operations and numeric conversions follow the current Rust/Java-compatible
 saturation rules. Arithmetic edge tests and compiled Java exercise actual D8
@@ -57,8 +70,10 @@ diagnostics; they do not become fake catchable successes.
 Handles are monotonically allocated and never reused, preventing stale aliases.
 Mark/sweep roots include active Activity/content View, statics, interned strings
 and frames. Traversal follows object fields, arrays, View children and listeners.
-Collection occurs between input callbacks; no automatic in-frame collection,
-moving/generational collector or finalization exists.
+Collection occurs between input callbacks and through explicit System.gc.
+Active and paused frame registers, invoke results and pending exceptions remain
+roots. No automatic allocation-triggered collector, moving/generational collector
+or finalization exists.
 
 Bounds include one million lifetime handles, one million array elements and one
 MiB per guest string. These do not enforce overall resident memory: nested arrays

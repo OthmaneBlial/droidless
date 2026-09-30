@@ -38,6 +38,16 @@ User instruction overrides the original GitHub CI request. `tools/ci.sh` runs
 fmt/check/test/clippy/release locally. No Actions workflow is installed and source
 repository Actions are disabled. Website deployment is separate from source CI.
 
+## ADR 004: managed DEX call continuations
+
+DEX calls use a managed frame stack and iterative evaluator. Each callee carries
+its return PC; exception unwinding keeps the caller at the invoke PC. Instruction
+slices retain the same registers/results/exceptions and existing GC traversal.
+This removes Rust recursion from DEX-to-DEX calls and supplies the continuation
+needed for future waiting workers. Native bridge callbacks and class initialization
+remain synchronous; Thread.start and blocking waits are still unsupported. Do not
+replace those waits with inline worker execution or clone isolated app heaps.
+
 ## Dependencies
 
 `zip` handles ZIP/deflate; `sha1` checks DEX signatures; `anyhow` retains errors;

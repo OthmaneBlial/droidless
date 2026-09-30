@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Iterative managed DEX calls with return continuations and cross-frame exception
+  unwinding. Compiled checks pause/resume nested calls and collect after each step;
+  reference/wide results, catch/finally, diagnostics and stack limits remain intact.
+  The normal FrameContract also passes on desktop Java. Native bridges/class
+  initialization remain synchronous; Thread.start/waits are still unsupported.
 - Immediate LinkedBlockingQueue FIFO operations with declared capacity, duplicates,
   null rejection, guest equality, inherited override dispatch and GC retention.
   The same immediate contract passes in compiled DEX and desktop Java. Waiting

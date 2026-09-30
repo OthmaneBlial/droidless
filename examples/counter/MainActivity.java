@@ -14,6 +14,7 @@ public class MainActivity extends Activity {
     private static int bias = 3;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if (FrameContract.contract() != 1) throw new IllegalStateException("Frame contract failed");
         setContentView(R.layout.main);
         label = (TextView) findViewById(R.id.count);
         findViewById(R.id.input).setOnKeyListener(new View.OnKeyListener() {

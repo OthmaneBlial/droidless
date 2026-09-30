@@ -24,6 +24,21 @@ pub(crate) struct Frame {
     pub pc: usize,
     pub result: Vec<Word>,
     pub exception: Option<Word>,
+    pub return_pc: Option<usize>,
+}
+impl Frame {
+    pub(crate) fn location(&self) -> String {
+        format!(
+            "at {} [classes{}.dex, PC 0x{:04x}]",
+            self.method.key(),
+            if self.dex == 0 {
+                String::new()
+            } else {
+                (self.dex + 1).to_string()
+            },
+            self.pc
+        )
+    }
 }
 pub struct Runtime {
     pub apk: Apk,
@@ -742,6 +757,19 @@ impl Runtime {
         args: Vec<Word>,
         virtual_call: bool,
     ) -> Result<Vec<Word>> {
+        let base = self.frames.len();
+        match self.begin_invoke(method, args, virtual_call)? {
+            Some(words) => Ok(words),
+            None => self.execute(base),
+        }
+    }
+    /// Resolve a call: native words return immediately; a DEX call pushes one managed frame.
+    pub(crate) fn begin_invoke(
+        &mut self,
+        method: Method,
+        args: Vec<Word>,
+        virtual_call: bool,
+    ) -> Result<Option<Vec<Word>>> {
         ensure!(self.frames.len() < 128, "guest call stack limit reached");
         self.method_calls += 1;
         if self.trace.methods {
@@ -781,7 +809,6 @@ impl Runtime {
                     let mut registers = vec![Word::ZERO; usize::from(code.registers)];
                     let start = registers.len() - args.len();
                     registers[start..].copy_from_slice(&args);
-                    let frame = self.frames.len();
                     self.frames.push(Frame {
                         dex: d,
                         method: target,
@@ -790,21 +817,9 @@ impl Runtime {
                         pc: 0,
                         result: vec![],
                         exception: None,
+                        return_pc: None,
                     });
-                    let result = self.execute(frame);
-                    let finished = self.frames.pop().context("frame stack underflow")?;
-                    return result.with_context(|| {
-                        format!(
-                            "at {} [classes{}.dex, PC 0x{:04x}]",
-                            finished.method.key(),
-                            if d == 0 {
-                                String::new()
-                            } else {
-                                (d + 1).to_string()
-                            },
-                            finished.pc
-                        )
-                    });
+                    return Ok(None);
                 }
             } else {
                 let native = Method {
@@ -812,7 +827,7 @@ impl Runtime {
                     ..method.clone()
                 };
                 if let Some(result) = self.native(&native, &args)? {
-                    return Ok(result);
+                    return Ok(Some(result));
                 }
             }
             if method.name == "<init>" {

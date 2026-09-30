@@ -20,7 +20,9 @@ The following are objectives, not completed capability claims.
    UI needs of a real notes/todo APK with restart/persistence tests.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
    callbacks are proven. Immediate FIFO queue operations also pass compiled and
-   desktop Java conformance. Follow Notepad's Thread.start requirement with actual
+   desktop Java conformance. Managed DEX call continuations now pause/resume with
+   GC and exception checks; native bridges/class initialization remain synchronous.
+   Follow Notepad's Thread.start requirement with actual
    guest worker execution; do not replace Thread.start with inline execution.
    Gate: a real APK completes its queued transactions and posts UI results.
 5. Lists/images/SQLite/network: follow first failures in substantial third-party

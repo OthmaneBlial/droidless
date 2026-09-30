@@ -52,7 +52,9 @@
       "native_keyboard_verified": true,
       "native_close_exit_zero": true,
       "source": "examples/counter",
-      "notes": "Native text-copy/key listener and clean close; headless VM conformance. Authored fixture, not independent APK compatibility evidence."
+      "notes": "Earlier native text-copy/key listener and clean close; current headless VM conformance adds FrameContract and instruction-slice/GC checks. The normal FrameContract passes on desktop Java 17. No worker or independent APK compatibility claim.",
+      "desktop_java_frame_differential_verified": true,
+      "managed_frame_continuations_verified": true
     },
     {
       "package": "org.droidless.intents",

@@ -285,3 +285,44 @@ Full local CI passes 33 Rust tests, 4,096 seeded parser mutations, warning-free
 Clippy and release build. The 17 original calculator cases still pass. The new
 queue subset is current-source support; v0.1.0 retains its older scope. The 50%
 everyday-app checkpoint remains ahead and the goal stays active.
+
+## Current source: managed DEX call continuations
+
+DEX-to-DEX calls now use an iterative managed frame stack. A caller remains at
+its invoke PC while its callee runs; return words become the caller's rooted
+invoke result before move-result. Exception routing preserves the faulting and
+calling PCs and unwinds only the current invocation's frame range. Native bridges
+and class initialization still execute synchronously within a step.
+
+The authored Counter APK additionally compiles FrameContract: nested reference
+and wide returns, recursive throws, typed catches and finally. The normal contract
+also passes on Java 17.0.19 with Java 8 source/target. A separate Rust regression
+executes that DEX one instruction at a time and collects after every pause. It
+checks caller/callee/result/exception roots, zero-step behavior, original guest
+causes, every nested diagnostic frame, 128-frame rejection and clean stacks after
+failure. This is continuation evidence, not an Android reference or worker test.
+
+```sh
+cargo test -p droidless-runtime sliced_calls --locked
+mkdir -p artifacts/frame-java-contract
+javac -source 8 -target 8 -Xlint:-options -d artifacts/frame-java-contract examples/counter/FrameContract.java
+java -cp artifacts/frame-java-contract org.droidless.counter.FrameContract
+```
+
+Full local CI passes 34 Rust tests, 4,096 seeded parser mutations, warning-free
+Clippy and release build. All 17 original calculator scenarios pass. Fresh
+headless timer replay still reaches Timer done: 3. The unchanged original Notepad
+digest was checked again; startup still stops at Thread.start from DBFlow's
+`f/b/a/b.a()` at PC `0x0007`, before Activity/UI creation.
+
+A fresh unsigned development bundle launched the public calculator and emitted
+onCreate/onStart/onResume. Native window automation could not attach, reporting
+`cgWindowNotFound` after refreshed app selection and a connection reset. The
+process was confirmed running, then stopped as a test process. **The native
+interaction/clean-close recheck was not completed for this increment.** Existing
+calculator/timer captures document the earlier native milestones; no new capture
+or native interaction claim is added here.
+
+Thread.start, waiting workers and blocking queue waits remain unsupported; the
+managed continuations are the first execution prerequisite, not a worker substitute.
+The v0.1.0 archive keeps its earlier scope and the 50% checkpoint remains active.
