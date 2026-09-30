@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Playful lime/ink identity, custom SVG robot/banner/runtime diagram, refreshed
+  README and portable website with self-hosted OFL fonts and accessible motion.
+- Next working checkpoint raised to 50%; milestone labels remain separate from
+  measured Android API coverage.
+
 - Explicit same-APK Activity Intents, typed Bundle extras, copied launch data,
   preserved back stack, finish/isFinishing and virtual Back callbacks.
 - Native screen/title changes and Escape-to-Back; `--back` headless replay and

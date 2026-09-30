@@ -1,39 +1,77 @@
-# DROIDLESS
+<div align="center">
 
-**Run Android apps without Android.**
+<img src="docs/assets/droidless-banner.svg" alt="DROIDLESS — Run Android apps without Android. Experimental Rust runtime." width="100%">
 
-[![Release](https://img.shields.io/github/v/release/OthmaneBlial/droidless)](https://github.com/OthmaneBlial/droidless/releases/latest)
+<br>
 
-[Project site](https://othmaneblial.github.io/droidless/) ·
-[Documentation](https://othmaneblial.github.io/droidless/docs.html)
+[![Release](https://img.shields.io/github/v/release/OthmaneBlial/droidless?style=for-the-badge&color=d9ff63&labelColor=171c21)](https://github.com/OthmaneBlial/droidless/releases/latest)
+[![Rust](https://img.shields.io/badge/Rust-1.95-ff987d?style=for-the-badge&logo=rust&labelColor=171c21)](rust-toolchain.toml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-d9ff63?style=for-the-badge&labelColor=171c21)](LICENSE)
+[![Checks](https://img.shields.io/badge/checks-local%20only-fffdf7?style=for-the-badge&labelColor=171c21)](tools/ci.sh)
 
-DROIDLESS is an experimental Android compatibility runtime written in Rust.
-It executes DEX bytecode itself, supplies a small Java/Android API subset,
-inflates APK layouts, and renders widgets in a native macOS window.
+**[🌐 Explore the website](https://othmaneblial.github.io/droidless/)** ·
+**[📖 Open the runtime notebook](https://othmaneblial.github.io/droidless/docs.html)** ·
+**[📦 Grab v0.1.0](https://github.com/OthmaneBlial/droidless/releases/tag/v0.1.0)**
 
-**A real, unmodified third-party calculator is interactive.** KasCalc 1.0 runs
-its own calculation and click-listener bytecode through DROIDLESS. Native mouse
-clicks on `7`, `+`, `5`, `=` produced `12.0`; multiplication and square root
-also worked. This is a verified subset, **not broad Android compatibility**.
+</div>
 
-<img src="docs/assets/kascalc-native.png" alt="Real KasCalc APK in a native DROIDLESS window displaying 12.0 after clicking 7 plus 5 equals" width="360">
+## 👋 Meet the little runtime with a big idea
 
-No Android Emulator, Android VM, ART, Dalvik library, browser renderer or hidden
-Android installation participates in execution. Android SDK tools compile our
-test APKs only; they are not runtime dependencies.
+Take an Android APK. Execute its own bytecode. Give it a native desktop window.
+
+**DROIDLESS is an experimental Android compatibility runtime, written in Rust.**
+It owns the DEX interpreter, managed heap, Android API bridge, resource system
+and View model. A small AppKit bridge supplies the macOS controls.
+
+No Android Emulator. No Android VM. No ART or borrowed Dalvik engine.
+No browser renderer or hidden Android installation. Android SDK tools compile
+our authored test APKs only; they do not participate in execution.
+
+> 🧭 A working slice of Android, one real APK at a time. Compatibility is narrow;
+> unsupported methods and opcodes report errors.
+
+## 🧮 The calculator has left the phone
+
+**An unmodified third-party calculator is interactive on macOS ARM64.**
+[KasCalc 1.0](https://github.com/KasRoudra/simplecalculator/releases/tag/v1.0)
+runs its original calculation and click-listener DEX bytecode through DROIDLESS.
+
+| Native clicks | Actual display |
+|---|---|
+| `7 → + → 5 → =` | **12.0** |
+| `8 → × → 8 → =` | **64.0** |
+| `√64` | **8.0** |
+
+<div align="center">
+<img src="docs/assets/kascalc-native.png" alt="Actual KasCalc APK in a native macOS window, displaying 12.0 after clicking 7 plus 5 equals" width="290">
+<p><sub>Real window. Real APK callbacks. Actual screenshot.</sub></p>
+</div>
+
+The upstream APK is SHA-256 checked, never rebuilt, patched or repackaged, and
+is not redistributed here. Ten additional headless scenarios check its View
+state. Menus, gestures, complete visual fidelity and every numeric edge case
+remain unverified. [See the evidence](docs/verification.md).
+
+## 🚀 Give it a spin
+
+Build with **Rust 1.95.0** and Apple's **Command Line Tools** on macOS:
 
 ```sh
+git clone https://github.com/OthmaneBlial/droidless.git
+cd droidless
 cargo build --release --locked
 sh tools/fetch-kascalc.sh
-# macOS native desktop window
+# Hello, desktop calculator 👋
 target/release/droidless artifacts/apks/KasCalc.apk
 ```
 
-Compilation needs Rust and, on macOS, Apple's Command Line Tools. Linux can use
-the headless code path; no Linux build/UI validation is claimed yet.
 The [v0.1.0 release](https://github.com/OthmaneBlial/droidless/releases/tag/v0.1.0)
-also provides a tested macOS ARM64 CLI archive and SHA-256 checksum. It has no
-Apple developer signature or notarization.
+includes a locally tested macOS ARM64 CLI archive and SHA-256 checksum. The binary
+has no Apple developer signature or notarization. Linux has a headless code path;
+its build and native UI have not been verified.
+
+<details>
+<summary><strong>🔎 Prefer the terminal? Inspect, replay and trace.</strong></summary>
 
 ```sh
 target/release/droidless inspect app.apk
@@ -43,90 +81,111 @@ target/release/droidless classes app.apk
 target/release/droidless methods app.apk
 target/release/droidless resources app.apk
 
-# Input reaches the APK's own listeners; actual View state is returned as JSON
+# Original APK listeners update the emitted JSON View tree
 target/release/droidless run --headless artifacts/apks/KasCalc.apk \
   --click 7 --click + --click 5 --click = --stats
-target/release/droidless inspect-ui fixtures/generated/counter.apk
-# Current source: explicit Activity navigation (authored conformance fixture)
+
+# Current source: authored multi-screen navigation fixture
 target/release/droidless run --headless fixtures/generated/intents.apk \
   --click "Open detail" --back
+```
 
-# CI is LOCAL ONLY. No GitHub workflows; Actions disabled on source repository.
+Use `--trace-bytecode`, `--trace-methods`, `--trace-framework` or
+`--trace-lifecycle` to follow execution. `--stats` / `--heap-stats` report real
+counters and timings. `--click`, `--key`, `--back`, `--headless` and `inspect-ui`
+support repeatable experiments. **Escape delivers Back** in the native window.
+
+</details>
+
+## ⚙️ Bytecode in. Native views out.
+
+<img src="docs/assets/runtime-path.svg" alt="APK → Rust DEX interpreter → Android API bridge → native AppKit controls; input returns to APK callbacks" width="100%">
+
+| Crate | Its job |
+|---|---|
+| `droidless-formats` | Bounded APK, binary XML, DEX and compiled-resource parsers |
+| `droidless-runtime` | Register interpreter, objects, GC, lifecycle, framework APIs and Views |
+| `droidless` | CLI, native macOS rendering and input bridge |
+
+[Architecture & decisions](docs/architecture.md) · [DEX VM](docs/dex-vm.md) ·
+[Framework & UI](docs/framework.md)
+
+## 🧰 What's in the toolbox?
+
+| Capability | Proven scope |
+|---|---|
+| 📦 APK / manifest / resources | Real APKs and malformed-input checks; default resource configuration |
+| 🧠 DEX 035–040 | Headers, digests, IDs, classes, code and try handlers; annotations/debug partial |
+| ⚡ Own register interpreter | Arithmetic, wide values, branches, arrays, fields, dispatch and Java throw/catch |
+| 🧹 Managed objects | Inheritance, strings, sticky class initialization and handle-based mark/sweep GC |
+| 🪟 Native widgets | TextView, Button, EditText, LinearLayout and FrameLayout; approximate layout/style |
+| 🖱️ Input | Native calculator mouse callbacks, Counter text/key callbacks and clean close |
+| 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish and lifecycle — current source |
+| 🛠️ Next up | Persistent storage, lists, images and timers; a substantial unmodified notes/todo APK |
+
+The published **v0.1.0 archive predates navigation**. Current source capability
+is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
+and games remain future compatibility work. [Exact limits](docs/compatibility.md).
+
+## 🧪 Tiny lab. Real bytecode.
+
+| APK | Origin | What we observed |
+|---|---|---|
+| KasCalc 1.0 | [Independent release](https://github.com/KasRoudra/simplecalculator/releases/tag/v1.0) | Native calculations; ten headless arithmetic/input cases |
+| SmallestAPK | [Independent sample](https://github.com/krossovochkin/SmallestAPK) | Original signed APK executes its Activity and creates the expected TextView |
+| Counter | [Authored Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks, resources and VM conformance |
+| Intents | [Authored Java/XML fixture](examples/intents/MainActivity.java) | Native screen transitions, retained text/title, Back override, extras and lifecycle/GC checks |
+
+Authored fixtures test implementation; they do not establish arbitrary APK
+compatibility. [Evidence catalog](compatibility/catalog.json).
+
+```sh
+# CI lives on your machine. GitHub Actions stays disabled.
 sh tools/ci.sh
 python3 tools/compatibility.py
 ```
 
-## Architecture
+Local checks cover formatting, builds, tests, Clippy and 4,096 seeded parser
+mutations. Normal tests require neither an Android SDK nor an emulator.
 
-```mermaid
-flowchart TD
-    APK[Unmodified APK] --> ZIP[Bounded ZIP loader]
-    ZIP --> Manifest[Binary AndroidManifest.xml]
-    ZIP --> DEX[DEX parser]
-    ZIP --> Resources[resources.arsc / layout XML]
-    Manifest --> VM[Rust Dalvik register interpreter]
-    DEX --> VM
-    VM <--> Framework[DROIDLESS Java / Android APIs]
-    Resources --> Framework
-    Framework --> Views[View tree / layout]
-    Views --> AppKit[Native AppKit window and controls]
-    AppKit -->|mouse / text / key events| VM
-```
-
-Three crates: `droidless-formats` owns binary parsers; `droidless-runtime` owns
-execution, heap, framework and Views; `droidless` owns CLI/platform integration.
-[Architecture and decisions](docs/architecture.md).
-
-## Current compatibility
-
-| Capability | Evidence / boundary |
-|---|---|
-| APK, binary XML, resources.arsc | Real APKs and malformed-input tests; default resource configuration |
-| DEX 035–040 | Headers/digests/IDs/class data/code/try handlers; annotations/debug partial |
-| Register interpreter | Moves, constants, branches, switches, numeric operations, arrays, fields, calls, casts, explicit and implicit Java throw/catch |
-| Object model / GC | Inheritance, dispatch, static initialization, strings/wide values, handle-based mark/sweep |
-| Activity / Intents | Launcher discovery; explicit same-APK navigation, typed extras, finish/Back, lifecycle and preserved screen state (current source) |
-| UI | TextView, Button, EditText, LinearLayout, FrameLayout; approximate styling/measurement |
-| Input | Native KasCalc mouse callbacks; native Counter text/key callbacks; clean lifecycle close |
-| macOS ARM64 | Actual native window and click evidence |
-| Linux | Headless path; native GUI not implemented, build not verified |
-| Storage, timers, networking | Not implemented yet |
-| AndroidX, Compose, JNI, JIT, games | Future compatibility work |
-
-Unsupported execution methods/opcodes fail with method, DEX module and PC.
-[Exact API/opcode scope and limitations](docs/compatibility.md).
-
-## Tested APKs
-
-| APK | Origin | Proven scope |
-|---|---|---|
-| KasCalc 1.0 | [Independent release](https://github.com/KasRoudra/simplecalculator/releases/tag/v1.0) | Launches/renders/responds to native clicks; ten headless arithmetic/input scenarios |
-| SmallestAPK | [Independent sample](https://github.com/krossovochkin/SmallestAPK) | Original signed APK executes its Activity and creates the expected TextView |
-| Counter | DROIDLESS [Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks and clean close; resources and VM conformance |
-| Intents | DROIDLESS [Java/XML fixture](examples/intents/MainActivity.java) | Native screen transitions, preserved text, Back override and clean root finish; typed extras/lifecycle tests |
-
-KasCalc is fetched and SHA-256 checked, never recompiled, patched, repackaged or
-redistributed. Custom fixtures are kept separate and do not prove arbitrary APK
-compatibility. [Catalog](compatibility/catalog.json), [verification](docs/verification.md).
-
-## Development
+<details>
+<summary><strong>🔧 Rebuild fixtures or create a development app bundle</strong></summary>
 
 ```sh
-sh tools/ci.sh
-# Optional fixture rebuild; normal tests need no Android SDK
 python3 tools/build-fixtures.py --sdk "$ANDROID_SDK_ROOT"
-# Optional unsigned development bundle
 sh tools/macos-app.sh
 ```
 
-Tracing: `--trace-bytecode`, `--trace-methods`, `--trace-framework`,
-`--trace-lifecycle`. `--stats` / `--heap-stats` report real counters and elapsed
-time. `--click TEXT`, `--key CHARACTER`, `--back`, `--headless` and `inspect-ui` support
-repeatable experiments. [VM](docs/dex-vm.md), [framework/UI](docs/framework.md),
-[security](docs/security.md), [roadmap](docs/roadmap.md).
-Escape delivers Back in the native window. Navigation is available on main;
-the published v0.1.0 archive retains its documented earlier scope.
+The bundle is unsigned and intended for local development.
 
-This prototype is not a security sandbox. Guest filesystem/network/native code
-and process APIs are unavailable; parser/VM limits do not replace OS isolation.
-Use trusted APKs. Apache-2.0 for DROIDLESS; third-party artifacts retain their licenses.
+</details>
+
+## 🗺️ Next checkpoint: 50%
+
+The **20% milestone** is demonstrated: an unmodified APK renders, accepts clicks,
+executes its own logic and updates native UI without Android. This is a milestone
+label, not a measurement of Android API coverage.
+
+The next ambition is **50%**: move beyond calculators toward useful everyday
+apps, with multiple screens, persistent data, lists, images and scheduled callbacks.
+That target remains ahead of us. Every step needs executable evidence and a
+clear compatibility boundary. [Follow the roadmap](docs/roadmap.md).
+
+## 🔐 A small but important boundary
+
+This prototype is not a security sandbox. Parser/VM limits do not replace OS
+isolation. Guest filesystem, networking, native-library and process APIs are
+unavailable in the published implementation. Use trusted APKs.
+[Security boundaries](docs/security.md).
+
+---
+
+<div align="center">
+
+**Built in Rust. Powered by original APK bytecode. A little stubborn by design. 🤖**
+
+DROIDLESS is Apache-2.0. Third-party artifacts retain their own licenses.
+
+[Website](https://othmaneblial.github.io/droidless/) · [Documentation](https://othmaneblial.github.io/droidless/docs.html) · [Source](https://github.com/OthmaneBlial/droidless)
+
+</div>

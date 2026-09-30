@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 360" role="img" aria-labelledby="title desc">
+  <title id="title">The DROIDLESS explorer</title>
+  <desc id="desc">A friendly lime robot with round glasses, a lightning antenna, and an APK tucked under its arm.</desc>
+  <g stroke="#171c21" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="180" cy="324" rx="108" ry="13" fill="#171c21" opacity=".12" stroke="none"/>
+    <path d="M134 265v39h-35m126-39v39h35" fill="none"/>
+    <path d="M79 189l-25 41 27 26m202-67 23 38" fill="none"/>
+    <rect x="79" y="119" width="204" height="156" rx="44" fill="#d9ff63"/>
+    <path d="M180 119V80" fill="none"/>
+    <path d="M190 24l-32 41h22l-9 31 40-45h-24z" fill="#ff987d" stroke-width="5"/>
+    <rect x="106" y="149" width="63" height="53" rx="25" fill="#fffdf7"/>
+    <rect x="191" y="149" width="63" height="53" rx="25" fill="#fffdf7"/>
+    <path d="M169 170h22m-85-2-26-6m174 6 25-6" fill="none" stroke-width="6"/>
+    <circle cx="140" cy="177" r="8" fill="#171c21" stroke="none"/>
+    <circle cx="221" cy="177" r="8" fill="#171c21" stroke="none"/>
+    <path d="M163 223q18 19 37 0" fill="none" stroke-width="6"/>
+    <g transform="rotate(12 287 266)">
+      <rect x="253" y="220" width="67" height="90" rx="10" fill="#fffdf7" stroke-width="6"/>
+      <path d="M270 241h33m-33 14h25m-25 14h33" stroke-width="4"/>
+      <path d="M270 288l8-8 8 8 13-14" fill="none" stroke="#ff987d" stroke-width="5"/>
+    </g>
+    <path d="m38 105 8-9m264 0 8 9m-9 34 14 2" fill="none" stroke="#ff987d" stroke-width="5"/>
+  </g>
+</svg>

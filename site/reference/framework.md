@@ -5,7 +5,23 @@ names and aliases are qualified against the package. The complete parsed XML tre
 preserves component attributes, filters, themes and metadata for inspection.
 Optional app-defined Application receives construction/onCreate. Main Activity
 receives construction, onCreate(null Bundle), onStart and onResume. Returning
-from the host loop calls onPause/onStop/onDestroy. A back stack is not implemented.
+from the host loop pauses/stops the foreground Activity and destroys the stack.
+
+Explicit same-APK Intents launch manifest-declared Activity classes. Bundle and
+Intent extras support String (including null), int, long, float, double and boolean,
+typed defaults, copying, removal and membership. startActivity copies extras;
+getExtras returns a copy. Transitions run after the current guest callback returns.
+The previous Activity pauses, the next creates/starts/resumes, then the previous
+stops. finish/Back resumes the preserved parent through restart/start/resume and
+stops/destroys the outgoing Activity. Each instance retains its title, content
+and Intent, and remains a GC root. Finishing a stopped Activity destroys it without
+changing the foreground screen. isFinishing remains true during teardown.
+
+`--back` and native Escape dispatch virtual onBackPressed, including APK overrides.
+Finishing the last Activity ends the native loop normally; headless output is null.
+Limits: 64 Activity instances, 128 pending transitions and 16,384 entries per Bundle.
+Saved-state recreation, activity results, launch modes/flags, tasks, implicit/
+external intents and launching from non-Activity contexts remain unsupported.
 
 Exact method signatures map to DROIDLESS behavior. setContentView accepts a View
 or layout resource; findViewById searches the guest graph. Widget mutations alter
@@ -39,7 +55,7 @@ styling attributes are omitted. The real screenshot visibly reflects this subset
 NSButton actions invoke the app's View.OnClickListener bytecode; XML onClick
 invokes an Activity method. NSTextField changes update EditText, which callbacks
 read through getText. Native controls supply focus/selection/accessibility.
-Key-down/up maps digits, letters and common operators to Android KeyEvent codes
+Escape dispatches Activity Back. Other key-down/up maps digits, letters and common operators to Android KeyEvent codes
 and executes OnKeyListener. Initial key focus uses the first enabled visible
 listener; complete Android focus/IME/gesture behavior remains future work.
 

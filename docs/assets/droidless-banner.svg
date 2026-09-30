@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 490" role="img" aria-labelledby="title desc">
+  <title id="title">DROIDLESS. Run Android apps without Android.</title>
+  <desc id="desc">A lime and ink project banner with a friendly robot explorer. Experimental Rust runtime, native macOS ARM64.</desc>
+  <defs><pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0v32" fill="none" stroke="#171c21" stroke-opacity=".07"/></pattern></defs>
+  <rect width="1280" height="490" rx="24" fill="#d9ff63"/>
+  <rect width="1280" height="490" rx="24" fill="url(#grid)"/>
+  <g fill="#171c21" font-family="Chivo, Helvetica, sans-serif">
+    <rect x="48" y="40" width="292" height="33" rx="16"/>
+    <text x="194" y="62" text-anchor="middle" font-size="12" font-weight="700" letter-spacing="2" fill="#d9ff63">EXPERIMENTAL / OPEN SOURCE</text>
+    <text x="45" y="205" font-size="116" font-weight="900" letter-spacing="-7">DROIDLESS</text>
+    <text x="51" y="282" font-size="46" font-weight="700" letter-spacing="-2">Run Android apps</text>
+    <text x="51" y="341" font-size="46" font-weight="700" letter-spacing="-2">without Android.</text>
+    <path d="M51 371h662" stroke="#171c21" stroke-width="2"/>
+    <text x="51" y="415" font-family="monospace" font-size="16">RUST ENGINE  /  REAL APK BYTECODE  /  NATIVE DESKTOP UI</text>
+  </g>
+  <g transform="translate(822 49) scale(1.08)" stroke="#171c21" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="180" cy="180" r="170" fill="#fffdf7" stroke-width="2"/>
+    <path d="M134 265v39h-35m126-39v39h35M79 189l-25 41 27 26m202-67 23 38" fill="none"/>
+    <rect x="79" y="119" width="204" height="156" rx="44" fill="#d9ff63"/>
+    <path d="M180 119V80" fill="none"/>
+    <path d="M190 24l-32 41h22l-9 31 40-45h-24z" fill="#ff987d" stroke-width="5"/>
+    <rect x="106" y="149" width="63" height="53" rx="25" fill="#fffdf7"/><rect x="191" y="149" width="63" height="53" rx="25" fill="#fffdf7"/>
+    <path d="M169 170h22m-85-2-26-6m174 6 25-6" fill="none" stroke-width="6"/>
+    <circle cx="140" cy="177" r="8" fill="#171c21" stroke="none"/><circle cx="221" cy="177" r="8" fill="#171c21" stroke="none"/>
+    <path d="M163 223q18 19 37 0" fill="none" stroke-width="6"/>
+    <g transform="rotate(12 287 266)"><rect x="253" y="220" width="67" height="90" rx="10" fill="#ff987d" stroke-width="6"/><path d="M270 241h33m-33 14h25m-25 14h33" stroke-width="4"/></g>
+  </g>
+</svg>

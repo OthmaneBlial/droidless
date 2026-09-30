@@ -23,3 +23,16 @@ The following are objectives, not completed capability claims.
 
 Every stable increment runs local CI, updates evidence/docs, commits and pushes
 main. GitHub Actions stay disabled. Releases/demos name exact artifacts and scope.
+
+## The next checkpoint: 50%
+
+The user has raised the working target beyond the demonstrated 20% native
+calculator milestone. These percentages are milestone labels, not Android API
+coverage measurements. The 50% checkpoint remains future work.
+
+Continue toward useful unmodified everyday apps: multiple screens, isolated
+persistent storage, lists, images and scheduled callbacks. Validate generic APIs
+with authored conformance fixtures, then prove actual workflows in independently
+built APKs. Keep local CI, native interaction evidence, restart checks and honest
+compatibility limits attached to each completed increment. Do not stop at the
+calculator or substitute authored fixtures for third-party app evidence.

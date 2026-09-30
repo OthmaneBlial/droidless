@@ -32,17 +32,23 @@ exp/abs/pow; Log d/i/w/e. The source's exact signature table is authoritative;
 other overloads remain unsupported.
 Throwable constructors/getMessage/getCause/toString and common runtime exception types
 are implemented for the fault paths covered by conformance tests.
+Current source adds explicit same-APK Intent constructors/setClass/setClassName,
+startActivity, getIntent, finish/isFinishing/onBackPressed, Bundle typed extras and
+back-stack lifecycle. This is authored-fixture evidence, not a third-party notes
+app claim; the v0.1.0 release predates navigation.
 
 ## Known ceilings
 
-- One Activity, single-threaded VM and approximate layout/style/configuration.
+- One foreground Activity with a bounded preserved back stack; single-threaded VM
+  and approximate layout/style/configuration. No saved-state recreation/tasks/
+  launch modes/activity results/implicit or external Intents.
 - Explicit and common implicit Java exceptions are catchable; unsupported APIs,
   malformed instructions and host resource ceilings remain terminal diagnostics.
 - UTF-16 lengths/substrings are honored; isolated surrogates are rejected by Rust.
 - Java float string scientific-notation edge cases differ from Rust formatting.
 - Failed class initialization is sticky and retains causes; concurrent initialization
   is unsupported. Instruction/field/method checks are not a complete Java type verifier.
-- No collections/I/O/Intent/Handler/Looper/SQLite/images/networking/JNI/JIT,
+- No collections/I/O/Handler/Looper/SQLite/images/networking/JNI/JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.
 
