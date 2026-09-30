@@ -32,14 +32,18 @@ Monitors are only meaningful under the current single guest thread.
 Instances hold descriptor plus fields keyed by declaring class/name/type. Arrays
 retain component type and words. Static fields are independent roots, initialized
 from encoded values before `<clinit>`. A class is marked initializing to prevent
-recursive entry. Initialization failure is a terminal error; a complete erroneous-
-class state machine is pending. Basic inheritance/virtual/interface dispatch is
-tested; transitive interface/array covariance rules are incomplete.
+recursive entry. A complete erroneous-class initialization state machine is
+pending. Inheritance/virtual/interface dispatch, inherited interface assignability
+and reference array covariance are exercised by compiled Java tests. Array reads/
+writes validate opcode/component width and reference element assignability.
 
-Explicit throw propagates a guest reference and searches parsed catch handlers
-in the current frame and callers. Host-generated faults such as divide-by-zero/
-null/bounds failures are currently terminal diagnostics, not universally catchable
-Java exceptions. This distinction must remain visible until corrected.
+Explicit throw and host-generated Java faults propagate guest Throwable objects
+through the parsed catch handlers in the current frame and callers. Integer/long
+zero division, null access/throw, negative array sizes, array bounds/store errors,
+casts, string bounds and numeric parse failures are catchable. Typed hierarchy
+matching, cross-frame propagation, catch-all/finally and getMessage are tested.
+Malformed bytecode, resource ceilings and unsupported APIs remain terminal host
+diagnostics; they do not become fake catchable successes.
 
 ## Heap
 

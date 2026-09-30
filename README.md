@@ -2,6 +2,9 @@
 
 **Run Android apps without Android.**
 
+[Project site](https://othmaneblial.github.io/droidless/) ·
+[Documentation](https://othmaneblial.github.io/droidless/docs.html)
+
 DROIDLESS is an experimental Android compatibility runtime written in Rust.
 It executes DEX bytecode itself, supplies a small Java/Android API subset,
 inflates APK layouts, and renders widgets in a native macOS window.
@@ -72,7 +75,7 @@ execution, heap, framework and Views; `droidless` owns CLI/platform integration.
 |---|---|
 | APK, binary XML, resources.arsc | Real APKs and malformed-input tests; default resource configuration |
 | DEX 035–040 | Headers/digests/IDs/class data/code/try handlers; annotations/debug partial |
-| Register interpreter | Moves, constants, branches, switches, numeric operations, arrays, fields, calls, casts, explicit throw/catch |
+| Register interpreter | Moves, constants, branches, switches, numeric operations, arrays, fields, calls, casts, explicit and implicit Java throw/catch |
 | Object model / GC | Inheritance, dispatch, static initialization, strings/wide values, handle-based mark/sweep |
 | Activity | Main launcher discovery; create/start/resume/pause/stop/destroy |
 | UI | TextView, Button, EditText, LinearLayout, FrameLayout; approximate styling/measurement |

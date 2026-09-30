@@ -41,7 +41,8 @@ Headless tests prove the runtime semantics, not macOS keyboard delivery.
 Counter APK is built from visible Java/XML using aapt/javac/D8; normal test runs
 need neither SDK nor emulator. Tests cover malformed/truncated inputs, ZIP safety,
 third-party Activity execution, arithmetic/wide values, fields/static initialization,
-arrays, inheritance/interface dispatch, explicit exceptions, GC reachability,
+arrays/covariance, inherited interface dispatch, explicit/implicit exceptions,
+17 fault paths and catch-all/finally, GC reachability,
 lifecycle, DEX clicks and EditText copy.
 Local CI also runs 4,096 seeded APK/DEX/XML/resource mutations without panics.
 This is deterministic smoke coverage, not a coverage-guided fuzz campaign.

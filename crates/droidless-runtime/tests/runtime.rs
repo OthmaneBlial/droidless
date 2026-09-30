@@ -65,6 +65,36 @@ fn real_d8_code_arithmetic_objects_arrays_dispatch_exceptions() {
 }
 
 #[test]
+fn implicit_java_faults_catch_finally_and_inherited_array_types() {
+    let mut vm = runtime();
+    for (which, expected) in [1, 1, 3, 4, 4, 2, 2, 2, 5, 6, 6, 7, 7, 8, 2, 6, 6]
+        .into_iter()
+        .enumerate()
+    {
+        assert_eq!(
+            eval(
+                &mut vm,
+                "faults",
+                &["I"],
+                "I",
+                vec![Word::from(which as i32)]
+            ),
+            vec![Word::from(expected)],
+            "fault case {which}"
+        );
+        assert_eq!(vm.stack_depth(), 0);
+    }
+    assert_eq!(
+        eval(&mut vm, "finallyFault", &[], "I", vec![]),
+        vec![Word::from(1)]
+    );
+    assert_eq!(
+        eval(&mut vm, "inheritedTypes", &[], "I", vec![]),
+        vec![Word::from(18)]
+    );
+}
+
+#[test]
 fn lifecycle_xml_resources_and_dex_callbacks() {
     let mut vm = runtime();
     vm.launch().unwrap();

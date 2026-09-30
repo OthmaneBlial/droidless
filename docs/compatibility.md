@@ -16,7 +16,7 @@
 
 Decoder coverage is not proof of every valid/malformed edge case. Tests cover
 arithmetic boundaries and compiled loops, fields, class initialization, wide
-values, arrays, dispatch and explicit throw/catch. Complete verifier/debug/
+values, arrays, dispatch and explicit/implicit throw/catch/finally. Complete verifier/debug/
 annotation coverage remains pending. Reserved/newer opcodes fail with method/PC.
 
 ## Framework families reached by real execution/tests
@@ -30,15 +30,18 @@ substring/concat/charAt; StringBuilder constructors/append/toString; Integer
 parseInt/toString; Double parseDouble/toString; Math sqrt/cbrt/sin/cos/tan/log/
 exp/abs/pow; Log d/i/w/e. The source's exact signature table is authoritative;
 other overloads remain unsupported.
+Throwable constructors/getMessage/toString and common runtime exception types
+are implemented for the fault paths covered by conformance tests.
 
 ## Known ceilings
 
 - One Activity, single-threaded VM and approximate layout/style/configuration.
-- Explicit throw/catch works; many runtime-created Java faults remain terminal.
+- Explicit and common implicit Java exceptions are catchable; unsupported APIs,
+  malformed instructions and host resource ceilings remain terminal diagnostics.
 - UTF-16 lengths/substrings are honored; isolated surrogates are rejected by Rust.
 - Java float string scientific-notation edge cases differ from Rust formatting.
-- Transitive interface assignability, array covariance, class-init failure semantics
-  and verification of all instruction boundaries are incomplete.
+- Class-init failure semantics and verification of all instruction boundaries
+  are incomplete; method/field verification is not a complete Java type verifier.
 - No collections/I/O/Intent/Handler/Looper/SQLite/images/networking/JNI/JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.

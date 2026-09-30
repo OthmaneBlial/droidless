@@ -1,5 +1,5 @@
 use crate::{
-    heap::{Data, Heap, Word, default_value, wide},
+    heap::{Data, Heap, Word, default_value, exception_parent, wide},
     ui::{self, Node},
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -351,6 +351,9 @@ impl Runtime {
         if let Some((d, c)) = self.class_location(class) {
             return self.apk.dex[d].classes[c].super_class.clone();
         }
+        if let Some(parent) = exception_parent(class) {
+            return Some(parent.into());
+        }
         let parent = match class {
             "Landroid/widget/Button;" | "Landroid/widget/EditText;" => "Landroid/widget/TextView;",
             "Landroid/widget/TextView;" | "Landroid/view/ViewGroup;" => "Landroid/view/View;",
@@ -364,31 +367,50 @@ impl Runtime {
                 "Landroid/content/ContextWrapper;"
             }
             "Landroid/content/ContextWrapper;" => "Landroid/content/Context;",
-            "Ljava/lang/RuntimeException;" => "Ljava/lang/Exception;",
-            "Ljava/lang/Exception;" => "Ljava/lang/Throwable;",
             _ if class != "Ljava/lang/Object;" && !class.starts_with('[') => "Ljava/lang/Object;",
             _ => return None,
         };
         Some(parent.into())
     }
     pub(crate) fn is_a(&self, class: &str, target: &str) -> bool {
-        let mut current = class.to_owned();
-        for _ in 0..128 {
-            if current == target {
-                return true;
-            }
-            if let Some((d, c)) = self.class_location(&current)
-                && self.apk.dex[d].classes[c]
-                    .interfaces
-                    .iter()
-                    .any(|i| i == target)
+        let (mut class, mut target) = (class, target);
+        while let Some(element) = class.strip_prefix('[') {
+            if [
+                "Ljava/lang/Object;",
+                "Ljava/lang/Cloneable;",
+                "Ljava/io/Serializable;",
+            ]
+            .contains(&target)
             {
                 return true;
             }
-            let Some(parent) = self.parent(&current) else {
+            let Some(rhs) = target.strip_prefix('[') else {
                 return false;
             };
-            current = parent;
+            if !element.starts_with(['L', '[']) || !rhs.starts_with(['L', '[']) {
+                return element == rhs;
+            }
+            (class, target) = (element, rhs);
+        }
+        let mut work = vec![class.to_owned()];
+        let mut visited = BTreeSet::new();
+        while let Some(current) = work.pop() {
+            if current == target {
+                return true;
+            }
+            if !visited.insert(current.clone()) || visited.len() > 128 {
+                continue;
+            }
+            if let Some((d, c)) = self.class_location(&current) {
+                work.extend(self.apk.dex[d].classes[c].interfaces.iter().cloned());
+            }
+            if current == "Ljava/lang/String;" || current == "Ljava/lang/StringBuilder;" {
+                work.push("Ljava/lang/CharSequence;".into());
+                work.push("Ljava/io/Serializable;".into());
+            }
+            if let Some(parent) = self.parent(&current) {
+                work.push(parent);
+            }
         }
         false
     }

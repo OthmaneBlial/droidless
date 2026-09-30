@@ -3,6 +3,38 @@ use anyhow::{Context, Result, ensure};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
+/// A Java fault raised by the host bridge. The interpreter materializes it as a
+/// guest Throwable at the faulting instruction so normal DEX catches can run.
+#[derive(Debug)]
+pub(crate) struct GuestFault(pub &'static str, pub String);
+impl std::fmt::Display for GuestFault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.0, self.1)
+    }
+}
+impl std::error::Error for GuestFault {}
+pub(crate) fn fault(class: &'static str, message: impl Into<String>) -> anyhow::Error {
+    GuestFault(class, message.into()).into()
+}
+pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
+    Some(match class {
+        "Ljava/lang/ArithmeticException;"
+        | "Ljava/lang/NullPointerException;"
+        | "Ljava/lang/ClassCastException;"
+        | "Ljava/lang/NegativeArraySizeException;"
+        | "Ljava/lang/ArrayStoreException;"
+        | "Ljava/lang/IllegalArgumentException;"
+        | "Ljava/lang/IndexOutOfBoundsException;" => "Ljava/lang/RuntimeException;",
+        "Ljava/lang/NumberFormatException;" => "Ljava/lang/IllegalArgumentException;",
+        "Ljava/lang/ArrayIndexOutOfBoundsException;"
+        | "Ljava/lang/StringIndexOutOfBoundsException;" => "Ljava/lang/IndexOutOfBoundsException;",
+        "Ljava/lang/RuntimeException;" => "Ljava/lang/Exception;",
+        "Ljava/lang/Exception;" => "Ljava/lang/Throwable;",
+        "Ljava/lang/Throwable;" => "Ljava/lang/Object;",
+        _ => return None,
+    })
+}
+
 /// One Dalvik register word. References are handles, never host addresses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum Word {
@@ -98,17 +130,23 @@ impl Heap {
     }
     pub fn get(&self, word: Word) -> Result<&Object> {
         let h = word.reference()?;
+        if h == 0 {
+            return Err(fault("Ljava/lang/NullPointerException;", "null reference"));
+        }
         self.objects
             .get(h.wrapping_sub(1))
             .and_then(Option::as_ref)
-            .context("null or invalid guest object reference")
+            .context("invalid guest object reference")
     }
     pub fn get_mut(&mut self, word: Word) -> Result<&mut Object> {
         let h = word.reference()?;
+        if h == 0 {
+            return Err(fault("Ljava/lang/NullPointerException;", "null reference"));
+        }
         self.objects
             .get_mut(h.wrapping_sub(1))
             .and_then(Option::as_mut)
-            .context("null or invalid guest object reference")
+            .context("invalid guest object reference")
     }
     pub fn text(&self, word: Word) -> Result<&str> {
         match &self.get(word)?.data {

@@ -1,14 +1,14 @@
 use crate::{
-    heap::{Data, Word, bits64, default_value, wide},
+    heap::{Data, GuestFault, Word, bits64, default_value, fault, wide},
     vm::Runtime,
 };
 use anyhow::{Context, Result, bail, ensure};
 
 #[derive(Debug)]
-pub(crate) struct Thrown(pub Word);
+pub(crate) struct Thrown(pub Word, pub String);
 impl std::fmt::Display for Thrown {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "uncaught guest exception {:?}", self.0)
+        write!(f, "uncaught guest exception {}", self.1)
     }
 }
 impl std::error::Error for Thrown {}
@@ -19,6 +19,21 @@ enum Flow {
 }
 
 impl Runtime {
+    pub(crate) fn throw_reference(&self, object: Word) -> Result<anyhow::Error> {
+        let value = self.heap.get(object)?;
+        ensure!(
+            self.is_a(&value.class, "Ljava/lang/Throwable;"),
+            "throw requires a Throwable"
+        );
+        let mut description = value.class.clone();
+        if let Some(message) = value.fields.get("message").and_then(|v| v.first())
+            && *message != Word::ZERO
+        {
+            description.push_str(": ");
+            description.push_str(self.heap.text(*message)?);
+        }
+        Ok(Thrown(object, description).into())
+    }
     fn unit(&self, f: usize, offset: usize) -> Result<u16> {
         self.frames[f]
             .code
@@ -48,6 +63,25 @@ impl Runtime {
     fn pair(&self, f: usize, n: usize) -> Result<u64> {
         bits64(&[self.reg(f, n)?, self.reg(f, n + 1)?])
     }
+    fn array_value(&self, element: &str, words: &[Word]) -> Result<()> {
+        ensure!(
+            words.len() == if matches!(element, "J" | "D") { 2 } else { 1 },
+            "array value width mismatch"
+        );
+        if element.starts_with(['L', '[']) {
+            if words[0] != Word::ZERO && !self.is_a(&self.heap.get(words[0])?.class, element) {
+                return Err(fault(
+                    "Ljava/lang/ArrayStoreException;",
+                    format!("incompatible element for [{element}"),
+                ));
+            }
+        } else {
+            for word in words {
+                word.int()?;
+            }
+        }
+        Ok(())
+    }
     fn jump(&self, f: usize, offset: i32) -> Result<Flow> {
         let pc = self.frames[f].pc as i64 + i64::from(offset);
         ensure!(
@@ -69,7 +103,16 @@ impl Runtime {
             }
             let flow = match self.step(f) {
                 Ok(flow) => flow,
-                Err(error) => {
+                Err(mut error) => {
+                    if let Some(fault) = error.downcast_ref::<GuestFault>() {
+                        let object = self.heap.instance(fault.0)?;
+                        let message = self.heap.string(fault.1.clone())?;
+                        self.heap
+                            .get_mut(object)?
+                            .fields
+                            .insert("message".into(), vec![message]);
+                        error = self.throw_reference(object)?;
+                    }
                     if let Some(thrown) = error.downcast_ref::<Thrown>() {
                         let exception = thrown.0;
                         let class = self.heap.get(exception)?.class.clone();
@@ -240,10 +283,12 @@ impl Runtime {
                 let object = r!(if op == 0x20 { hi } else { a });
                 let matches = object == Word::ZERO || self.is_a(&self.heap.get(object)?.class, &ty);
                 if op == 0x1f {
-                    ensure!(
-                        matches,
-                        "guest ClassCastException: incompatible cast to {ty}"
-                    );
+                    if !matches {
+                        return Err(fault(
+                            "Ljava/lang/ClassCastException;",
+                            format!("incompatible cast to {ty}"),
+                        ));
+                    }
                 } else {
                     put!(lo, Word::from(i32::from(object != Word::ZERO && matches)));
                 }
@@ -276,7 +321,12 @@ impl Runtime {
                     .strip_prefix('[')
                     .context("new-array expects array type")?
                     .to_owned();
-                let length = usize::try_from(int!(hi)).context("negative array length")?;
+                let length = usize::try_from(int!(hi)).map_err(|_| {
+                    fault(
+                        "Ljava/lang/NegativeArraySizeException;",
+                        "negative array length",
+                    )
+                })?;
                 let v = self.array(element, length)?;
                 put!(lo, v);
                 next = 2;
@@ -300,6 +350,9 @@ impl Runtime {
                     .iter()
                     .map(|n| Ok(vec![self.reg(f, *n)?]))
                     .collect::<Result<Vec<_>>>()?;
+                for value in &values {
+                    self.array_value(&element, value)?;
+                }
                 let array = self.array(element, values.len())?;
                 if let Data::Array { values: target, .. } = &mut self.heap.get_mut(array)?.data {
                     *target = values;
@@ -335,20 +388,36 @@ impl Runtime {
                         vec![Word::Bits(v as u32)]
                     });
                 }
-                let Data::Array { values: target, .. } = &mut self.heap.get_mut(r!(a))?.data else {
+                let Data::Array {
+                    element,
+                    values: target,
+                } = &mut self.heap.get_mut(r!(a))?.data
+                else {
                     bail!("fill-array-data on non-array");
                 };
+                let expected_width = match element.as_str() {
+                    "Z" | "B" => 1,
+                    "C" | "S" => 2,
+                    "I" | "F" => 4,
+                    "J" | "D" => 8,
+                    _ => bail!("fill-array-data requires primitive array"),
+                };
                 ensure!(
-                    target.len() >= count,
-                    "fill-array-data exceeds array length"
+                    width == expected_width,
+                    "array payload element width mismatch"
                 );
+                if target.len() < count {
+                    return Err(fault(
+                        "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                        "fill-array-data exceeds array length",
+                    ));
+                }
                 target[..count].clone_from_slice(&values);
                 next = 3;
             }
             0x27 => {
                 let object = r!(a);
-                self.heap.get(object)?;
-                return Err(Thrown(object).into());
+                return Err(self.throw_reference(object)?);
             }
             0x28 => return self.jump(f, (word >> 8) as u8 as i8 as i32),
             0x29 => return self.jump(f, u!(1) as i16 as i32),
@@ -456,17 +525,51 @@ impl Runtime {
             0x44..=0x51 => {
                 let p = u!(1);
                 let array = r!(usize::from(p as u8));
-                let index =
-                    usize::try_from(int!(usize::from(p >> 8))).context("negative array index")?;
+                let Data::Array { element, values } = &self.heap.get(array)?.data else {
+                    bail!("array access on non-array");
+                };
+                let element = element.clone();
+                let length = values.len();
+                let index = usize::try_from(int!(usize::from(p >> 8))).map_err(|_| {
+                    fault(
+                        "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                        "negative array index",
+                    )
+                })?;
+                if index >= length {
+                    return Err(fault(
+                        "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                        "array index out of bounds",
+                    ));
+                }
                 let get = op <= 0x4a;
                 let sub = if get { op - 0x44 } else { op - 0x4b };
+                let compatible = match sub {
+                    0 => matches!(element.as_str(), "I" | "F"),
+                    1 => matches!(element.as_str(), "J" | "D"),
+                    2 => element.starts_with(['L', '[']),
+                    3 => element == "Z",
+                    4 => element == "B",
+                    5 => element == "C",
+                    6 => element == "S",
+                    _ => false,
+                };
+                ensure!(
+                    compatible,
+                    "array opcode does not match element type {element}"
+                );
                 if get {
                     let Data::Array { values, .. } = &self.heap.get(array)?.data else {
                         bail!("aget on non-array");
                     };
                     let mut value = values
                         .get(index)
-                        .context("guest array index out of bounds")?
+                        .ok_or_else(|| {
+                            fault(
+                                "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                                "array index out of bounds",
+                            )
+                        })?
                         .clone();
                     if sub >= 3 {
                         let n = value[0].int()?;
@@ -493,12 +596,16 @@ impl Runtime {
                             _ => n as i16 as i32,
                         });
                     }
+                    self.array_value(&element, &value)?;
                     let Data::Array { values, .. } = &mut self.heap.get_mut(array)?.data else {
                         bail!("aput on non-array");
                     };
-                    *values
-                        .get_mut(index)
-                        .context("guest array index out of bounds")? = value;
+                    *values.get_mut(index).ok_or_else(|| {
+                        fault(
+                            "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                            "array index out of bounds",
+                        )
+                    })? = value;
                 }
                 next = 2;
             }
@@ -692,11 +799,18 @@ fn int_op(op: u8, x: i32, y: i32) -> Result<i32> {
         1 => x.wrapping_sub(y),
         2 => x.wrapping_mul(y),
         3 => {
-            ensure!(y != 0, "guest ArithmeticException: divide by zero");
+            if y == 0 {
+                return Err(fault("Ljava/lang/ArithmeticException;", "divide by zero"));
+            }
             x.wrapping_div(y)
         }
         4 => {
-            ensure!(y != 0, "guest ArithmeticException: remainder by zero");
+            if y == 0 {
+                return Err(fault(
+                    "Ljava/lang/ArithmeticException;",
+                    "remainder by zero",
+                ));
+            }
             x.wrapping_rem(y)
         }
         5 => x & y,
@@ -714,11 +828,18 @@ fn long_op(op: u8, x: u64, y: u64) -> Result<u64> {
         1 => x.wrapping_sub(y),
         2 => x.wrapping_mul(y),
         3 => {
-            ensure!(y != 0, "guest ArithmeticException: divide by zero");
+            if y == 0 {
+                return Err(fault("Ljava/lang/ArithmeticException;", "divide by zero"));
+            }
             (x as i64).wrapping_div(y as i64) as u64
         }
         4 => {
-            ensure!(y != 0, "guest ArithmeticException: remainder by zero");
+            if y == 0 {
+                return Err(fault(
+                    "Ljava/lang/ArithmeticException;",
+                    "remainder by zero",
+                ));
+            }
             (x as i64).wrapping_rem(y as i64) as u64
         }
         5 => x & y,

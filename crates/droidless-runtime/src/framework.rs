@@ -1,5 +1,5 @@
 use crate::{
-    heap::{Data, Word, bits64, wide},
+    heap::{Data, Word, bits64, exception_parent, fault, wide},
     vm::Runtime,
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -10,6 +10,7 @@ use droidless_formats::{
 
 pub(crate) fn known_class(class: &str) -> bool {
     crate::ui::View::for_class(class).is_some()
+        || exception_parent(class).is_some()
         || [
             "Ljava/lang/Object;",
             "Ljava/lang/StringBuilder;",
@@ -58,13 +59,43 @@ impl Runtime {
                     .context("uninitialized KeyEvent")?
                     .clone();
             }
-            ("Ljava/lang/RuntimeException;", "<init>(Ljava/lang/String;)V")
-            | ("Ljava/lang/Exception;", "<init>(Ljava/lang/String;)V")
-            | ("Ljava/lang/Throwable;", "<init>(Ljava/lang/String;)V") => {
+            (class, "<init>()V") if exception_parent(class).is_some() => {
+                self.heap.get(receiver)?;
+            }
+            (class, "<init>(Ljava/lang/String;)V") if exception_parent(class).is_some() => {
                 self.heap
                     .get_mut(receiver)?
                     .fields
                     .insert("message".into(), vec![arg(1)?]);
+            }
+            ("Ljava/lang/Throwable;", "getMessage()Ljava/lang/String;") => {
+                result = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("message")
+                    .cloned()
+                    .unwrap_or_else(|| vec![Word::ZERO]);
+            }
+            ("Ljava/lang/Throwable;", "toString()Ljava/lang/String;") => {
+                let object = self.heap.get(receiver)?;
+                let class = object
+                    .class
+                    .trim_start_matches('L')
+                    .trim_end_matches(';')
+                    .replace('/', ".");
+                let message = object
+                    .fields
+                    .get("message")
+                    .and_then(|v| v.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO);
+                let text = if message == Word::ZERO {
+                    class
+                } else {
+                    format!("{class}: {}", self.heap.text(message)?)
+                };
+                result.push(self.heap.string(text)?);
             }
             ("Ljava/lang/String;", "valueOf(Ljava/lang/Object;)Ljava/lang/String;") => {
                 if arg(0)? == Word::ZERO {
@@ -128,17 +159,28 @@ impl Runtime {
             ("Ljava/lang/String;", "substring(I)Ljava/lang/String;")
             | ("Ljava/lang/String;", "substring(II)Ljava/lang/String;") => {
                 let units = self.heap.text(receiver)?.encode_utf16().collect::<Vec<_>>();
-                let start = usize::try_from(arg(1)?.int()?).context("negative substring start")?;
+                let start = usize::try_from(arg(1)?.int()?).map_err(|_| {
+                    fault(
+                        "Ljava/lang/StringIndexOutOfBoundsException;",
+                        "negative substring start",
+                    )
+                })?;
                 let end = if args.len() == 3 {
-                    usize::try_from(arg(2)?.int()?).context("negative substring end")?
+                    usize::try_from(arg(2)?.int()?).map_err(|_| {
+                        fault(
+                            "Ljava/lang/StringIndexOutOfBoundsException;",
+                            "negative substring end",
+                        )
+                    })?
                 } else {
                     units.len()
                 };
-                let text = String::from_utf16(
-                    units
-                        .get(start..end)
-                        .context("substring indexes out of bounds")?,
-                )?;
+                let text = String::from_utf16(units.get(start..end).ok_or_else(|| {
+                    fault(
+                        "Ljava/lang/StringIndexOutOfBoundsException;",
+                        "substring indexes out of bounds",
+                    )
+                })?)?;
                 result.push(self.heap.string(text)?);
             }
             ("Ljava/lang/String;", "concat(Ljava/lang/String;)Ljava/lang/String;") => {
@@ -146,13 +188,23 @@ impl Runtime {
                 result.push(self.heap.string(text)?);
             }
             ("Ljava/lang/String;", "charAt(I)C") => {
-                let index = usize::try_from(arg(1)?.int()?).context("negative string index")?;
+                let index = usize::try_from(arg(1)?.int()?).map_err(|_| {
+                    fault(
+                        "Ljava/lang/StringIndexOutOfBoundsException;",
+                        "negative string index",
+                    )
+                })?;
                 let c = self
                     .heap
                     .text(receiver)?
                     .encode_utf16()
                     .nth(index)
-                    .context("charAt index out of bounds")?;
+                    .ok_or_else(|| {
+                        fault(
+                            "Ljava/lang/StringIndexOutOfBoundsException;",
+                            "charAt index out of bounds",
+                        )
+                    })?;
                 result.push(Word::Bits(u32::from(c)));
             }
             ("Ljava/lang/String;", "valueOf(I)Ljava/lang/String;")
@@ -171,15 +223,28 @@ impl Runtime {
                     .text(arg(0)?)?
                     .trim()
                     .parse::<f64>()
-                    .context("guest NumberFormatException")?;
+                    .map_err(|_| {
+                        fault(
+                            "Ljava/lang/NumberFormatException;",
+                            "invalid floating-point string",
+                        )
+                    })?;
                 result = wide(value.to_bits());
             }
             ("Ljava/lang/Integer;", "parseInt(Ljava/lang/String;)I") => {
-                let value = self
-                    .heap
-                    .text(arg(0)?)?
-                    .parse::<i32>()
-                    .context("guest NumberFormatException")?;
+                let input = arg(0)?;
+                if input == Word::ZERO {
+                    return Err(fault(
+                        "Ljava/lang/NumberFormatException;",
+                        "null integer string",
+                    ));
+                }
+                let value = self.heap.text(input)?.parse::<i32>().map_err(|_| {
+                    fault(
+                        "Ljava/lang/NumberFormatException;",
+                        "invalid integer string",
+                    )
+                })?;
                 result.push(Word::from(value));
             }
             ("Ljava/lang/StringBuilder;", "<init>()V") => {
