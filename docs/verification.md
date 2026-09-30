@@ -152,7 +152,7 @@ Java differential evidence, not an Android reference run.
 
 Retrying the unchanged Notepad release with the current interpreter gets through
 Class.forName and Class.newInstance. GeneratedDatabaseHolder's inherited
-`typeConverters` field now shares its parent's storage. Startup then fails on
+`typeConverters` field now shares its parent's storage. At that checkpoint startup failed on
 `Ljava/util/ArrayList;` in `Lcom/raizlabs/android/dbflow/config/e;-><init>()V`,
 PC `0x000a`, under Application.onCreate PC `0x0016`. No Activity/UI or notes
 workflow has been reached. [Reflection limits](reflection.md).
@@ -189,3 +189,35 @@ and viewport bounds have regressions. Full local CI passes 28 Rust tests,
 4,096 seeded parser mutations, warning-free Clippy and a release build.
 The v0.1.0 archive predates this demo; use current source. The 50% everyday-app
 milestone is still ahead. GitHub Actions remain disabled; checks are local only.
+
+## Current source: ordered Java lists
+
+The authored Collections APK now also executes ListContract: ArrayList hierarchy,
+duplicates/nulls, insertion order, indexed get/set/add/remove, first/last index
+lookup, guest equality, bounds with unchanged data, iteration/exhaustion, structural
+changes, nonstructural replacements during search, equality callback counts and
+APK remove(int) override dispatch. The same pure-Java contract passes
+on Java 17.0.19 with Java 8 source/target. The extra runtime guard against mutation
+during equals is tested separately in guest DEX, not presented as Java differential
+evidence. No Android reference run or native collection-fixture test is claimed.
+
+List and Set iteration share managed storage and retain their owners/elements
+across GC. Rust regressions check both list insertion overloads at the 16,384-entry
+ceiling without changing values/version, and reject LinkedHashMap subclasses
+whose eviction hooks would otherwise be skipped. Basic LinkedHashMap operations
+reuse the existing Map implementation; access-order maps, views/iterators, bulk
+operations and eviction remain unsupported. [Exact collection limits](collections.md).
+
+The unchanged Notepad v1.0.0 APK retains SHA-256
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+DBFlow now constructs ArrayList and LinkedHashMap. Startup's first unsupported
+call is `Ljava/lang/Thread;-><init>(Ljava/lang/String;)V`, from
+`Lcom/raizlabs/android/dbflow/f/b/a/b;-><init>(Ljava/lang/String;)V`, PC `0x0000`,
+under Application.onCreate PC `0x0016`. No Activity/UI or notes workflow is reached.
+The original APK is neither changed nor redistributed. Thread/queue scheduling
+is the next diagnosed boundary, rather than a skipped initializer.
+
+Full local CI passes 28 Rust tests, 4,096 seeded parser mutations, warning-free
+Clippy and release build; all 17 scenarios in the two original calculator APKs
+still pass. The v0.1.0 archive keeps its older scope; this increment is current
+source evidence. The 50% checkpoint remains active and has not been achieved.

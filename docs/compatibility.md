@@ -41,7 +41,9 @@ commit/apply/remove/clear, MODE_PRIVATE stores, Activity.getPreferences and a
 minimal application-context singleton. Native authored-note save/restart/clear
 and isolated persistence are verified. Apply is synchronous; preference listeners,
 String sets and general file APIs remain unsupported. [Storage limits](storage.md).
-HashSet/HashMap add bounded basic operations using guest equals; Set iterators
+HashSet/ArrayList/HashMap and basic LinkedHashMap add bounded operations using
+guest equals; lists preserve duplicates/order and support indexed operations.
+Set/List iterators
 support removal and fail-fast next/remove. Collections.unmodifiableSet stays live
 and rejects mutation. Canonical Class literals work as Map keys, with basic package
 metadata. [Collections methods, evidence and ceilings](collections.md).

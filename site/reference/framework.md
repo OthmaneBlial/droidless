@@ -35,11 +35,14 @@ unsupported. [Exact storage semantics and boundaries](storage.md).
 
 ## Java collections subset
 
-HashSet/HashMap provide bounded storage, nulls and guest virtual equals. Set
+HashSet/ArrayList/HashMap and basic LinkedHashMap operations provide bounded
+storage, nulls and guest virtual equals. Lists preserve duplicates/order and add
+indexed reads, updates, insertion/removal and first/last index lookup. Set/List
 iteration supports removal and catchable invalid-state/exhaustion/concurrent-change
 errors. Collections.unmodifiableSet is a live read-only view, including its
 iterator. Class literals have stable identity; Class.getPackage/Package.getName
-expose basic metadata. Bulk operations and Map views remain unsupported. [Exact methods and ceilings](collections.md).
+expose basic metadata. Bulk operations, Map views, access-order maps and eviction
+hooks remain unsupported. [Exact methods and ceilings](collections.md).
 
 ## APK classes and Java numbers
 

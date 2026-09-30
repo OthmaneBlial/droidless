@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Bounded ArrayList with ordered duplicates/nulls, indexed operations, guest
+  equality and Set/List iterators; basic inherited LinkedHashMap operations.
+  The compiled list contract also passes on desktop Java. Local CI remains
+  28 Rust tests, 4,096 parser mutations and 17 original calculator scenarios.
+- Unmodified Notepad passes DBFlow's collection constructors and now stops at
+  Thread(String). No Activity/UI reached; scheduling remains future work.
+
 - Replace the public README/site showcase with unmodified Simple Calculator 1.0,
   a real white/charcoal native capture and seven checked headless scenarios.
   Site/SVG accents use blue instead of peach; the previous pink capture is removed.
@@ -9,7 +16,7 @@
   `--size WIDTHxHEIGHT` native/headless viewports. Local CI passes 28 Rust tests.
 - APK-local Class lookup/no-argument construction, guest access/initialization
   faults and inherited field resolution. Compiled conformance plus a desktop Java
-  differential run. Notepad startup now stops at ArrayList; no notes UI claim.
+  differential run. Notepad stopped at ArrayList at that checkpoint; no notes UI claim.
 
 - Bounded HashSet/HashMap with guest equals, Set iterators, live unmodifiable Set
   views, GC retention and explicit unsupported methods. Compiled conformance

@@ -10,9 +10,10 @@ The following are objectives, not completed capability claims.
    interaction and comparisons with expected Android behavior.
 3. Multi-screen/persistence: explicit Intents/Bundle/back stack are proven in an
    authored native fixture. Isolated SharedPreferences save/restart/clear are also
-   proven in an authored native fixture. Basic HashSet/HashMap and live read-only
-   Set views pass compiled conformance. Unmodified Notepad startup now reaches
-   ArrayList in DBFlow after APK-local lookup/reflective construction and inherited
+   proven in an authored native fixture. Basic HashSet/ArrayList/HashMap/LinkedHashMap
+   and live read-only Set views pass compiled conformance. Unmodified Notepad
+   startup now reaches Thread(String) in DBFlow after collection constructors,
+   APK-local lookup/reflective construction and inherited
    field resolution. The new neutral public calculator also proves boxed Double
    execution through native clicks. Follow that failure, then the actual storage/
    UI needs of a real notes/todo APK with restart/persistence tests.

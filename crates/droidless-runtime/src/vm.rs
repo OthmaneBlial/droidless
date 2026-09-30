@@ -485,7 +485,11 @@ impl Runtime {
             "Ljava/lang/Double;" => "Ljava/lang/Number;",
             "Ljava/util/HashSet;" => "Ljava/util/AbstractSet;",
             "Ljava/util/HashMap;" => "Ljava/util/AbstractMap;",
-            "Ljava/util/AbstractSet;" => "Ljava/util/AbstractCollection;",
+            "Ljava/util/LinkedHashMap;" => "Ljava/util/HashMap;",
+            "Ljava/util/ArrayList;" => "Ljava/util/AbstractList;",
+            "Ljava/util/AbstractSet;" | "Ljava/util/AbstractList;" => {
+                "Ljava/util/AbstractCollection;"
+            }
             "Landroid/widget/Button;" | "Landroid/widget/EditText;" => "Landroid/widget/TextView;",
             "Landroid/widget/TextView;" | "Landroid/view/ViewGroup;" => "Landroid/view/View;",
             "Landroid/widget/LinearLayout;" | "Landroid/widget/FrameLayout;" => {
@@ -555,7 +559,20 @@ impl Runtime {
                     .map(String::from),
                 );
             }
-            if current == "Ldroidless/runtime/SetIterator;" {
+            if current == "Ljava/util/ArrayList;" {
+                work.extend(
+                    [
+                        "Ljava/util/List;",
+                        "Ljava/util/Collection;",
+                        "Ljava/lang/Iterable;",
+                        "Ljava/util/RandomAccess;",
+                        "Ljava/lang/Cloneable;",
+                        "Ljava/io/Serializable;",
+                    ]
+                    .map(String::from),
+                );
+            }
+            if current == "Ldroidless/runtime/CollectionIterator;" {
                 work.push("Ljava/util/Iterator;".into());
             }
             if current == "Ldroidless/runtime/UnmodifiableSet;" {

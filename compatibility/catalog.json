@@ -87,7 +87,9 @@
       "native_ui": false,
       "headless_conformance_verified": true,
       "source": "examples/collections",
-      "notes": "Authored compiled fixture: guest equals/nulls, Set/Map operations, iterator exceptions, live read-only views, Class identity/package metadata, GC retention and bounded entries. No native interaction or independent notes-app evidence."
+      "notes": "Authored compiled fixture: ordered/indexed lists, duplicates/nulls, guest equals, Set/Map operations, iterator override/error behavior, live read-only views, GC retention, bounded entries and rejected eviction hooks. Same ListContract passes on desktop Java 17 with Java 8 source/target. No native interaction or independent notes-app evidence.",
+      "desktop_java_list_differential_verified": true,
+      "android_reference_verified": false
     },
     {
       "package": "org.droidless.reflection",
@@ -108,8 +110,8 @@
       "sha256": "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f",
       "status": "startup-blocked",
       "native_ui": false,
-      "first_failure": "unsupported class Ljava/util/ArrayList; in DBFlow config/e.<init> at PC 0x000a (Application.onCreate PC 0x0016)",
-      "notes": "Parsed; collection setup, APK-local Class lookup/reflective construction and inherited field aliases resolve. No Activity/UI or notes workflow reached. Original release APK unmodified and not redistributed.",
+      "first_failure": "unsupported method Ljava/lang/Thread;-><init>(Ljava/lang/String;)V in DBFlow f/b/a/b.<init> at PC 0x0000 (Application.onCreate PC 0x0016)",
+      "notes": "Parsed; DBFlow ArrayList/LinkedHashMap constructors, APK-local reflection and inherited fields resolve. No Activity/UI or notes workflow reached. Original release APK unmodified and not redistributed.",
       "release_tag": "v1.0.0"
     }
   ]

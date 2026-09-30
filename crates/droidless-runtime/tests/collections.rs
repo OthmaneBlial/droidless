@@ -14,9 +14,12 @@ fn runtime() -> Runtime {
     .unwrap()
 }
 fn call(vm: &mut Runtime, name: &str, returns: &str) -> Vec<Word> {
+    call_class(vm, "MainActivity", name, returns)
+}
+fn call_class(vm: &mut Runtime, class: &str, name: &str, returns: &str) -> Vec<Word> {
     vm.invoke(
         Method {
-            class: "Lorg/droidless/collections/MainActivity;".into(),
+            class: format!("Lorg/droidless/collections/{class};"),
             name: name.into(),
             parameters: vec![],
             returns: returns.into(),
@@ -33,11 +36,19 @@ fn guest_equality_nulls_iteration_live_readonly_views_and_gc() {
     vm.launch().unwrap();
     assert_eq!(vm.snapshot().unwrap().view.text, "Collections passed");
     call(&mut vm, "retain", "V");
+    call_class(&mut vm, "ListContract", "retain", "V");
     vm.collect();
     let next = call(&mut vm, "nextRetained", "Ljava/lang/String;")[0];
     assert_eq!(vm.heap.text(next).unwrap(), "iterator keeps its owner");
     let value = call(&mut vm, "retainedValue", "Ljava/lang/String;")[0];
     assert_eq!(vm.heap.text(value).unwrap(), "map keeps key and value");
+    let next = call_class(
+        &mut vm,
+        "ListContract",
+        "nextRetained",
+        "Ljava/lang/String;",
+    )[0];
+    assert_eq!(vm.heap.text(next).unwrap(), "list iterator keeps its owner");
 }
 
 #[test]
@@ -70,6 +81,36 @@ fn collection_limits_and_unsupported_overrides_fail_without_mutation() {
         panic!("collection lost");
     };
     assert_eq!(stored, &values);
+    let list = vm.heap.instance("Ljava/util/ArrayList;").unwrap();
+    vm.heap.get_mut(list).unwrap().data = Data::Collection {
+        values: values.clone(),
+        version: 0,
+    };
+    for (parameters, args, returns) in [
+        (vec!["Ljava/lang/Object;".into()], vec![list, new_key], "Z"),
+        (
+            vec!["I".into(), "Ljava/lang/Object;".into()],
+            vec![list, Word::from(16_384), new_key],
+            "V",
+        ),
+    ] {
+        let add = Method {
+            class: "Ljava/util/List;".into(),
+            name: "add".into(),
+            parameters,
+            returns: returns.into(),
+        };
+        assert!(format!("{:#}", vm.invoke(add, args, true).unwrap_err()).contains("entry limit"));
+        let Data::Collection {
+            values: stored,
+            version,
+        } = &vm.heap.get(list).unwrap().data
+        else {
+            panic!("list lost");
+        };
+        assert_eq!(stored, &values);
+        assert_eq!(*version, 0);
+    }
     let map = vm.heap.instance("Ljava/util/HashMap;").unwrap();
     vm.heap.get_mut(map).unwrap().data = Data::Map {
         entries: values.into_iter().map(|key| (key, Word::ZERO)).collect(),
@@ -98,7 +139,7 @@ fn collection_limits_and_unsupported_overrides_fail_without_mutation() {
             .iter()
             .all(|(key, value)| *key != new_key && *value == Word::ZERO)
     );
-    for object in [set, map] {
+    for object in [set, list, map] {
         let to_string = Method {
             class: "Ljava/lang/Object;".into(),
             name: "toString".into(),
@@ -113,4 +154,19 @@ fn collection_limits_and_unsupported_overrides_fail_without_mutation() {
             .contains("unsupported collection method")
         );
     }
+    let class = "Lorg/droidless/collections/ListContract$EvictingMap;";
+    let object = vm.heap.instance(class).unwrap();
+    let constructor = Method {
+        class: class.into(),
+        name: "<init>".into(),
+        parameters: vec![],
+        returns: "V".into(),
+    };
+    assert!(
+        format!(
+            "{:#}",
+            vm.invoke(constructor, vec![object], false).unwrap_err()
+        )
+        .contains("eviction hooks are unsupported")
+    );
 }
