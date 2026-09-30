@@ -2,6 +2,8 @@
 
 **Run Android apps without Android.**
 
+[![Release](https://img.shields.io/github/v/release/OthmaneBlial/droidless)](https://github.com/OthmaneBlial/droidless/releases/latest)
+
 [Project site](https://othmaneblial.github.io/droidless/) ·
 [Documentation](https://othmaneblial.github.io/droidless/docs.html)
 
@@ -29,6 +31,9 @@ target/release/droidless artifacts/apks/KasCalc.apk
 
 Compilation needs Rust and, on macOS, Apple's Command Line Tools. Linux can use
 the headless code path; no Linux build/UI validation is claimed yet.
+The [v0.1.0 release](https://github.com/OthmaneBlial/droidless/releases/tag/v0.1.0)
+also provides a tested macOS ARM64 CLI archive and SHA-256 checksum. It has no
+Apple developer signature or notarization.
 
 ```sh
 target/release/droidless inspect app.apk
