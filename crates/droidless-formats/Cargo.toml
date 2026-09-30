@@ -1,0 +1,11 @@
+[package]
+name = "droidless-formats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+sha1 = "0.10"
