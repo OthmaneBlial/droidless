@@ -102,6 +102,129 @@ fn bulk_copy_roots_snapshots_and_releases_them_after_guest_mutation() {
 }
 
 #[test]
+fn snapshots_retain_values_across_gc_and_workers_and_preserve_limits() {
+    let mut vm = runtime();
+    let original = call_class(&mut vm, "SnapshotContract", "retain", "Ljava/lang/Object;")[0];
+    vm.collect();
+    assert!(
+        vm.heap.get(original).is_err(),
+        "snapshot retained the live list"
+    );
+    let value = call_class(
+        &mut vm,
+        "SnapshotContract",
+        "nextRetained",
+        "Ljava/lang/String;",
+    )[0];
+    assert_eq!(vm.heap.text(value).unwrap(), "snapshot keeps old value");
+    call_class(&mut vm, "SnapshotContract", "release", "V");
+    vm.collect();
+    assert!(
+        vm.heap.get(value).is_err(),
+        "released snapshot retained an element"
+    );
+    let old_value = call_class(
+        &mut vm,
+        "SnapshotContract",
+        "prepareWriteMutation",
+        "Ljava/lang/Object;",
+    )[0];
+    let remove = Method {
+        class: "Lorg/droidless/collections/SnapshotContract;".into(),
+        name: "removeMutation".into(),
+        parameters: vec![],
+        returns: "V".into(),
+    };
+    let error = vm.invoke(remove, vec![], false).unwrap_err();
+    assert!(
+        format!("{error:#}")
+            .contains("unsupported CopyOnWriteArrayList mutation during remove equality")
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    assert_eq!(
+        call_class(&mut vm, "SnapshotContract", "mutationSize", "I")[0],
+        Word::ZERO
+    );
+    vm.collect();
+    assert!(
+        vm.heap.get(old_value).is_err(),
+        "failed search retained its snapshot"
+    );
+    call_class(&mut vm, "SnapshotContract", "prepareWorker", "V");
+    vm.collect();
+    vm.poll_messages().unwrap();
+    vm.collect();
+    assert_eq!(
+        call_class(&mut vm, "SnapshotContract", "verifyWorker", "I")[0],
+        Word::from(1)
+    );
+    let list = vm
+        .heap
+        .instance("Ljava/util/concurrent/CopyOnWriteArrayList;")
+        .unwrap();
+    vm.heap.get_mut(list).unwrap().data = Data::Collection {
+        values: vec![Word::ZERO; 16_384],
+        version: 0,
+    };
+    for (parameters, args, returns) in [
+        (
+            vec!["Ljava/lang/Object;".into()],
+            vec![list, Word::ZERO],
+            "Z",
+        ),
+        (
+            vec!["I".into(), "Ljava/lang/Object;".into()],
+            vec![list, Word::from(16_384), Word::ZERO],
+            "V",
+        ),
+    ] {
+        let add = Method {
+            class: "Ljava/util/List;".into(),
+            name: "add".into(),
+            parameters,
+            returns: returns.into(),
+        };
+        assert!(format!("{:#}", vm.invoke(add, args, true).unwrap_err()).contains("entry limit"));
+        let Data::Collection { values, version } = &vm.heap.get(list).unwrap().data else {
+            panic!("list lost")
+        };
+        assert_eq!(values, &vec![Word::ZERO; 16_384]);
+        assert_eq!(*version, 0);
+    }
+    for (name, parameters, returns, args) in [
+        ("<init>", vec!["I".into()], "V", vec![list, Word::from(1)]),
+        (
+            "<init>",
+            vec!["[Ljava/lang/Object;".into()],
+            "V",
+            vec![list, Word::ZERO],
+        ),
+        (
+            "addIfAbsent",
+            vec!["Ljava/lang/Object;".into()],
+            "Z",
+            vec![list, Word::ZERO],
+        ),
+    ] {
+        let method = Method {
+            class: "Ljava/util/concurrent/CopyOnWriteArrayList;".into(),
+            name: name.into(),
+            parameters,
+            returns: returns.into(),
+        };
+        assert!(
+            format!("{:#}", vm.invoke(method, args, false).unwrap_err())
+                .contains("unsupported method")
+        );
+        let Data::Collection { values, version } = &vm.heap.get(list).unwrap().data else {
+            panic!("list lost")
+        };
+        assert_eq!(values.len(), 16_384);
+        assert_eq!(*version, 0);
+    }
+}
+
+#[test]
 fn collection_limits_and_unsupported_overrides_fail_without_mutation() {
     let mut vm = runtime();
     let mut values = vec![];

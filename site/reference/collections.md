@@ -1,6 +1,6 @@
 # Java collections subset
 
-Current source implements bounded guest HashSet, ArrayList and HashMap storage,
+Current source implements bounded guest HashSet, ArrayList, CopyOnWriteArrayList and HashMap storage,
 plus basic insertion-mode LinkedHashMap and immediate LinkedBlockingQueue operations. Objects stay
 in the managed heap; lookups execute the APK's virtual `equals` method. Null keys,
 null values and String value equality are supported by the Set/List/Map stores.
@@ -10,9 +10,11 @@ Queues reject null elements. There is no host Java runtime.
 |---|---|
 | HashSet | Empty/int-capacity constructors; size, isEmpty, add, contains, remove, clear, iterator |
 | ArrayList | Empty/int-capacity constructors; size, isEmpty, add, contains, remove, clear, iterator; indexed get/set/add/remove; indexOf/lastIndexOf |
+| CopyOnWriteArrayList | Empty constructor; size, isEmpty, add, contains, remove, clear; indexed get/set/add/remove; indexOf/lastIndexOf; snapshot iterator |
 | HashMap / LinkedHashMap | Empty/int-capacity constructors; size, isEmpty, containsKey, containsValue, get, put, remove, clear; putAll between native maps |
 | LinkedBlockingQueue | Empty/fixed-capacity constructors; size, isEmpty, remainingCapacity, add/offer, peek/element, poll/remove, contains, remove(Object), clear; immediate operations and worker take/put waits |
 | Set / List iterator | hasNext, next, remove; exhaustion, invalid remove and structural-change exceptions |
+| Snapshot iterator | hasNext, next; original values survive later list changes; remove throws UnsupportedOperationException |
 | Collections | unmodifiableSet / unmodifiableList: live backing views; supported mutations and iterator.remove throw UnsupportedOperationException |
 
 All stores allow at most 16,384 entries. Negative Set/List/Map initial capacity raises a
@@ -106,8 +108,33 @@ Indexed and collection mutators raise UnsupportedOperationException before
 changing the backing List. Read-only iterators wrap the backing iterator without
 changing its mutation permissions: shared cursors still delegate, and a separate mutable alias remains
 writable. Iterator.remove rejects mutation through the wrapper; backing
-structural changes retain the native iterator's fail-fast behavior. ListIterator,
+structural changes retain the backing iterator's fail-fast or snapshot behavior. ListIterator,
 subList, arrays and collection equals/hashCode/toString remain unsupported.
+
+## Snapshot lists
+
+CopyOnWriteArrayList reuses the bounded managed List store. Empty construction,
+duplicates/nulls, indexed operations and search use guest references and equality.
+Writes replace the backing vector. iterator captures a shallow copy of its values:
+later set/add/remove/clear calls, including guest worker writes, do not change that
+iterator or raise ConcurrentModificationException. next exhaustion raises
+NoSuchElementException; iterator.remove always raises UnsupportedOperationException.
+Read-only List views delegate snapshot iteration. Retained snapshots keep old
+elements through GC without retaining the live List; releasing the iterator
+releases those roots.
+
+Searches hold a GC-rooted snapshot across guest equals callbacks. Reentrant read
+searches keep their original values even if equals clears the live List. Mutation
+during remove(Object) equality is explicitly unsupported and reports a terminal
+diagnostic; callback effects remain. Java's write revalidation algorithm is not
+implemented, and this guard is tested separately from desktop Java conformance.
+
+The 16,384-entry ceiling applies. Writes and iterator creation currently copy O(n)
+references; Java's shared-array O(1) iterator creation is not reproduced. The
+serial shared-heap worker executor provides exclusive mutation; this is not
+parallel CPU or complete Java concurrency support. Array/Collection constructors,
+addIfAbsent, other bulk APIs, ListIterator/subList, arrays, clone, serialization
+and list equals/hashCode/toString remain unsupported. No host Java is used.
 
 ## Reproduce the compiled conformance check
 
@@ -126,6 +153,10 @@ java -cp artifacts/queue-java-contract org.droidless.collections.QueueContract
 mkdir -p artifacts/map-java-contract
 javac -source 8 -target 8 -Xlint:-options -d artifacts/map-java-contract examples/collections/MapCopyContract.java
 java -cp artifacts/map-java-contract org.droidless.collections.MapCopyContract
+# Desktop comparison for snapshot iteration and a worker update:
+mkdir -p artifacts/snapshot-java-contract
+javac -source 8 -target 8 -Xlint:-options -d artifacts/snapshot-java-contract examples/collections/SnapshotContract.java
+java -cp artifacts/snapshot-java-contract org.droidless.collections.SnapshotContract
 ```
 
 The authored APK displays `Collections passed` in its headless View snapshot. It
@@ -144,9 +175,19 @@ limitations are tested separately and are not presented as Java differential evi
 No Android reference differential run is claimed.
 This establishes a generic API subset, not working third-party notes-app UI.
 
+SnapshotContract runs in the same compiled APK and on desktop Java 17. It checks
+snapshot stability, duplicates/nulls, indexes, mutation rejection, exhaustion,
+guest equality/GC and read-only wrapping. Rust checks additionally cover old-value
+retention/release, a guest worker changing the live List, entry ceilings, unknown
+constructors/methods and cleanup after the reentrant-write diagnostic. Desktop
+main uses Thread.join only to wait for its reference worker; guest join remains
+unsupported and the DROIDLESS check uses its worker polling path.
+
 Contract references: [Android ArrayList](https://developer.android.com/reference/java/util/ArrayList),
 [Java 8 ArrayList](https://docs.oracle.com/javase/8/docs/api/java/util/ArrayList.html)
 and [Java 8 LinkedHashMap](https://docs.oracle.com/javase/8/docs/api/java/util/LinkedHashMap.html).
 Queue semantics: [Java 8 LinkedBlockingQueue](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/LinkedBlockingQueue.html).
 
 Bulk-copy and read-only view contracts: [Java 8 HashMap](https://docs.oracle.com/javase/8/docs/api/java/util/HashMap.html) and [Java 8 Collections](https://docs.oracle.com/javase/8/docs/api/java/util/Collections.html).
+
+Snapshot contract: [Java 17 CopyOnWriteArrayList](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/CopyOnWriteArrayList.html).

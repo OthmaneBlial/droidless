@@ -44,10 +44,14 @@ String sets and general file APIs remain unsupported. [Storage limits](storage.m
 HashSet/ArrayList/HashMap and basic LinkedHashMap add bounded operations using
 guest equals; lists preserve duplicates/order and support indexed operations.
 Native HashMap/LinkedHashMap putAll copies bounded entries with snapshot GC roots.
-Set/List iterators
+ArrayList/Set iterators
 support removal and fail-fast next/remove. Collections.unmodifiableSet/unmodifiableList stay live
 and reject mutation. Canonical Class literals work as Map keys, with basic package
 metadata. [Collections methods, evidence and ceilings](collections.md).
+CopyOnWriteArrayList adds bounded indexed/membership operations and immutable
+snapshot iterators: old values survive live changes, GC and serial guest worker
+writes. Read-only views preserve this iterator behavior. Reentrant remove equality,
+copy constructors, bulk APIs and ListIterator/subList remain unsupported.
 LinkedBlockingQueue supports an immediate FIFO subset with fixed/default capacity,
 duplicates, null rejection and inherited override dispatch. Worker take/put waits
 retain managed frames; timed waits and parallel execution remain unsupported. [Queue limits](collections.md#immediate-fifo-queues).
@@ -77,7 +81,7 @@ checks. The authored native Start worker action also delivers its main-thread re
   is unsupported. Instruction/field/method checks are not a complete Java type verifier.
 - Main waits, blocking native-bridge callbacks/initializers, sleep/join, wait/notify,
   worker Looper delivery/priority, parallel execution and general Java timers are unsupported.
-- Other bulk collections, custom Map copies/views, snapshot CopyOnWriteArrayList,
+- Other bulk collections, custom Map copies/views, CopyOnWriteArrayList write revalidation,
   ListIterator/subList, custom class loaders, method/field reflection, general file I/O,
   SQLite, images, networking, JNI, JIT,
   APK signature verification, installation registry or Linux native renderer.

@@ -13,8 +13,9 @@ The following are objectives, not completed capability claims.
    proven in an authored native fixture. Basic HashSet/ArrayList/HashMap/LinkedHashMap
    and live read-only Set/List views pass compiled conformance. Native map bulk
    copying and primitive Class metadata now complete more DBFlow setup in the
-   unmodified Notepad. Startup reaches the bundled class com/b/a/c/d/a/a and stops
-   at CopyOnWriteArrayList before Activity creation. APK-local lookup/reflective
+   unmodified Notepad. Snapshot CopyOnWriteArrayList construction now resolves;
+   startup stops at Build.VERSION.SDK_INT in Application.onCreate before Activity
+   creation. APK-local lookup/reflective
    construction and inherited fields also resolve. The neutral public calculator proves boxed Double
    execution through native clicks. Follow that failure, then the actual storage/
    UI needs of a real notes/todo APK with restart/persistence tests.
@@ -27,7 +28,7 @@ The following are objectives, not completed capability claims.
    priorities and join/sleep remain ahead. Notepad passes deferred Thread.start;
    independently completed transaction execution remains unproven.
    Gate: a real APK completes its queued transactions and posts UI results.
-5. Snapshot collections, lists/images/SQLite/network: follow first failures in substantial third-party
+5. Virtual system metadata, lists/images/SQLite/network: follow first failures in substantial third-party
    apps, with host capabilities explicit and tested.
 6. Linux native backend: common VM/View model, real Linux builds/render/input.
 7. Kotlin/AndroidX, then fragments/Compose/JNI/foreign libraries: major subsequent

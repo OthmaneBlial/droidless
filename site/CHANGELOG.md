@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Bounded CopyOnWriteArrayList operations and snapshot iterators: old values
+  survive live mutations, GC and serial guest worker updates; iterator removal
+  raises UnsupportedOperationException. Read-only views preserve snapshots. The
+  normal SnapshotContract also passes on desktop Java. Reentrant remove equality,
+  copy constructors, bulk APIs and ListIterator/subList remain unsupported.
+- Unmodified Notepad passes snapshot-list construction and now stops at
+  Build.VERSION.SDK_INT in Application.onCreate, before Activity/UI creation.
+  Local CI passes 40 Rust tests, 4,096 mutations and 17 calculator scenarios.
+
 - Canonical primitive Class metadata from all nine wrapper TYPE fields; wrapper
   lookup, constructor faults and rejected native final-field writes. The compiled
   PrimitiveContract also passes on desktop Java.
@@ -11,9 +20,10 @@
   also pass on desktop Java. Other bulk APIs, custom Map copying and ListIterator/
   subList remain unsupported.
 
-- Unmodified Notepad now passes primitive metadata, native map copying and
-  unmodifiableList setup, then stops at CopyOnWriteArrayList before Activity/UI
-  creation. No initializer is skipped and the original APK remains unchanged.
+- At the metadata/map-copy checkpoint, unmodified Notepad passed primitive
+  metadata, native map copying and unmodifiableList setup, then stopped at
+  CopyOnWriteArrayList before Activity/UI creation. No initializer is skipped and
+  the original APK remains unchanged.
 
 - Deferred guest Thread.start execution on a serial host worker executor, retaining
   shared-heap DEX frames across LinkedBlockingQueue take/put and reentrant monitor

@@ -29,6 +29,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/util/ArrayList;",
             "Ljava/util/LinkedHashMap;",
             "Ljava/util/concurrent/LinkedBlockingQueue;",
+            "Ljava/util/concurrent/CopyOnWriteArrayList;",
             "Ljava/lang/Throwable;",
             "Ljava/lang/Exception;",
             "Ljava/lang/RuntimeException;",

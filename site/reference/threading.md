@@ -135,9 +135,10 @@ emitted onPause/onStop/onDestroy, exiting with status 0.
 The earlier scheduling and immediate-queue checkpoints diagnosed Notepad's
 LinkedBlockingQueue constructor and then Thread.start. Current source resolves
 both. Primitive metadata, native map copying and read-only List construction also
-resolve. The unchanged release now stops at CopyOnWriteArrayList in bundled
-`com/b/a/c/d/a/a.<init>` PC `0x0012`, under `<clinit>` PC `0x0002` and
-Application.onCreate PC `0x001e`.
+resolve. Snapshot CopyOnWriteArrayList construction now resolves too; snapshot
+stability across serial worker writes is checked in the authored Collections
+fixture. The unchanged Notepad release now stops at `Build.VERSION.SDK_INT` in
+Application.onCreate PC `0x002e`.
 This is still before Activity/UI creation; the independent worker/notes workflow
 has not executed successfully. The 50% checkpoint remains ahead. The v0.1.0 release
 archive predates scheduling and workers.

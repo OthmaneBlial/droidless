@@ -634,7 +634,9 @@ impl Runtime {
                     .map(String::from),
                 );
             }
-            if current == "Ljava/util/ArrayList;" {
+            if current == "Ljava/util/ArrayList;"
+                || current == "Ljava/util/concurrent/CopyOnWriteArrayList;"
+            {
                 work.extend(
                     [
                         "Ljava/util/List;",
@@ -649,6 +651,7 @@ impl Runtime {
             }
             if current == "Ldroidless/runtime/CollectionIterator;"
                 || current == "Ldroidless/runtime/UnmodifiableIterator;"
+                || current == "Ldroidless/runtime/SnapshotIterator;"
             {
                 work.push("Ljava/util/Iterator;".into());
             }

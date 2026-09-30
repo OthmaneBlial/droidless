@@ -89,12 +89,14 @@
       "native_ui": false,
       "headless_conformance_verified": true,
       "source": "examples/collections",
-      "notes": "Authored compiled fixture: ordered/indexed lists, immediate FIFO queues, duplicate/null/capacity behavior, guest equals, Set/Map operations, iterator and inherited queue override dispatch, live read-only views, GC retention, limits and rejected eviction hooks. Native map copying, live/nested read-only List views, shared iterator aliases, snapshot GC roots and error cleanup are checked. Same ListContract, MapCopyContract and immediate QueueContract pass on desktop Java 17 with Java 8 source/target. Queue waits/workers are covered by the separate Scheduling fixture; queue iterators remain unsupported. No native interaction or independent notes-app evidence.",
+      "notes": "Authored compiled fixture: ordered/indexed lists, immediate FIFO queues, duplicate/null/capacity behavior, guest equals, Set/Map operations, iterator and inherited queue override dispatch, live read-only views, GC retention, limits and rejected eviction hooks. Native map copying, live/nested read-only List views, shared iterator aliases, snapshot GC roots and error cleanup are checked. Same ListContract, MapCopyContract and immediate QueueContract pass on desktop Java 17 with Java 8 source/target. Queue waits/workers are covered by the separate Scheduling fixture; queue iterators remain unsupported. No native interaction or independent notes-app evidence. SnapshotContract also passes on Java 17: immutable snapshot iteration across live changes, read-only wrapping, nulls/indexes and guest equality. Rust checks cover GC retention/release, serial guest worker writes, entry ceilings and explicit reentrant-remove rejection with root cleanup. Snapshot creation copies O(n) references; guest join and parallel CPU execution remain unsupported.",
       "desktop_java_list_differential_verified": true,
       "desktop_java_immediate_queue_differential_verified": true,
       "android_reference_verified": false,
       "desktop_java_map_copy_differential_verified": true,
-      "headless_readonly_list_verified": true
+      "headless_readonly_list_verified": true,
+      "desktop_java_snapshot_differential_verified": true,
+      "headless_snapshot_worker_verified": true
     },
     {
       "package": "org.droidless.reflection",
@@ -136,8 +138,8 @@
       "sha256": "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f",
       "status": "startup-blocked",
       "native_ui": false,
-      "first_failure": "unsupported class Ljava/util/concurrent/CopyOnWriteArrayList; in Lcom/b/a/c/d/a/a;-><init>()V at PC 0x0012, <clinit> PC 0x0002 (Application.onCreate PC 0x001e)",
-      "notes": "Parsed; DBFlow collections, reflection, inherited fields, deferred Thread.start, primitive TYPE metadata and native map copying resolve. Read-only List construction also resolves; startup advances to CopyOnWriteArrayList. No Activity/UI or independently working notes/worker workflow reached. Original release APK unmodified and not redistributed.",
+      "first_failure": "unsupported framework field Landroid/os/Build$VERSION;->SDK_INT:I in Lir/cafebazaar/notepad/App;->onCreate()V at PC 0x002e",
+      "notes": "Parsed; DBFlow collections, reflection, inherited fields, deferred Thread.start, primitive TYPE metadata, native map copying, read-only List and CopyOnWriteArrayList construction resolve. Startup advances to Build.VERSION.SDK_INT. No Activity/UI or independently working notes/worker workflow reached. Original release APK unmodified and not redistributed.",
       "release_tag": "v1.0.0"
     }
   ]

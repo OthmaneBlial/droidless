@@ -437,3 +437,57 @@ Chrome paste of the expected command block.
 
 GitHub Actions remain disabled; CI runs locally. v0.1.0 keeps its earlier archive
 scope. The 50% everyday-app checkpoint remains active and has not been achieved.
+
+## Current source: snapshot lists
+
+Verified on 2026-10-01, macOS ARM64. CopyOnWriteArrayList uses the existing bounded
+managed List store with snapshot iteration. SnapshotContract executes in the
+authored Collections APK and passes on desktop Java 17 with Java 8 source/target.
+It checks duplicates/nulls, indexed reads/writes, search/equality, remove during
+iteration, iterator exhaustion and rejected iterator mutation. Old snapshot values
+survive later set/add/remove/clear calls. Read-only List wrapping retains this
+behavior. Reentrant read search keeps the original snapshot even if guest equals
+clears the live List and runs GC.
+
+The Rust integration check collects an otherwise unreachable live List while
+its iterator retains the old dynamic value, then verifies that releasing the
+iterator releases that value. Another check starts a guest writer, polls its
+managed execution and confirms that the old iterator retains its original value
+while live reads see the worker's replacement. Entry ceilings and unknown
+constructors/methods fail without changing the store. A separate negative check
+clears the List inside remove equality and collects it: the runtime rejects write
+revalidation explicitly, preserves callback effects, unwinds frames and releases
+temporary snapshot roots. This guard is not desktop Java differential evidence.
+
+```sh
+cargo test -p droidless-runtime --test collections --locked
+mkdir -p artifacts/snapshot-java-contract
+javac -source 8 -target 8 -Xlint:-options -d artifacts/snapshot-java-contract examples/collections/SnapshotContract.java
+java -cp artifacts/snapshot-java-contract org.droidless.collections.SnapshotContract
+target/release/droidless run --headless --ephemeral fixtures/generated/collections.apk
+```
+
+The desktop reference main uses Thread.join to wait for its worker. Guest join
+remains unsupported; DROIDLESS uses its worker polling path. Iterator creation
+copies O(n) references rather than sharing Java's backing array. No parallel CPU,
+complete concurrency library or Android reference execution is claimed.
+[Methods and limits](collections.md#snapshot-lists).
+
+The unchanged Notepad v1.0.0 release retains SHA-256
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+Snapshot-list construction now passes. The fresh release build stops at:
+
+```text
+Lir/cafebazaar/notepad/App;->onCreate()V [classes.dex, PC 0x002e]:
+unsupported framework field Landroid/os/Build$VERSION;->SDK_INT:I
+```
+
+No initializer is skipped. Activity/UI creation and independent notes/worker
+workflows remain unproven. The 50% checkpoint remains active and ahead.
+
+Full local CI passes 40 Rust tests, warning-free Clippy, release build and 4,096
+seeded parser mutations. All 17 original calculator scenarios pass. Fresh headless
+checks produce Collections passed, Worker result: kept-consumer:payload and
+Timer done: 3. This increment changes runtime collection behavior and documentation;
+the previously verified neutral native calculator capture remains the showcase.
+GitHub Actions remain disabled, and the v0.1.0 archive retains its earlier scope.

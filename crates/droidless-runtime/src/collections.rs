@@ -7,6 +7,8 @@ use anyhow::{Context, Result, bail, ensure};
 use droidless_formats::dex::Method;
 
 const ITERATOR: &str = "Ldroidless/runtime/CollectionIterator;";
+const SNAPSHOT_ITERATOR: &str = "Ldroidless/runtime/SnapshotIterator;";
+const COPY_ON_WRITE_LIST: &str = "Ljava/util/concurrent/CopyOnWriteArrayList;";
 const READ_ONLY_ITERATOR: &str = "Ldroidless/runtime/UnmodifiableIterator;";
 const READ_ONLY_SET: &str = "Ldroidless/runtime/UnmodifiableSet;";
 const READ_ONLY_LIST: &str = "Ldroidless/runtime/UnmodifiableList;";
@@ -61,6 +63,27 @@ impl Runtime {
     fn collection_find(&mut self, owner: Word, key: Word, last: bool) -> Result<Option<usize>> {
         key.reference()?;
         let (values, version) = self.collection(owner)?;
+        if self.is_a(&self.heap.get(owner)?.class, COPY_ON_WRITE_LIST) {
+            let values = values.to_vec();
+            let roots = self.native_roots.len();
+            self.native_roots.extend([owner, key]);
+            self.native_roots.extend(values.iter().copied());
+            let found = (|| -> Result<Option<usize>> {
+                for offset in 0..values.len() {
+                    let index = if last {
+                        values.len() - 1 - offset
+                    } else {
+                        offset
+                    };
+                    if self.object_equal(key, values[index], false)? {
+                        return Ok(Some(index));
+                    }
+                }
+                Ok(None)
+            })();
+            self.native_roots.truncate(roots);
+            return found;
+        }
         // ponytail: linear membership with guest equals; use hash buckets if profiling justifies them.
         let len = values.len();
         let identity = !self.is_a(&self.heap.get(owner)?.class, "Ljava/util/ArrayList;");
@@ -233,7 +256,7 @@ impl Runtime {
             if sig == "iterator()Ljava/util/Iterator;" {
                 let iterator = *result.first().context("iterator returned no value")?;
                 ensure!(
-                    [ITERATOR, READ_ONLY_ITERATOR]
+                    [ITERATOR, SNAPSHOT_ITERATOR, READ_ONLY_ITERATOR]
                         .contains(&self.heap.get(iterator)?.class.as_str()),
                     "unmodifiable iterator for this collection is unsupported"
                 );
@@ -249,15 +272,27 @@ impl Runtime {
         if method.class == "Ljava/util/HashMap;" || method.class == "Ljava/util/LinkedHashMap;" {
             return self.map_native(method, args);
         }
-        let list = method.class == "Ljava/util/ArrayList;";
-        if !list && method.class != "Ljava/util/HashSet;" && method.class != ITERATOR {
+        let cow = method.class == COPY_ON_WRITE_LIST;
+        let list = method.class == "Ljava/util/ArrayList;" || cow;
+        let snapshot_iterator = method.class == SNAPSHOT_ITERATOR;
+        if !list
+            && method.class != "Ljava/util/HashSet;"
+            && method.class != ITERATOR
+            && !snapshot_iterator
+        {
             return Ok(None);
         }
         let receiver = *args.first().context("collection receiver missing")?;
         let arg = |n| args.get(n).copied().context("collection argument missing");
         let sig = method.signature();
         let mut result = vec![];
-        if method.class == ITERATOR {
+        if method.class == ITERATOR || snapshot_iterator {
+            if snapshot_iterator && sig == "remove()V" {
+                return Err(fault(
+                    "Ljava/lang/UnsupportedOperationException;",
+                    "snapshot iterator",
+                ));
+            }
             let object = self.heap.get(receiver)?;
             let field = |name: &str| {
                 object
@@ -267,11 +302,17 @@ impl Runtime {
                     .copied()
                     .context("uninitialized iterator")
             };
-            let owner = field("owner")?;
+            let owner = if snapshot_iterator {
+                receiver
+            } else {
+                field("owner")?
+            };
             let position = field("position")?.int()? as usize;
-            let expected = field("version")?.int()? as u32;
             let (values, version) = self.collection(owner)?;
-            if sig != "hasNext()Z" && expected != version {
+            if !snapshot_iterator
+                && sig != "hasNext()Z"
+                && field("version")?.int()? as u32 != version
+            {
                 return Err(fault(
                     "Ljava/util/ConcurrentModificationException;",
                     "collection changed during iteration",
@@ -328,7 +369,7 @@ impl Runtime {
             "invalid collection receiver"
         );
         match sig.as_str() {
-            "<init>()V" | "<init>(I)V" => {
+            "<init>()V" | "<init>(I)V" if !cow || sig == "<init>()V" => {
                 if sig == "<init>(I)V" && arg(1)?.int()? < 0 {
                     return Err(fault(
                         "Ljava/lang/IllegalArgumentException;",
@@ -359,7 +400,14 @@ impl Runtime {
                 result.push(Word::from(i32::from(!exists)));
             }
             "remove(Ljava/lang/Object;)Z" => {
+                let version = self.collection(receiver)?.1;
                 let index = self.collection_find(receiver, arg(1)?, false)?;
+                if cow {
+                    ensure!(
+                        self.collection(receiver)?.1 == version,
+                        "unsupported CopyOnWriteArrayList mutation during remove equality"
+                    );
+                }
                 if let Some(index) = index {
                     let mut values = self.collection(receiver)?.0.to_vec();
                     values.remove(index);
@@ -379,10 +427,17 @@ impl Runtime {
                 let index = self.list_index(receiver, arg(1)?, false)?;
                 let value = arg(2)?;
                 value.reference()?;
-                let Data::Collection { values, .. } = &mut self.heap.get_mut(receiver)?.data else {
-                    bail!("uninitialized collection");
-                };
-                result.push(std::mem::replace(&mut values[index], value));
+                if cow {
+                    let mut values = self.collection(receiver)?.0.to_vec();
+                    result.push(std::mem::replace(&mut values[index], value));
+                    self.change_collection(receiver, values)?;
+                } else {
+                    let Data::Collection { values, .. } = &mut self.heap.get_mut(receiver)?.data
+                    else {
+                        bail!("uninitialized collection");
+                    };
+                    result.push(std::mem::replace(&mut values[index], value));
+                }
             }
             "add(ILjava/lang/Object;)V" if list => {
                 let index = self.list_index(receiver, arg(1)?, true)?;
@@ -400,6 +455,16 @@ impl Runtime {
             }
             "clear()V" => self.change_collection(receiver, vec![])?,
             "iterator()Ljava/util/Iterator;" => {
+                if cow {
+                    // ponytail: bounded snapshot copy; share immutable arrays if iterator allocation is profiled.
+                    let values = self.collection(receiver)?.0.to_vec();
+                    let iterator = self.heap.instance(SNAPSHOT_ITERATOR)?;
+                    let object = self.heap.get_mut(iterator)?;
+                    object.data = Data::Collection { values, version: 0 };
+                    object.fields.insert("position".into(), vec![Word::ZERO]);
+                    result.push(iterator);
+                    return Ok(Some(result));
+                }
                 let version = self.collection(receiver)?.1;
                 let iterator = self.heap.instance(ITERATOR)?;
                 let fields = &mut self.heap.get_mut(iterator)?.fields;
@@ -409,7 +474,7 @@ impl Runtime {
                 fields.insert("version".into(), vec![Word::Bits(version)]);
                 result.push(iterator);
             }
-            // AbstractSet/AbstractCollection override these; do not fall back to Object's behavior.
+            // Collections override these; do not fall back to Object's behavior.
             "equals(Ljava/lang/Object;)Z" | "hashCode()I" | "toString()Ljava/lang/String;" => {
                 bail!("unsupported collection method {}", method.key())
             }
