@@ -91,7 +91,7 @@ dependencies = [
 
 [[package]]
 name = "droidless"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "cc",
@@ -102,7 +102,7 @@ dependencies = [
 
 [[package]]
 name = "droidless-formats"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -112,7 +112,7 @@ dependencies = [
 
 [[package]]
 name = "droidless-runtime"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "droidless-formats",

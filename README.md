@@ -79,7 +79,7 @@ execution, heap, framework and Views; `droidless` owns CLI/platform integration.
 | Object model / GC | Inheritance, dispatch, static initialization, strings/wide values, handle-based mark/sweep |
 | Activity | Main launcher discovery; create/start/resume/pause/stop/destroy |
 | UI | TextView, Button, EditText, LinearLayout, FrameLayout; approximate styling/measurement |
-| Input | Native mouse callbacks proven on KasCalc; runtime text/key callbacks tested headlessly |
+| Input | Native KasCalc mouse callbacks; native Counter text/key callbacks; clean lifecycle close |
 | macOS ARM64 | Actual native window and click evidence |
 | Linux | Headless path; native GUI not implemented, build not verified |
 | Storage, intents, timers, networking | Not implemented yet |
@@ -94,7 +94,7 @@ Unsupported execution methods/opcodes fail with method, DEX module and PC.
 |---|---|---|
 | KasCalc 1.0 | [Independent release](https://github.com/KasRoudra/simplecalculator/releases/tag/v1.0) | Launches/renders/responds to native clicks; ten headless arithmetic/input scenarios |
 | SmallestAPK | [Independent sample](https://github.com/krossovochkin/SmallestAPK) | Original signed APK executes its Activity and creates the expected TextView |
-| Counter | DROIDLESS [Java/XML fixture](examples/counter/MainActivity.java) | Resources, counter/text-copy callbacks, VM numeric/object/array/exception conformance |
+| Counter | DROIDLESS [Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks and clean close; resources and VM conformance |
 
 KasCalc is fetched and SHA-256 checked, never recompiled, patched, repackaged or
 redistributed. Custom fixtures are kept separate and do not prove arbitrary APK
