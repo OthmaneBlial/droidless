@@ -18,11 +18,11 @@
     <path d="M134 265v39h-35m126-39v39h35M79 189l-25 41 27 26m202-67 23 38" fill="none"/>
     <rect x="79" y="119" width="204" height="156" rx="44" fill="#d9ff63"/>
     <path d="M180 119V80" fill="none"/>
-    <path d="M190 24l-32 41h22l-9 31 40-45h-24z" fill="#ff987d" stroke-width="5"/>
+    <path d="M190 24l-32 41h22l-9 31 40-45h-24z" fill="#83b8ff" stroke-width="5"/>
     <rect x="106" y="149" width="63" height="53" rx="25" fill="#fffdf7"/><rect x="191" y="149" width="63" height="53" rx="25" fill="#fffdf7"/>
     <path d="M169 170h22m-85-2-26-6m174 6 25-6" fill="none" stroke-width="6"/>
     <circle cx="140" cy="177" r="8" fill="#171c21" stroke="none"/><circle cx="221" cy="177" r="8" fill="#171c21" stroke="none"/>
     <path d="M163 223q18 19 37 0" fill="none" stroke-width="6"/>
-    <g transform="rotate(12 287 266)"><rect x="253" y="220" width="67" height="90" rx="10" fill="#ff987d" stroke-width="6"/><path d="M270 241h33m-33 14h25m-25 14h33" stroke-width="4"/></g>
+    <g transform="rotate(12 287 266)"><rect x="253" y="220" width="67" height="90" rx="10" fill="#83b8ff" stroke-width="6"/><path d="M270 241h33m-33 14h25m-25 14h33" stroke-width="4"/></g>
   </g>
 </svg>

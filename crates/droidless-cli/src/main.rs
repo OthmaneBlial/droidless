@@ -21,7 +21,7 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
         println!(
-            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --key CHAR --input TEXT --back --stats\n             --data-dir APPS_ROOT | --ephemeral\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText. Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
+            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --key CHAR --input TEXT --back --stats\n             --data-dir APPS_ROOT | --ephemeral\n             --size WIDTHxHEIGHT (128..4096; default 420x720)\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText. Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
         );
         return Ok(());
     }
@@ -40,6 +40,7 @@ fn run() -> Result<()> {
         let mut headless = args[0] == "inspect-ui";
         let mut data_dir = None;
         let mut ephemeral = false;
+        let mut size = None;
         let mut i = 1;
         while i < args.len() {
             match args[i].as_str() {
@@ -88,6 +89,15 @@ fn run() -> Result<()> {
                     }
                 }
                 "--ephemeral" => ephemeral = true,
+                "--size" => {
+                    i += 1;
+                    let value = args
+                        .get(i)
+                        .ok_or_else(|| anyhow::anyhow!("--size requires WIDTHxHEIGHT"))?;
+                    if size.replace(parse_size(value)?).is_some() {
+                        bail!("expected one --size");
+                    }
+                }
                 s if s.starts_with('-') => bail!("unknown run option {s}"),
                 _ => {
                     if path.replace(args[i].clone()).is_some() {
@@ -110,6 +120,10 @@ fn run() -> Result<()> {
             Runtime::with_data_dir(apk, data_dir.map(Ok).unwrap_or_else(default_data_dir)?)?
         };
         runtime.trace = trace;
+        if let Some((width, height)) = size {
+            runtime.width = width;
+            runtime.height = height;
+        }
         runtime.launch()?;
         for action in actions {
             match action {
@@ -215,6 +229,34 @@ fn run() -> Result<()> {
         command => bail!("unknown command {command}; see --help"),
     }
     Ok(())
+}
+
+fn parse_size(value: &str) -> Result<(f32, f32)> {
+    let (width, height) = value
+        .split_once('x')
+        .ok_or_else(|| anyhow::anyhow!("expected WIDTHxHEIGHT"))?;
+    let (width, height) = (width.parse::<u16>()?, height.parse::<u16>()?);
+    anyhow::ensure!(
+        (128..=4096).contains(&width) && (128..=4096).contains(&height),
+        "viewport dimensions must be 128..4096"
+    );
+    Ok((f32::from(width), f32::from(height)))
+}
+
+#[test]
+fn viewport_size_is_bounded() {
+    assert_eq!(parse_size("192x400").unwrap(), (192.0, 400.0));
+    for value in [
+        "0x400",
+        "192x0",
+        "NaNx400",
+        "192x400x5",
+        "-1x400",
+        "4097x400",
+        "65536x400",
+    ] {
+        assert!(parse_size(value).is_err(), "{value}");
+    }
 }
 
 fn default_data_dir() -> Result<std::path::PathBuf> {

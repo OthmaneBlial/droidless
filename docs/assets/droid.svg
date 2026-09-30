@@ -7,7 +7,7 @@
     <path d="M79 189l-25 41 27 26m202-67 23 38" fill="none"/>
     <rect x="79" y="119" width="204" height="156" rx="44" fill="#d9ff63"/>
     <path d="M180 119V80" fill="none"/>
-    <path d="M190 24l-32 41h22l-9 31 40-45h-24z" fill="#ff987d" stroke-width="5"/>
+    <path d="M190 24l-32 41h22l-9 31 40-45h-24z" fill="#83b8ff" stroke-width="5"/>
     <rect x="106" y="149" width="63" height="53" rx="25" fill="#fffdf7"/>
     <rect x="191" y="149" width="63" height="53" rx="25" fill="#fffdf7"/>
     <path d="M169 170h22m-85-2-26-6m174 6 25-6" fill="none" stroke-width="6"/>
@@ -17,8 +17,8 @@
     <g transform="rotate(12 287 266)">
       <rect x="253" y="220" width="67" height="90" rx="10" fill="#fffdf7" stroke-width="6"/>
       <path d="M270 241h33m-33 14h25m-25 14h33" stroke-width="4"/>
-      <path d="M270 288l8-8 8 8 13-14" fill="none" stroke="#ff987d" stroke-width="5"/>
+      <path d="M270 288l8-8 8 8 13-14" fill="none" stroke="#83b8ff" stroke-width="5"/>
     </g>
-    <path d="m38 105 8-9m264 0 8 9m-9 34 14 2" fill="none" stroke="#ff987d" stroke-width="5"/>
+    <path d="m38 105 8-9m264 0 8 9m-9 34 14 2" fill="none" stroke="#83b8ff" stroke-width="5"/>
   </g>
 </svg>

@@ -39,13 +39,22 @@ HashSet/HashMap provide bounded storage, nulls and guest virtual equals. Set
 iteration supports removal and catchable invalid-state/exhaustion/concurrent-change
 errors. Collections.unmodifiableSet is a live read-only view, including its
 iterator. Class literals have stable identity; Class.getPackage/Package.getName
-expose basic metadata. Bulk operations, Map views and dynamic class loading remain
-unsupported. [Exact methods and ceilings](collections.md).
+expose basic metadata. Bulk operations and Map views remain unsupported. [Exact methods and ceilings](collections.md).
+
+## APK classes and Java numbers
+
+APK-local Class lookup and no-argument reflective construction execute guest
+initializers/constructors with access and exception checks. Inherited field
+references resolve to their declaring owner. [Methods and limits](reflection.md).
+Double.valueOf(D), doubleValue, instance/static toString and isNaN(D), plus
+Long.toString(J), support the new public calculator. Raw double bits, including
+negative zero and NaN payloads, survive boxing/unboxing. Other numeric wrapper
+methods remain unsupported; Double equals/hashCode fail explicitly.
 
 Exact method signatures map to DROIDLESS behavior. setContentView accepts a View
 or layout resource; findViewById searches the guest graph. Widget mutations alter
 objects read by rendering. Window metrics use the logical host dimensions and
-density 1. Unknown classes/methods/opcodes and native methods fail with diagnostics.
+density 1. `--size WIDTHxHEIGHT` selects logical host dimensions (128–4096 per axis; default 420×720). Unknown classes/methods/opcodes and native methods fail with diagnostics.
 There is no APK-specific mathematical output or emulator fallback.
 
 ## Resource/layout subset
@@ -61,7 +70,7 @@ Binary layouts create TextView, Button, EditText, LinearLayout and FrameLayout.
 TableLayout/TableRow use the basic linear model. Attributes include IDs, text,
 resource references, width/height, weight, orientation, uniform padding, margins,
 text size/color, gravity, enabled/visibility and XML onClick. Recursive include
-is bounded. px/dp/sp resolve at density 1.
+is bounded. px/dp/sp resolve at density 1. `--size WIDTHxHEIGHT` selects logical host dimensions (128–4096 per axis; default 420×720).
 
 Weighted linear children divide remaining primary-axis space. Measurement is
 approximate for explicit weighted base sizes and many Android constraints.

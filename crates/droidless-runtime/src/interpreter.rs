@@ -604,14 +604,9 @@ impl Runtime {
                     .get(usize::from(u!(1)))
                     .context("invalid field index")?
                     .clone();
-                let key = field.key();
                 let static_field = op >= 0x60;
-                ensure!(
-                    self.class_location(&field.class).is_some()
-                        || (!static_field && field.class == "Landroid/util/DisplayMetrics;"),
-                    "unsupported framework field {}",
-                    field.key()
-                );
+                let field = self.resolve_field(&field, static_field)?;
+                let key = field.key();
                 let get = if static_field { op <= 0x66 } else { op <= 0x58 };
                 let dest = if static_field { a } else { lo };
                 if static_field {

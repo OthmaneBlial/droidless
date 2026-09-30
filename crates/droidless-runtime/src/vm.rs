@@ -1,11 +1,11 @@
 use crate::{
-    heap::{Data, Heap, Word, default_value, exception_parent, wide},
+    heap::{Data, Heap, Word, default_value, exception_parent, fault, wide},
     ui::{self, Node},
 };
 use anyhow::{Context, Result, bail, ensure};
 use droidless_formats::{
     apk::Apk,
-    dex::{Code, EncodedValue, Method},
+    dex::{Code, EncodedValue, Field, Method},
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -418,6 +418,62 @@ impl Runtime {
                 .map(|c| (d, c))
         })
     }
+    pub(crate) fn resolve_field(&self, field: &Field, static_field: bool) -> Result<Field> {
+        ensure!(
+            self.class_location(&field.class).is_some()
+                || (!static_field && field.class == "Landroid/util/DisplayMetrics;"),
+            "unsupported framework field {}",
+            field.key()
+        );
+        let mut work = vec![field.class.clone()];
+        let mut visited = BTreeSet::new();
+        while let Some(class) = work.pop() {
+            if !visited.insert(class.clone()) {
+                continue;
+            }
+            ensure!(
+                visited.len() <= 128,
+                "field resolution hierarchy limit reached"
+            );
+            if let Some((d, c)) = self.class_location(&class) {
+                let def = &self.apk.dex[d].classes[c];
+                for (is_static, indexes) in
+                    [(true, &def.static_fields), (false, &def.instance_fields)]
+                {
+                    for index in indexes {
+                        let declared = &self.apk.dex[d].fields[*index];
+                        if declared.name == field.name && declared.ty == field.ty {
+                            if is_static != static_field {
+                                return Err(fault(
+                                    "Ljava/lang/IncompatibleClassChangeError;",
+                                    field.key(),
+                                ));
+                            }
+                            return Ok(declared.clone());
+                        }
+                    }
+                }
+                if let Some(parent) = &def.super_class {
+                    work.push(parent.clone());
+                }
+                work.extend(def.interfaces.iter().rev().cloned());
+            } else if class == "Landroid/util/DisplayMetrics;"
+                && !static_field
+                && [
+                    ("widthPixels", "I"),
+                    ("heightPixels", "I"),
+                    ("density", "F"),
+                ]
+                .contains(&(field.name.as_str(), field.ty.as_str()))
+            {
+                return Ok(Field {
+                    class,
+                    ..field.clone()
+                });
+            }
+        }
+        Err(fault("Ljava/lang/NoSuchFieldError;", field.key()))
+    }
     pub(crate) fn parent(&self, class: &str) -> Option<String> {
         if let Some((d, c)) = self.class_location(class) {
             return self.apk.dex[d].classes[c].super_class.clone();
@@ -426,6 +482,7 @@ impl Runtime {
             return Some(parent.into());
         }
         let parent = match class {
+            "Ljava/lang/Double;" => "Ljava/lang/Number;",
             "Ljava/util/HashSet;" => "Ljava/util/AbstractSet;",
             "Ljava/util/HashMap;" => "Ljava/util/AbstractMap;",
             "Ljava/util/AbstractSet;" => "Ljava/util/AbstractCollection;",
@@ -441,6 +498,7 @@ impl Runtime {
                 "Landroid/content/ContextWrapper;"
             }
             "Landroid/content/ContextWrapper;" => "Landroid/content/Context;",
+            _ if class.starts_with('[') => "Ljava/lang/Object;",
             _ if class != "Ljava/lang/Object;" && !class.starts_with('[') => "Ljava/lang/Object;",
             _ => return None,
         };

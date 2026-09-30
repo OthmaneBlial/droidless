@@ -33,8 +33,8 @@
       </div>
       <figure class="specimen">
         <div class="specimen-top"><span class="window-dots" aria-hidden="true">● ● ●</span><span>calculator.apk → desktop</span><span class="specimen-indicator" aria-hidden="true">↗</span></div>
-        <div class="specimen-image"><img src="assets/kascalc-native.png" alt="Actual native DROIDLESS window running the unmodified KasCalc APK, showing 12.0 after clicking 7 + 5 =." width="840" height="1504"></div>
-        <figcaption><strong>Yes, it really runs.</strong><span>KasCalc 1.0 · Original APK bytecode</span></figcaption>
+        <div class="specimen-image"><img src="assets/simple-calculator-native.png" alt="Actual native DROIDLESS window running the unmodified Simple Calculator APK, showing 12 after clicking 7 + 5 =." width="384" height="864"></div>
+        <figcaption><strong>Yes, it really runs.</strong><span>Simple Calculator 1.0 · Original APK bytecode</span></figcaption>
         <img class="explorer" src="assets/droid.svg" alt="" width="180" height="180">
         <span class="specimen-sticker">NO ANDROID<br>UNDER THE HOOD</span>
       </figure>
@@ -44,13 +44,13 @@
 
     <section class="evidence wrap" id="evidence" aria-labelledby="evidence-title">
       <div class="section-label"><span>01 / THE PROOF</span><p>🧮 The calculator left the phone.</p></div>
-      <div class="evidence-intro"><h2 id="evidence-title">A real APK.<br><span class="ink-underline">A real result.</span></h2><div><p>The independently released <a href="https://github.com/KasRoudra/simplecalculator/releases/tag/v1.0">KasCalc 1.0 APK</a> runs unmodified. Clicks reach its original handlers; its own DEX code does the calculations.</p><p>These results were observed in a native macOS window. The screenshot above is the actual app.</p></div></div>
+      <div class="evidence-intro"><h2 id="evidence-title">A real APK.<br><span class="ink-underline">A real result.</span></h2><div><p>The independently published <a href="https://github.com/swiftugandan/Simple-Android-Calculator/tree/3ba860b281eba34f144e4e75115f0c0a06bced31">Simple Calculator 1.0 APK</a> runs unmodified. Clicks reach its original handlers; its own DEX code does the calculations.</p><p>These results were observed in a native macOS window. The screenshot above is the actual app.</p></div></div>
       <div class="results" aria-label="Verified native calculations">
-        <div class="result"><span class="result-input">7 + 5 =</span><strong>12.0<span aria-hidden="true">✓</span></strong><span class="result-label">native display / verified</span></div>
-        <div class="result"><span class="result-input">8 × 8 =</span><strong>64.0<span aria-hidden="true">✓</span></strong><span class="result-label">native display / verified</span></div>
-        <div class="result"><span class="result-input">√64</span><strong>8.0<span aria-hidden="true">✓</span></strong><span class="result-label">native display / verified</span></div>
+        <div class="result"><span class="result-input">7 + 5 =</span><strong>12<span aria-hidden="true">✓</span></strong><span class="result-label">native display / verified</span></div>
+        <div class="result"><span class="result-input">8 × 8 =</span><strong>64<span aria-hidden="true">✓</span></strong><span class="result-label">native display / verified</span></div>
+        <div class="result"><span class="result-input">9 / 3 =</span><strong>3<span aria-hidden="true">✓</span></strong><span class="result-label">native display / verified</span></div>
       </div>
-      <p class="evidence-footnote">One calculator proves an execution path. Compatibility remains narrow. Ten headless scenarios check additional calculations and input; menus, gestures and complete visual fidelity remain unverified. <a href="docs.html#evidence">Open the verification record ↗</a></p>
+      <p class="evidence-footnote">One calculator proves an execution path. Compatibility remains narrow. Seven headless scenarios check additional calculations and input. Styling and table layout are approximate; the capture uses a 192 × 400 logical viewport. Build current source for this demo. <a href="docs.html#evidence">Open the verification record ↗</a></p>
     </section>
 
     <section class="architecture" id="how" aria-labelledby="architecture-title">
@@ -74,7 +74,7 @@
         <div class="milestone next"><span class="milestone-number">50<span>%</span></span><div><span class="pill">NEXT TARGET</span><h3>Everyday Android apps</h3><p>Multiple screens, persistent data, lists, images and scheduled callbacks.</p></div></div>
         <p class="milestone-note">Milestone labels, not measured Android API coverage. The 50% target is future work.</p>
       </div></div>
-      <div class="lab-note"><span class="lab-note-icon" aria-hidden="true">🧪</span><p><strong>Fresh from the lab:</strong> current source supports Activity navigation, isolated persistent preferences and bounded Java collections. Authored fixtures verify native screen changes, UTF-8 paste, notes that survive a restart and headless collection semantics. The v0.1.0 archive predates these increments.</p><a href="docs.html#compatibility" class="text-link">Current scope ↗</a></div>
+      <div class="lab-note"><span class="lab-note-icon" aria-hidden="true">🧪</span><p><strong>Fresh from the lab:</strong> current source supports Activity navigation, isolated persistent preferences and bounded Java collections, APK-local class lookup and reflective construction. Authored fixtures verify native screen changes, UTF-8 paste, notes that survive a restart and headless collection semantics. The v0.1.0 archive predates these increments.</p><a href="docs.html#compatibility" class="text-link">Current scope ↗</a></div>
     </section>
 
     <section class="start" aria-labelledby="start-title"><div class="wrap">
@@ -83,8 +83,9 @@
         <div class="code-block"><div class="code-header"><span>TERMINAL / macOS</span><button class="copy-button" type="button" data-copy="build-code" aria-label="Copy build commands">Copy</button></div><pre><code id="build-code">git clone https://github.com/OthmaneBlial/droidless.git
 cd droidless
 cargo build --release --locked
-sh tools/fetch-kascalc.sh
-target/release/droidless artifacts/apks/KasCalc.apk</code></pre><p class="code-note">Prefer a binary? <a href="https://github.com/OthmaneBlial/droidless/releases/tag/v0.1.0">macOS ARM64 v0.1.0 archive ↗</a><br>No Apple developer signature or notarization.</p></div>
+sh tools/fetch-simple-calculator.sh
+target/release/droidless run --size 192x400 \
+  artifacts/apks/SimpleCalculator.apk</code></pre><p class="code-note">Earlier preview binary: <a href="https://github.com/OthmaneBlial/droidless/releases/tag/v0.1.0">macOS ARM64 v0.1.0 archive ↗</a><br>Predates this demo. No Apple signature or notarization.</p></div>
       </div>
       <div class="boundary"><span class="eyebrow">🔬 The current boundary</span><p>Experimental, with a limited API subset. AndroidX, Compose, native libraries, general file APIs, timers and networking are future work. Current source grants only bounded SharedPreferences storage. Linux has an unverified headless path and no native GUI. Use trusted APKs; this prototype is not a security sandbox.</p><a href="docs.html#compatibility">Read the exact limits ↗</a></div>
     </div></section>

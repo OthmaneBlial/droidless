@@ -29,7 +29,9 @@ Monitors are only meaningful under the current single guest thread.
 
 ## Classes and objects
 
-Instances hold descriptor plus fields keyed by declaring class/name/type. Arrays
+Instances hold descriptor plus fields keyed by declaring class/name/type. Field
+opcodes resolve inherited symbolic owners before accessing storage or initializing
+the declaring class; missing/wrong-kind fields raise guest linkage errors. Arrays
 retain component type and words. Static fields are independent roots, initialized
 from encoded values before `<clinit>`. A class is marked initializing to prevent
 recursive entry. Failed initialization persists: non-Error guest exceptions are

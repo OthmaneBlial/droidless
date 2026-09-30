@@ -24,8 +24,8 @@ Computer-use automation inspected a real AppKit window and clicked the APK butto
 | AC, 8, x, 8, = | 64.0 |
 | √ | 8.0 |
 
-[Window screenshot](assets/kascalc-native.png) captures the real 12.0 state.
-It is a screenshot, not a generated image; gradients/ripple rendering is partial.
+The earlier capture recorded the real 12.0 state; the public showcase now uses
+the separate Simple Calculator APK below. Gradients/ripple rendering is partial.
 `otool -L` showed AppKit/QuartzCore/Foundation/CoreFoundation/libSystem/libobjc;
 process inspection found no emulator/QEMU/Waydroid/Anbox/app_process/dalvikvm.
 Runtime source contains no subprocess fallback to Android.
@@ -137,3 +137,55 @@ PC `0x0004`, and fails on
 The parent Application method is at PC `0x0016`. No Activity/UI or working notes
 workflow was reached. Dynamic class loading is the next observed blocker; the
 APK remains unchanged and is not redistributed.
+
+
+## Current source: APK-local reflection and inherited fields
+
+The authored Reflection APK executes lookup, canonical Class identity, arrays,
+component initialization rules, no-argument construction/access checks, unwrapped
+constructor errors, sticky initialization failures and inherited field aliases.
+Object/int/wide/static fields and shadowing are exercised by compiled guest code.
+Rust integration checks add GC identity, bounded malformed array names and
+catchable missing/wrong-kind field faults. The same ReflectionContract passes on
+Homebrew Java 17.0.19 after compiling with Java 8 source/target. This is desktop
+Java differential evidence, not an Android reference run.
+
+Retrying the unchanged Notepad release with the current interpreter gets through
+Class.forName and Class.newInstance. GeneratedDatabaseHolder's inherited
+`typeConverters` field now shares its parent's storage. Startup then fails on
+`Ljava/util/ArrayList;` in `Lcom/raizlabs/android/dbflow/config/e;-><init>()V`,
+PC `0x000a`, under Application.onCreate PC `0x0016`. No Activity/UI or notes
+workflow has been reached. [Reflection limits](reflection.md).
+
+## Current source: neutral public calculator
+
+Simple Calculator 1.0, package `uk.ac.nott.cs.itxpm`, comes from
+[swiftugandan's independently built APK](https://github.com/swiftugandan/Simple-Android-Calculator/blob/3ba860b281eba34f144e4e75115f0c0a06bced31/bin/verysimplecalc.apk).
+SHA-256: `7c1adc93607c8511a3abd379f74765747d2ae72fb70c4ff5c471f13e94b98921`.
+The pinned fetch helper verifies the original 24,317-byte APK; it is not modified,
+rebuilt, repackaged or redistributed. It declares one Activity, no permissions and
+no native libraries; SDK versions are unspecified in the manifest.
+
+Native AppKit button clicks, observed through fresh accessibility states:
+
+| Buttons | Display |
+|---|---|
+| 7, +, 5, = | 12 |
+| c, 8, x, 8, = | 64 |
+| c, 9, /, 3, = | 3 |
+
+[Actual window capture](assets/simple-calculator-native.png) shows the first result
+in a white/charcoal native window at a 192×400 logical viewport (`--size`).
+This is an actual screenshot; styling remains approximate. Gradient/image
+backgrounds, Android themes and table-column stretching remain incomplete.
+The APK's own handlers use boxed Double values, double arithmetic, isNaN and
+Long.toString. No app-specific arithmetic or output is implemented in DROIDLESS.
+Native Escape emits onPause/onStop/onDestroy and exits with status 0.
+
+Seven headless scenarios check arithmetic, decimals, multiple digits and clear.
+The ten older KasCalc scenarios also still pass. Double bit preservation,
+Number dispatch, NaN/negative-zero formatting, explicit unsupported overrides
+and viewport bounds have regressions. Full local CI passes 28 Rust tests,
+4,096 seeded parser mutations, warning-free Clippy and a release build.
+The v0.1.0 archive predates this demo; use current source. The 50% everyday-app
+milestone is still ahead. GitHub Actions remain disabled; checks are local only.

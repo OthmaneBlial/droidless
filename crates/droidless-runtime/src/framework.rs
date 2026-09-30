@@ -16,6 +16,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/StringBuilder;",
             "Ljava/lang/String;",
             "Ljava/lang/Class;",
+            "Ljava/lang/Double;",
+            "Ljava/lang/Number;",
             "Ljava/util/HashSet;",
             "Ljava/util/HashMap;",
             "Ljava/lang/Throwable;",
@@ -47,58 +49,15 @@ impl Runtime {
         if let Some(result) = self.collection_native(method, args)? {
             return Ok(Some(result));
         }
+        if let Some(result) = self.reflection_native(method, args)? {
+            return Ok(Some(result));
+        }
         let signature = method.signature();
         let arg =
             |n| -> Result<Word> { args.get(n).copied().context("framework argument missing") };
         let receiver = args.first().copied().unwrap_or(Word::ZERO);
         let mut result = vec![];
         match (method.class.as_str(), signature.as_str()) {
-            ("Ljava/lang/Class;", "getPackage()Ljava/lang/Package;") => {
-                ensure!(
-                    self.heap.get(receiver)?.class == "Ljava/lang/Class;",
-                    "invalid Class receiver"
-                );
-                let name = *self
-                    .heap
-                    .get(receiver)?
-                    .fields
-                    .get("name")
-                    .and_then(|v| v.first())
-                    .context("Class has no descriptor")?;
-                let descriptor = self.heap.text(name)?;
-                let package = descriptor
-                    .strip_prefix('L')
-                    .and_then(|s| s.strip_suffix(';'))
-                    .and_then(|s| s.rsplit_once('/'))
-                    .map(|(p, _)| p.replace('/', "."));
-                let object = if let Some(package) = package {
-                    let key = format!("droidless:package:{package}");
-                    if let Some(object) = self.statics.get(&key).and_then(|v| v.first()) {
-                        *object
-                    } else {
-                        let object = self.heap.instance("Ljava/lang/Package;")?;
-                        let name = self.heap.string(package)?;
-                        self.heap
-                            .get_mut(object)?
-                            .fields
-                            .insert("name".into(), vec![name]);
-                        self.statics.insert(key, vec![object]);
-                        object
-                    }
-                } else {
-                    Word::ZERO
-                };
-                result.push(object);
-            }
-            ("Ljava/lang/Package;", "getName()Ljava/lang/String;") => result.push(
-                *self
-                    .heap
-                    .get(receiver)?
-                    .fields
-                    .get("name")
-                    .and_then(|v| v.first())
-                    .context("uninitialized Package")?,
-            ),
             ("Landroid/view/KeyEvent;", "getAction()I") => {
                 result = self
                     .heap
@@ -285,6 +244,48 @@ impl Runtime {
                 self.heap
                     .string(java_double(f64::from_bits(bits64(args)?)))?,
             ),
+            ("Ljava/lang/Double;", "valueOf(D)Ljava/lang/Double;") => {
+                let value = wide(bits64(args)?);
+                let object = self.heap.instance("Ljava/lang/Double;")?;
+                self.heap
+                    .get_mut(object)?
+                    .fields
+                    .insert("value".into(), value);
+                result.push(object);
+            }
+            ("Ljava/lang/Double;", "doubleValue()D") => {
+                result = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("value")
+                    .context("uninitialized Double")?
+                    .clone();
+            }
+            ("Ljava/lang/Double;", "toString()Ljava/lang/String;") => {
+                let words = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("value")
+                    .context("uninitialized Double")?;
+                result.push(
+                    self.heap
+                        .string(java_double(f64::from_bits(bits64(words)?)))?,
+                );
+            }
+            ("Ljava/lang/Double;", "isNaN(D)Z") => {
+                result.push(Word::from(i32::from(
+                    f64::from_bits(bits64(args)?).is_nan(),
+                )));
+            }
+            ("Ljava/lang/Double;", "equals(Ljava/lang/Object;)Z")
+            | ("Ljava/lang/Double;", "hashCode()I") => {
+                bail!("unsupported Double method {}", method.key());
+            }
+            ("Ljava/lang/Long;", "toString(J)Ljava/lang/String;") => {
+                result.push(self.heap.string((bits64(args)? as i64).to_string())?);
+            }
             ("Ljava/lang/Double;", "parseDouble(Ljava/lang/String;)D") => {
                 let value = self
                     .heap

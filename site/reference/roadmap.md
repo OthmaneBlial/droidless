@@ -12,7 +12,9 @@ The following are objectives, not completed capability claims.
    authored native fixture. Isolated SharedPreferences save/restart/clear are also
    proven in an authored native fixture. Basic HashSet/HashMap and live read-only
    Set views pass compiled conformance. Unmodified Notepad startup now reaches
-   dynamic class loading in DBFlow. Follow that failure, then the actual storage/
+   ArrayList in DBFlow after APK-local lookup/reflective construction and inherited
+   field resolution. The new neutral public calculator also proves boxed Double
+   execution through native clicks. Follow that failure, then the actual storage/
    UI needs of a real notes/todo APK with restart/persistence tests.
 4. Async Java: deterministic Handler/Looper/Runnable scheduling before threads.
    Gate: timer callbacks update UI under the documented main-thread model.

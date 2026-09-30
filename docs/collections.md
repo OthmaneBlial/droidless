@@ -28,7 +28,9 @@ equals/hashCode/toString remain unsupported. Unmodifiable iteration currently
 requires this runtime's native Set iterator. Unknown calls fail explicitly.
 Class literals now have stable identity, so repeated class references work as
 Map keys; Class.getPackage and Package.getName provide basic package metadata.
-Dynamic class loading and reflective invocation remain unsupported.
+APK-local class lookup and no-argument construction have a separate
+[reflection subset](reflection.md). Custom loaders and method/field reflection
+remain unsupported.
 
 ## Reproduce the compiled conformance check
 

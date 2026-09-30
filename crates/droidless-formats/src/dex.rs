@@ -59,6 +59,7 @@ pub struct EncodedMethod {
 #[derive(Clone, Debug, Serialize)]
 pub struct Class {
     pub name: String,
+    pub access: u32,
     pub super_class: Option<String>,
     pub interfaces: Vec<String>,
     pub methods: Vec<EncodedMethod>,
@@ -205,6 +206,7 @@ impl Dex {
             }
             let mut class = Class {
                 name,
+                access: b.u32(p + 4)?,
                 super_class,
                 interfaces: type_list(b.u32(p + 12)? as usize)?,
                 methods: vec![],

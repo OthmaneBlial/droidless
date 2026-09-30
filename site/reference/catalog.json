@@ -3,6 +3,24 @@
   "host": "macOS ARM64",
   "apps": [
     {
+      "package": "uk.ac.nott.cs.itxpm",
+      "version": "1.0",
+      "origin": "third-party",
+      "artifact_url": "https://raw.githubusercontent.com/swiftugandan/Simple-Android-Calculator/3ba860b281eba34f144e4e75115f0c0a06bced31/bin/verysimplecalc.apk",
+      "sha256": "7c1adc93607c8511a3abd379f74765747d2ae72fb70c4ff5c471f13e94b98921",
+      "status": "interactive-subset",
+      "native_ui": true,
+      "native_mouse": true,
+      "native_keyboard_verified": false,
+      "native_close_exit_zero": true,
+      "logical_viewport": [
+        192,
+        400
+      ],
+      "headless_scenarios": 7,
+      "notes": "Current source only: native addition/multiplication/division. Styling/table/gradient/theme fidelity incomplete; full numerical behavior unverified. Public original APK unmodified and not redistributed."
+    },
+    {
       "package": "com.kasroudra.kascalc",
       "version": "1.0",
       "origin": "third-party",
@@ -72,6 +90,17 @@
       "notes": "Authored compiled fixture: guest equals/nulls, Set/Map operations, iterator exceptions, live read-only views, Class identity/package metadata, GC retention and bounded entries. No native interaction or independent notes-app evidence."
     },
     {
+      "package": "org.droidless.reflection",
+      "origin": "droidless-fixture",
+      "status": "ui-created",
+      "native_ui": false,
+      "headless_conformance_verified": true,
+      "desktop_java_differential_verified": true,
+      "android_reference_verified": false,
+      "source": "examples/reflection",
+      "notes": "Authored compiled APK: class lookup/construction, initialization/access faults, arrays and inherited field aliases; GC and missing/wrong-kind regressions. Same pure-Java contract passes on Java 17 with Java 8 source/target."
+    },
+    {
       "package": "ir.cafebazaar.notepad",
       "version": "1.0",
       "origin": "third-party",
@@ -79,8 +108,8 @@
       "sha256": "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f",
       "status": "startup-blocked",
       "native_ui": false,
-      "first_failure": "unsupported method Ljava/lang/Class;->forName(Ljava/lang/String;)Ljava/lang/Class; in DBFlow FlowManager.a at PC 0x0004 (Application.onCreate PC 0x0016)",
-      "notes": "Parsed; application context, HashSet/HashMap setup and package metadata resolve. No Activity/UI or notes workflow reached. Original release APK unmodified and not redistributed.",
+      "first_failure": "unsupported class Ljava/util/ArrayList; in DBFlow config/e.<init> at PC 0x000a (Application.onCreate PC 0x0016)",
+      "notes": "Parsed; collection setup, APK-local Class lookup/reflective construction and inherited field aliases resolve. No Activity/UI or notes workflow reached. Original release APK unmodified and not redistributed.",
       "release_tag": "v1.0.0"
     }
   ]

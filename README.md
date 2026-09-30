@@ -5,7 +5,7 @@
 <br>
 
 [![Release](https://img.shields.io/github/v/release/OthmaneBlial/droidless?style=for-the-badge&color=d9ff63&labelColor=171c21)](https://github.com/OthmaneBlial/droidless/releases/latest)
-[![Rust](https://img.shields.io/badge/Rust-1.95-ff987d?style=for-the-badge&logo=rust&labelColor=171c21)](rust-toolchain.toml)
+[![Rust](https://img.shields.io/badge/Rust-1.95-83b8ff?style=for-the-badge&logo=rust&labelColor=171c21)](rust-toolchain.toml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-d9ff63?style=for-the-badge&labelColor=171c21)](LICENSE)
 [![Checks](https://img.shields.io/badge/checks-local%20only-fffdf7?style=for-the-badge&labelColor=171c21)](tools/ci.sh)
 
@@ -30,27 +30,29 @@ our authored test APKs only; they do not participate in execution.
 > 🧭 A working slice of Android, one real APK at a time. Compatibility is narrow;
 > unsupported methods and opcodes report errors.
 
-## 🧮 The calculator has left the phone
+## 🧮 A calculator, now at home on the desktop
 
-**An unmodified third-party calculator is interactive on macOS ARM64.**
-[KasCalc 1.0](https://github.com/KasRoudra/simplecalculator/releases/tag/v1.0)
+**An unmodified public APK, in a clean white and charcoal native window.**
+[Simple Calculator 1.0](https://github.com/swiftugandan/Simple-Android-Calculator/tree/3ba860b281eba34f144e4e75115f0c0a06bced31), published by swiftugandan,
 runs its original calculation and click-listener DEX bytecode through DROIDLESS.
 
 | Native clicks | Actual display |
 |---|---|
-| `7 → + → 5 → =` | **12.0** |
-| `8 → × → 8 → =` | **64.0** |
-| `√64` | **8.0** |
+| `7 → + → 5 → =` | **12** |
+| `8 → × → 8 → =` | **64** |
+| `9 → / → 3 → =` | **3** |
 
 <div align="center">
-<img src="docs/assets/kascalc-native.png" alt="Actual KasCalc APK in a native macOS window, displaying 12.0 after clicking 7 plus 5 equals" width="290">
-<p><sub>Real window. Real APK callbacks. Actual screenshot.</sub></p>
+<img src="docs/assets/simple-calculator-native.png" alt="Actual public Simple Calculator APK in a native macOS window, displaying 12 after clicking 7 plus 5 equals" width="260">
+<p><sub>Real window. Original APK callbacks. Actual screenshot at a 192 × 400 logical viewport.</sub></p>
 </div>
 
-The upstream APK is SHA-256 checked, never rebuilt, patched or repackaged, and
-is not redistributed here. Ten additional headless scenarios check its View
-state. Menus, gestures, complete visual fidelity and every numeric edge case
-remain unverified. [See the evidence](docs/verification.md).
+The upstream APK is pinned to a commit and SHA-256 checked. It is never rebuilt,
+patched or repackaged, and is not redistributed here. Seven headless scenarios
+check its View state. Android themes, gradients, table-column stretching and
+complete numeric behavior remain incomplete or unverified.
+[See the evidence](docs/verification.md#current-source-neutral-public-calculator).
+Build current source for this demo; the v0.1.0 archive predates its Java support.
 
 ## 🚀 Give it a spin
 
@@ -60,9 +62,9 @@ Build with **Rust 1.95.0** and Apple's **Command Line Tools** on macOS:
 git clone https://github.com/OthmaneBlial/droidless.git
 cd droidless
 cargo build --release --locked
-sh tools/fetch-kascalc.sh
+sh tools/fetch-simple-calculator.sh
 # Hello, desktop calculator 👋
-target/release/droidless artifacts/apks/KasCalc.apk
+target/release/droidless run --size 192x400 artifacts/apks/SimpleCalculator.apk
 ```
 
 The [v0.1.0 release](https://github.com/OthmaneBlial/droidless/releases/tag/v0.1.0)
@@ -82,7 +84,7 @@ target/release/droidless methods app.apk
 target/release/droidless resources app.apk
 
 # Original APK listeners update the emitted JSON View tree
-target/release/droidless run --headless artifacts/apks/KasCalc.apk \
+target/release/droidless run --headless --size 192x400 artifacts/apks/SimpleCalculator.apk \
   --click 7 --click + --click 5 --click = --stats
 
 # Current source: authored multi-screen navigation fixture
@@ -93,7 +95,7 @@ target/release/droidless run --headless fixtures/generated/intents.apk \
 Use `--trace-bytecode`, `--trace-methods`, `--trace-framework` or
 `--trace-lifecycle` to follow execution. `--stats` / `--heap-stats` report real
 counters and timings. `--click`, `--key`, `--back`, `--headless` and `inspect-ui`
-support repeatable experiments. **Escape delivers Back** in the native window.
+support repeatable experiments. `--size WIDTHxHEIGHT` selects a 128–4096 logical viewport on each axis (default 420×720). **Escape delivers Back** in the native window.
 Current source adds `--input TEXT` for the first visible EditText, per-package
 preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only runs.
 
@@ -125,9 +127,10 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish and lifecycle — current source |
 | 📓 Persistent preferences | Typed SharedPreferences, isolated package data, native authored-note save/restart/clear — current source |
 | 🗂️ Java collections | Bounded HashSet/HashMap, guest equality, Set iterators and live read-only Set views — current source |
-| 🛠️ Next up | Dynamic class loading, general app files, lists, images and timers; a substantial unmodified notes/todo APK |
+| 🔎 APK classes | APK-local Class lookup, no-argument construction, initialization/access faults and inherited field resolution — current source |
+| 🛠️ Next up | Custom class loaders, ArrayList, general app files, lists, images and timers; a substantial unmodified notes/todo APK |
 
-The published **v0.1.0 archive predates navigation, persistence and collections**. Current source capability
+The published **v0.1.0 archive predates navigation, persistence, collections and the new calculator demo**. Current source capability
 is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
 and games remain future compatibility work. [Exact limits](docs/compatibility.md).
 
@@ -135,13 +138,15 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 
 | APK | Origin | What we observed |
 |---|---|---|
+| Simple Calculator 1.0 | [Pinned independent APK](https://github.com/swiftugandan/Simple-Android-Calculator/tree/3ba860b281eba34f144e4e75115f0c0a06bced31) | Three native arithmetic cases; seven headless cases |
 | KasCalc 1.0 | [Independent release](https://github.com/KasRoudra/simplecalculator/releases/tag/v1.0) | Native calculations; ten headless arithmetic/input cases |
 | SmallestAPK | [Independent sample](https://github.com/krossovochkin/SmallestAPK) | Original signed APK executes its Activity and creates the expected TextView |
 | Counter | [Authored Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks, resources and VM conformance |
 | Intents | [Authored Java/XML fixture](examples/intents/MainActivity.java) | Native screen transitions, retained text/title, Back override, extras and lifecycle/GC checks |
 | Preferences | [Authored Java/XML fixture](examples/preferences/MainActivity.java) | Native UTF-8 paste, save/restart/clear, typed values and package/path isolation |
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless guest equality, nulls, iteration, live read-only views, Class keys, GC and entry limits |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Collection setup resolves; DBFlow startup stops at Class.forName. No UI or working-notes claim |
+| Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, guest faults and inherited fields; same contract passes on desktop Java |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Class lookup and reflective construction resolve; DBFlow startup stops at ArrayList. No UI or working-notes claim |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).
@@ -149,6 +154,7 @@ compatibility. [Evidence catalog](compatibility/catalog.json).
 ```sh
 # CI lives on your machine. GitHub Actions stays disabled.
 sh tools/ci.sh
+sh tools/fetch-kascalc.sh # Earlier calculator regression APK
 python3 tools/compatibility.py
 ```
 

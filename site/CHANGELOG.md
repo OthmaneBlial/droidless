@@ -2,11 +2,20 @@
 
 ## Unreleased
 
+- Replace the public README/site showcase with unmodified Simple Calculator 1.0,
+  a real white/charcoal native capture and seven checked headless scenarios.
+  Site/SVG accents use blue instead of peach; the previous pink capture is removed.
+- Boxed Double valueOf/unboxing/toString/isNaN and Long.toString(J), plus bounded
+  `--size WIDTHxHEIGHT` native/headless viewports. Local CI passes 28 Rust tests.
+- APK-local Class lookup/no-argument construction, guest access/initialization
+  faults and inherited field resolution. Compiled conformance plus a desktop Java
+  differential run. Notepad startup now stops at ArrayList; no notes UI claim.
+
 - Bounded HashSet/HashMap with guest equals, Set iterators, live unmodifiable Set
   views, GC retention and explicit unsupported methods. Compiled conformance
-  and capacity/error regressions bring local CI to 24 Rust tests.
+  and capacity/error regressions brought that increment to 24 Rust tests.
 - Canonical Class literal identity and basic package metadata. Unmodified Notepad
-  now passes collection setup and stops at Class.forName in DBFlow; no UI claim.
+  passed collection setup and stopped at Class.forName at that checkpoint.
 
 - Isolated typed SharedPreferences with staged editors, atomic persistent writes,
   package/case/link checks and explicit storage ceilings. `--data-dir`,
