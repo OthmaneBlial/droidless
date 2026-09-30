@@ -81,8 +81,9 @@ void *dl_open(const char *title, float width, float height, void *context, Callb
     return (__bridge_retained void *)host;
 }
 
-void dl_begin(void *opaque) {
+void dl_begin(void *opaque, const char *title) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;
+    host.window.title = [NSString stringWithUTF8String:title];
     [host.touched removeAllObjects];
     host.keyTarget = 0;
 }
@@ -149,7 +150,10 @@ void dl_run(void *opaque) {
             NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:0.05] inMode:NSDefaultRunLoopMode dequeue:YES];
             if (event) {
                 int consumed = 0;
-                if (host.keyTarget && (event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp) && !(event.modifierFlags&NSEventModifierFlagCommand)) {
+                if ((event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp) && event.keyCode == 53 && !(event.modifierFlags&NSEventModifierFlagCommand)) {
+                    if (event.type == NSEventTypeKeyDown && !host.callback(host.context, 5, 0, NULL)) host.running = NO;
+                    consumed = 1;
+                } else if (host.keyTarget && (event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp) && !(event.modifierFlags&NSEventModifierFlagCommand)) {
                     int result = host.callback(host.context, event.type == NSEventTypeKeyDown ? 3 : 4, host.keyTarget, event.charactersIgnoringModifiers.UTF8String);
                     if (!result) host.running = NO;
                     consumed = result == 2;

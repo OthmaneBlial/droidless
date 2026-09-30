@@ -8,8 +8,9 @@ The following are objectives, not completed capability claims.
 2. Improve input/resources: full focus/IME/paste, qualifier/
    style resolution, images/drawables and weighted measurement. Gate: native
    interaction and comparisons with expected Android behavior.
-3. Multi-screen/persistence: explicit Intents/Bundle/back stack and isolated
-   SharedPreferences/files. Gate: notes/todo APK and restart/persistence tests.
+3. Multi-screen/persistence: explicit Intents/Bundle/back stack are proven in an
+   authored native fixture. Next: isolated SharedPreferences/files, then a real
+   notes/todo APK with restart/persistence tests.
 4. Async Java: deterministic Handler/Looper/Runnable scheduling before threads.
    Gate: timer callbacks update UI under the documented main-thread model.
 5. Lists/images/SQLite/network: follow first failures in substantial third-party

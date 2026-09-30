@@ -65,3 +65,19 @@ The macOS ARM64 release archive is extracted into a clean temporary directory;
 its bundled CLI launches the Counter APK and its DEX Increment callback returns
 the expected 1. The archive excludes the third-party calculator. The package
 check is part of `python3 tools/package-macos.py`.
+
+## Current source: explicit navigation
+
+The authored Intents fixture verifies Bundle primitive/String values and defaults,
+copy isolation, exact cross-Activity lifecycle order, retained parent Views across
+GC, virtual Back overrides, inactive finish, isFinishing during destruction and
+clean stack teardown. Undeclared and implicit targets fail explicitly.
+
+Native AppKit verification edited Home's input to `Native preserved input`, opened
+Detail with `Original extras`, then pressed Escape. Home returned with the same
+text and `Home resume 2`; the window title followed the Activity. Guarded intercepted
+Escape in its APK override; its Finish button returned Home with `Home resume 3`.
+Escape on Home ended the process with status 0. The headless CLI replay likewise
+returned JSON null after the last Activity finished. Local CI passes 17 Rust tests,
+4,096 parser mutations and all ten unchanged KasCalc scenarios. No new release
+archive or third-party multi-screen compatibility is claimed by this increment.

@@ -47,6 +47,9 @@ target/release/droidless resources app.apk
 target/release/droidless run --headless artifacts/apks/KasCalc.apk \
   --click 7 --click + --click 5 --click = --stats
 target/release/droidless inspect-ui fixtures/generated/counter.apk
+# Current source: explicit Activity navigation (authored conformance fixture)
+target/release/droidless run --headless fixtures/generated/intents.apk \
+  --click "Open detail" --back
 
 # CI is LOCAL ONLY. No GitHub workflows; Actions disabled on source repository.
 sh tools/ci.sh
@@ -82,12 +85,12 @@ execution, heap, framework and Views; `droidless` owns CLI/platform integration.
 | DEX 035–040 | Headers/digests/IDs/class data/code/try handlers; annotations/debug partial |
 | Register interpreter | Moves, constants, branches, switches, numeric operations, arrays, fields, calls, casts, explicit and implicit Java throw/catch |
 | Object model / GC | Inheritance, dispatch, static initialization, strings/wide values, handle-based mark/sweep |
-| Activity | Main launcher discovery; create/start/resume/pause/stop/destroy |
+| Activity / Intents | Launcher discovery; explicit same-APK navigation, typed extras, finish/Back, lifecycle and preserved screen state (current source) |
 | UI | TextView, Button, EditText, LinearLayout, FrameLayout; approximate styling/measurement |
 | Input | Native KasCalc mouse callbacks; native Counter text/key callbacks; clean lifecycle close |
 | macOS ARM64 | Actual native window and click evidence |
 | Linux | Headless path; native GUI not implemented, build not verified |
-| Storage, intents, timers, networking | Not implemented yet |
+| Storage, timers, networking | Not implemented yet |
 | AndroidX, Compose, JNI, JIT, games | Future compatibility work |
 
 Unsupported execution methods/opcodes fail with method, DEX module and PC.
@@ -100,6 +103,7 @@ Unsupported execution methods/opcodes fail with method, DEX module and PC.
 | KasCalc 1.0 | [Independent release](https://github.com/KasRoudra/simplecalculator/releases/tag/v1.0) | Launches/renders/responds to native clicks; ten headless arithmetic/input scenarios |
 | SmallestAPK | [Independent sample](https://github.com/krossovochkin/SmallestAPK) | Original signed APK executes its Activity and creates the expected TextView |
 | Counter | DROIDLESS [Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks and clean close; resources and VM conformance |
+| Intents | DROIDLESS [Java/XML fixture](examples/intents/MainActivity.java) | Native screen transitions, preserved text, Back override and clean root finish; typed extras/lifecycle tests |
 
 KasCalc is fetched and SHA-256 checked, never recompiled, patched, repackaged or
 redistributed. Custom fixtures are kept separate and do not prove arbitrary APK
@@ -117,9 +121,11 @@ sh tools/macos-app.sh
 
 Tracing: `--trace-bytecode`, `--trace-methods`, `--trace-framework`,
 `--trace-lifecycle`. `--stats` / `--heap-stats` report real counters and elapsed
-time. `--click TEXT`, `--key CHARACTER`, `--headless` and `inspect-ui` support
+time. `--click TEXT`, `--key CHARACTER`, `--back`, `--headless` and `inspect-ui` support
 repeatable experiments. [VM](docs/dex-vm.md), [framework/UI](docs/framework.md),
 [security](docs/security.md), [roadmap](docs/roadmap.md).
+Escape delivers Back in the native window. Navigation is available on main;
+the published v0.1.0 archive retains its documented earlier scope.
 
 This prototype is not a security sandbox. Guest filesystem/network/native code
 and process APIs are unavailable; parser/VM limits do not replace OS isolation.

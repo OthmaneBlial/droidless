@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Explicit same-APK Activity Intents, typed Bundle extras, copied launch data,
+  preserved back stack, finish/isFinishing and virtual Back callbacks.
+- Native screen/title changes and Escape-to-Back; `--back` headless replay and
+  clean termination when the root Activity finishes.
+- Authored Intents conformance APK and native navigation verification. v0.1.0
+  release artifacts retain their original scope. CI remains local only.
+
 ## 0.1.0 — 2026-09-30 — interactive APK preview
 
 - Unmodified KasCalc 1.0 APK runs DEX math/click callbacks in a native macOS window;

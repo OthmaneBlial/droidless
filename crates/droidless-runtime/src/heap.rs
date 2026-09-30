@@ -94,6 +94,7 @@ pub enum Data {
         element: String,
         values: Vec<Vec<Word>>,
     },
+    Bundle(BTreeMap<String, (String, Vec<Word>)>),
 }
 #[derive(Clone, Debug)]
 pub struct Object {
@@ -182,6 +183,9 @@ impl Heap {
             work.extend(object.fields.values().flatten().copied());
             if let Data::Array { values, .. } = &object.data {
                 work.extend(values.iter().flatten().copied());
+            }
+            if let Data::Bundle(values) = &object.data {
+                work.extend(values.values().flat_map(|(_, words)| words).copied());
             }
             if let Some(view) = &object.view {
                 work.extend(view.children.iter().copied());

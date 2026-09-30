@@ -26,16 +26,20 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/view/WindowManager;",
             "Landroid/view/Display;",
             "Landroid/os/Bundle;",
+            "Landroid/content/Intent;",
             "Landroid/view/KeyEvent;",
         ]
         .contains(&class)
 }
 impl Runtime {
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
-        let signature = method.signature();
         if self.trace.framework {
             eprintln!("framework: {} {args:?}", method.key());
         }
+        if let Some(result) = self.component_native(method, args)? {
+            return Ok(Some(result));
+        }
+        let signature = method.signature();
         let arg =
             |n| -> Result<Word> { args.get(n).copied().context("framework argument missing") };
         let receiver = args.first().copied().unwrap_or(Word::ZERO);
@@ -328,6 +332,7 @@ impl Runtime {
             }
             ("Landroid/app/Activity;", "onCreate(Landroid/os/Bundle;)V")
             | ("Landroid/app/Activity;", "onStart()V")
+            | ("Landroid/app/Activity;", "onRestart()V")
             | ("Landroid/app/Activity;", "onResume()V")
             | ("Landroid/app/Activity;", "onPause()V")
             | ("Landroid/app/Activity;", "onStop()V")
@@ -341,15 +346,18 @@ impl Runtime {
                     self.heap.get(view)?.view.is_some(),
                     "setContentView expects View"
                 );
-                self.root = Some(view);
+                self.set_content(receiver, view)?;
             }
             ("Landroid/app/Activity;", "setContentView(I)V") => {
-                self.root = Some(self.inflate_id(arg(1)?.int()? as u32, 0)?);
+                let root = self.inflate_id(arg(1)?.int()? as u32, 0)?;
+                self.set_content(receiver, root)?;
             }
             ("Landroid/app/Activity;", "findViewById(I)Landroid/view/View;")
             | ("Landroid/view/View;", "findViewById(I)Landroid/view/View;") => {
                 let root = if method.class == "Landroid/app/Activity;" {
-                    self.root.context("findViewById before setContentView")?
+                    self.screen(receiver)?
+                        .root
+                        .context("findViewById before setContentView")?
                 } else {
                     receiver
                 };
@@ -359,7 +367,7 @@ impl Runtime {
                 );
             }
             ("Landroid/app/Activity;", "setTitle(Ljava/lang/CharSequence;)V") => {
-                self.title = self.heap.text(arg(1)?)?.to_owned()
+                self.set_title(receiver, self.heap.text(arg(1)?)?.to_owned())?;
             }
             ("Landroid/content/Context;", "getString(I)Ljava/lang/String;")
             | ("Landroid/content/res/Resources;", "getString(I)Ljava/lang/String;") => {

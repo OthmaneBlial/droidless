@@ -30,7 +30,7 @@ unsafe extern "C" {
         context: *mut c_void,
         callback: Callback,
     ) -> *mut c_void;
-    fn dl_begin(host: *mut c_void);
+    fn dl_begin(host: *mut c_void, title: *const c_char);
     fn dl_view(host: *mut c_void, node: *const NativeView);
     fn dl_end(host: *mut c_void);
     fn dl_run(host: *mut c_void);
@@ -64,14 +64,24 @@ extern "C" fn event(context: *mut c_void, kind: u32, handle: usize, text: *const
                     .runtime
                     .key_text(handle, if kind == 3 { 0 } else { 1 }, text)?;
             }
+            5 => {
+                context.runtime.back()?;
+                consumed = true;
+            }
             _ => anyhow::bail!("unknown native event {kind}"),
         }
-        draw(context)
+        if context.runtime.activity.is_some() {
+            draw(context)?;
+        }
+        Ok(())
     }))
     .unwrap_or_else(|_| Err(anyhow::anyhow!("panic in native event callback")));
     if let Err(error) = result {
         eprintln!("DROIDLESS: {error:#}");
         context.error = Some(error);
+        return 0;
+    }
+    if context.runtime.activity.is_none() {
         return 0;
     }
     if consumed { 2 } else { 1 }
@@ -113,9 +123,10 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
         Ok(())
     }
     let tree = context.runtime.snapshot()?;
+    let title = CString::new(format!("{} — DROIDLESS", context.runtime.title.trim()))?;
     // SAFETY: the live host pointer comes only from dl_open and is used on the same thread.
     unsafe {
-        dl_begin(context.host);
+        dl_begin(context.host, title.as_ptr());
     }
     node(context.host, &tree)?;
     // SAFETY: same live host as above.
@@ -125,6 +136,9 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
     Ok(())
 }
 pub fn run(runtime: &mut Runtime) -> Result<()> {
+    if runtime.activity.is_none() {
+        return Ok(());
+    }
     let title = CString::new(format!("{} — DROIDLESS", runtime.title.trim()))?;
     let mut context = ContextData {
         runtime,

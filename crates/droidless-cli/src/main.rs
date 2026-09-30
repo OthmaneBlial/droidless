@@ -4,6 +4,12 @@ use droidless_runtime::{Runtime, Trace};
 #[cfg(target_os = "macos")]
 mod native;
 
+enum Action {
+    Click(String),
+    Key(String),
+    Back,
+}
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("DROIDLESS: {error:#}");
@@ -14,7 +20,7 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
         println!(
-            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --key CHAR --stats\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\nExperimental runtime; unsupported features fail explicitly."
+            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --key CHAR --back --stats\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\nNative Back: Escape. Experimental runtime; unsupported features fail explicitly."
         );
         return Ok(());
     }
@@ -44,8 +50,7 @@ fn run() -> Result<()> {
                 }
                 "--click" => {
                     i += 1;
-                    actions.push((
-                        false,
+                    actions.push(Action::Click(
                         args.get(i)
                             .ok_or_else(|| anyhow::anyhow!("--click requires text"))?
                             .clone(),
@@ -53,13 +58,13 @@ fn run() -> Result<()> {
                 }
                 "--key" => {
                     i += 1;
-                    actions.push((
-                        true,
+                    actions.push(Action::Key(
                         args.get(i)
                             .ok_or_else(|| anyhow::anyhow!("--key requires one character"))?
                             .clone(),
                     ));
                 }
+                "--back" => actions.push(Action::Back),
                 s if s.starts_with('-') => bail!("unknown run option {s}"),
                 _ => {
                     if path.replace(args[i].clone()).is_some() {
@@ -75,19 +80,26 @@ fn run() -> Result<()> {
         let mut runtime = Runtime::new(apk)?;
         runtime.trace = trace;
         runtime.launch()?;
-        for (key, text) in actions {
-            if key {
-                let target = runtime
-                    .focused_key_target()?
-                    .ok_or_else(|| anyhow::anyhow!("no View key listener"))?;
-                runtime.key_text(target, 0, &text)?;
-                runtime.key_text(target, 1, &text)?;
-            } else {
-                runtime.click_text(&text)?;
+        for action in actions {
+            match action {
+                Action::Key(text) => {
+                    let target = runtime
+                        .focused_key_target()?
+                        .ok_or_else(|| anyhow::anyhow!("no View key listener"))?;
+                    runtime.key_text(target, 0, &text)?;
+                    if runtime.activity.is_some() && runtime.focused_key_target()? == Some(target) {
+                        runtime.key_text(target, 1, &text)?;
+                    }
+                }
+                Action::Click(text) => {
+                    runtime.click_text(&text)?;
+                }
+                Action::Back => runtime.back()?,
             }
         }
         if headless {
-            println!("{}", serde_json::to_string_pretty(&runtime.snapshot()?)?);
+            let tree = runtime.activity.map(|_| runtime.snapshot()).transpose()?;
+            println!("{}", serde_json::to_string_pretty(&tree)?);
         } else {
             #[cfg(target_os = "macos")]
             native::run(&mut runtime)?;

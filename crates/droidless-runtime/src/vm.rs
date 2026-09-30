@@ -31,6 +31,7 @@ pub struct Runtime {
     pub activity: Option<Word>,
     pub root: Option<Word>,
     pub title: String,
+    pub(crate) default_title: String,
     pub trace: Trace,
     pub instructions: u64,
     pub method_calls: u64,
@@ -44,8 +45,14 @@ pub struct Runtime {
     initializing_depth: usize,
     pub(crate) interned: BTreeMap<String, Word>,
     budget: u64,
+    pub(crate) screens: BTreeMap<usize, crate::activities::Screen>,
+    pub(crate) back_stack: Vec<Word>,
+    pub(crate) navigation: std::collections::VecDeque<crate::activities::Navigation>,
 }
 impl Runtime {
+    pub(crate) fn reset_budget(&mut self) {
+        self.budget = 0;
+    }
     pub fn stack_depth(&self) -> usize {
         self.frames.len()
     }
@@ -78,6 +85,7 @@ impl Runtime {
             heap: Heap::default(),
             activity: None,
             root: None,
+            default_title: title.clone(),
             title,
             trace: Trace::default(),
             instructions: 0,
@@ -92,6 +100,9 @@ impl Runtime {
             initializing_depth: 0,
             interned: BTreeMap::new(),
             budget: 0,
+            screens: BTreeMap::new(),
+            back_stack: vec![],
+            navigation: std::collections::VecDeque::new(),
         })
     }
     pub fn launch(&mut self) -> Result<()> {
@@ -119,29 +130,17 @@ impl Runtime {
             .main_activity
             .clone()
             .context("APK has no MAIN/LAUNCHER Activity")?;
+        let intent = self.heap.instance("Landroid/content/Intent;")?;
         let class = descriptor(&name);
-        let activity = self.new_instance(&class)?;
-        self.activity = Some(activity);
-        self.invoke(
-            Method {
-                class: class.clone(),
-                name: "<init>".into(),
-                parameters: vec![],
-                returns: "V".into(),
-            },
-            vec![activity],
-            false,
-        )?;
-        self.lifecycle_call(activity, &class, "onCreate", vec![Word::ZERO])?;
-        self.lifecycle_call(activity, &class, "onStart", vec![])?;
-        self.lifecycle_call(activity, &class, "onResume", vec![])?;
+        self.create_screen(&class, intent)?;
+        self.drain_navigation()?;
         ensure!(
-            self.root.is_some(),
+            self.activity.is_none() || self.root.is_some(),
             "Activity ran but did not create a View hierarchy"
         );
         Ok(())
     }
-    fn lifecycle_call(
+    pub(crate) fn lifecycle_call(
         &mut self,
         object: Word,
         class: &str,
@@ -171,12 +170,23 @@ impl Runtime {
     }
     pub fn close(&mut self) -> Result<()> {
         self.budget = 0;
+        for screen in self.screens.values_mut() {
+            screen.finishing = true;
+        }
         if let Some(activity) = self.activity {
             let class = self.heap.get(activity)?.class.clone();
-            for name in ["onPause", "onStop", "onDestroy"] {
+            for name in ["onPause", "onStop"] {
                 self.lifecycle_call(activity, &class, name, vec![])?;
             }
         }
+        while let Some(activity) = self.back_stack.pop() {
+            let class = self.heap.get(activity)?.class.clone();
+            self.lifecycle_call(activity, &class, "onDestroy", vec![])?;
+        }
+        self.screens.clear();
+        self.activity = None;
+        self.root = None;
+        self.navigation.clear();
         Ok(())
     }
     pub fn snapshot(&self) -> Result<Node> {
@@ -212,6 +222,7 @@ impl Runtime {
                 vec![listener, word],
                 true,
             )?;
+            self.drain_navigation()?;
             self.collect();
             return Ok(true);
         }
@@ -228,6 +239,7 @@ impl Runtime {
                 vec![activity, word],
                 true,
             )?;
+            self.drain_navigation()?;
             self.collect();
             return Ok(true);
         }
@@ -300,6 +312,7 @@ impl Runtime {
             true,
         )?;
         let consumed = result.first().context("onKey returned no result")?.int()? != 0;
+        self.drain_navigation()?;
         self.collect();
         Ok(consumed)
     }
@@ -324,6 +337,16 @@ impl Runtime {
             .activity
             .into_iter()
             .chain(self.root)
+            .chain(self.back_stack.iter().copied())
+            .chain(
+                self.screens
+                    .values()
+                    .flat_map(|s| s.root.into_iter().chain([s.intent])),
+            )
+            .chain(self.navigation.iter().map(|n| match n {
+                crate::activities::Navigation::Start(intent)
+                | crate::activities::Navigation::Finish(intent) => *intent,
+            }))
             .chain(self.statics.values().flatten().copied())
             .chain(self.interned.values().copied())
             .chain(self.failed_classes.values().flatten().copied())

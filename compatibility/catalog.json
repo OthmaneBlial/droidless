@@ -35,6 +35,18 @@
       "native_close_exit_zero": true,
       "source": "examples/counter",
       "notes": "Native text-copy/key listener and clean close; headless VM conformance. Authored fixture, not independent APK compatibility evidence."
+    },
+    {
+      "package": "org.droidless.intents",
+      "origin": "droidless-fixture",
+      "status": "interactive-fixture",
+      "native_ui": true,
+      "native_mouse": true,
+      "native_text_verified": true,
+      "native_back_verified": true,
+      "native_close_exit_zero": true,
+      "source": "examples/intents",
+      "notes": "Current source: explicit navigation, typed copied extras, preserved input/title, Back override and lifecycle/GC tests. Authored fixture, not independent multi-screen APK evidence."
     }
   ]
 }
