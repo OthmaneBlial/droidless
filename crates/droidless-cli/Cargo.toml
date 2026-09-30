@@ -9,3 +9,6 @@ anyhow.workspace = true
 serde_json.workspace = true
 droidless-formats = { path = "../droidless-formats" }
 droidless-runtime = { path = "../droidless-runtime" }
+
+[build-dependencies]
+cc = "1"

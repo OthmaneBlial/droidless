@@ -100,6 +100,7 @@ pub fn string_pool(chunk: &Chunk<'_>) -> Result<Vec<String>> {
     ensure!(chunk.kind == 1 && chunk.header >= 28, "invalid string pool");
     let b = chunk.bytes;
     let count = b.u32(8)? as usize;
+    ensure!(count <= 1_000_000, "string pool entry limit exceeded");
     let flags = b.u32(16)?;
     let start = b.u32(20)? as usize;
     b.table(chunk.header, count, 4)?;

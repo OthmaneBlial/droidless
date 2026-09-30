@@ -1,0 +1,11 @@
+{
+  "apk": "artifacts/apks/KasCalc.apk",
+  "apk_decode_median_ms": 2.813333,
+  "arch": "aarch64",
+  "dex_int_loop_instructions_per_second_median": 26829525.29540635,
+  "headless_launch_and_layout_median_ms": 1.478083,
+  "os": "macos",
+  "samples": 11,
+  "scope": "Warm process samples, release build; no native first-frame measurement, no emulator comparison",
+  "version": "0.0.1"
+}

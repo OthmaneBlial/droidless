@@ -24,6 +24,7 @@ impl Apk {
             .with_context(|| format!("loading APK {}", path.display()))
     }
     pub fn parse(data: &[u8]) -> Result<Self> {
+        ensure!(data.len() <= 256 * 1024 * 1024, "APK exceeds 256 MiB limit");
         let mut archive = zip::ZipArchive::new(Cursor::new(data))?;
         ensure!(archive.len() <= 50_000, "too many APK entries");
         let mut files = BTreeMap::new();
@@ -46,7 +47,13 @@ impl Apk {
             ensure!(total <= 256 * 1024 * 1024, "expanded APK exceeds 256 MiB");
             let name = file.name().to_owned();
             let mut bytes = vec![];
-            file.read_to_end(&mut bytes)?;
+            (&mut file)
+                .take(64 * 1024 * 1024 + 1)
+                .read_to_end(&mut bytes)?;
+            ensure!(
+                bytes.len() <= 64 * 1024 * 1024 && bytes.len() as u64 == file.size(),
+                "APK entry expansion exceeds limit or declared size"
+            );
             ensure!(files.insert(name, bytes).is_none(), "duplicate APK entry");
         }
         let manifest = Manifest::parse(

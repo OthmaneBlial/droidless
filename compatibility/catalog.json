@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "host": "macOS ARM64",
+  "apps": [
+    {
+      "package": "com.kasroudra.kascalc",
+      "version": "1.0",
+      "origin": "third-party",
+      "artifact_url": "https://github.com/KasRoudra/simplecalculator/releases/download/v1.0/KasCalc.apk",
+      "sha256": "6010d2f142cd8d0114ab627a44b50b5dc223b4d94ae5a235f836afbae211f505",
+      "status": "interactive-subset",
+      "native_ui": true,
+      "native_mouse": true,
+      "native_keyboard_verified": false,
+      "headless_scenarios": 10,
+      "notes": "Basic arithmetic/native clicks. Menus/gestures/full numerical behavior unverified."
+    },
+    {
+      "package": "c.k",
+      "origin": "third-party-sample",
+      "artifact_url": "https://github.com/krossovochkin/SmallestAPK/blob/c6e1063d8b6c3b3ad852db534a8ccd63b877e92e/apk/k-release.apk",
+      "sha256": "4cd031dca892b0434274af0dee6f07cacc9163a5b685ba0f363f5642e0374318",
+      "status": "ui-created",
+      "notes": "Original signed sample executes Activity and creates OK TextView."
+    },
+    {
+      "package": "org.droidless.counter",
+      "origin": "droidless-fixture",
+      "status": "headless-interactive",
+      "source": "examples/counter",
+      "notes": "Counter/text-copy and VM conformance; not independent compatibility evidence."
+    }
+  ]
+}

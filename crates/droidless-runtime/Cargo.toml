@@ -8,3 +8,6 @@ license.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 droidless-formats = { path = "../droidless-formats" }
+
+[dev-dependencies]
+serde_json.workspace = true

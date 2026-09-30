@@ -1,0 +1,7 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp">
+  <TextView android:id="@+id/count" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="0" android:textSize="32sp" />
+  <Button android:id="@+id/increment" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Increment" />
+  <Button android:id="@+id/decrement" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Decrement" />
+  <EditText android:id="@+id/input" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Type here" />
+  <Button android:id="@+id/copy" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Copy input" />
+</LinearLayout>

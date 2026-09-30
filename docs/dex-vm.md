@@ -1,0 +1,56 @@
+# Register machine, objects and garbage collection
+
+Primary input contracts: [DEX format](https://source.android.com/docs/core/runtime/dex-format)
+and [Dalvik bytecode](https://source.android.com/docs/core/runtime/dalvik-bytecode).
+Implementation belongs to DROIDLESS, not these reference implementations.
+
+Standalone DEX 035/037/038/039/040 is accepted. Container 041, reverse endian,
+optimized/quickened DEX and newer invoke forms are rejected. The parser checks
+magic, header/whole-file size, SHA-1, Adler-32, table ranges and referenced IDs.
+Class members use delta indexes. Code items retain register counts, instructions,
+try ranges/catch handlers and debug offset. Annotations/debug programs are not
+fully decoded. This is not a full bytecode verifier.
+
+## Frame and value semantics
+
+One register is a 32-bit primitive word or a typed managed handle. Long/double use
+two adjacent low/high words, including in argument lists. Input registers occupy
+the final `ins_size` positions in `registers_size`. Each call has its own PC,
+register file, invoke result and pending exception. Errors retain method/DEX/PC.
+
+Integer overflow wraps, shifts mask counts, float/double arithmetic uses IEEE
+operations and numeric conversions follow the current Rust/Java-compatible
+saturation rules. Arithmetic edge tests and compiled Java exercise actual D8
+instructions rather than a parallel calculator implementation.
+
+Execution stops after five million instructions per launch/input/close transaction
+or 128 frames. Unsupported opcodes fail rather than acting as successful NOPs.
+Monitors are only meaningful under the current single guest thread.
+
+## Classes and objects
+
+Instances hold descriptor plus fields keyed by declaring class/name/type. Arrays
+retain component type and words. Static fields are independent roots, initialized
+from encoded values before `<clinit>`. A class is marked initializing to prevent
+recursive entry. Initialization failure is a terminal error; a complete erroneous-
+class state machine is pending. Basic inheritance/virtual/interface dispatch is
+tested; transitive interface/array covariance rules are incomplete.
+
+Explicit throw propagates a guest reference and searches parsed catch handlers
+in the current frame and callers. Host-generated faults such as divide-by-zero/
+null/bounds failures are currently terminal diagnostics, not universally catchable
+Java exceptions. This distinction must remain visible until corrected.
+
+## Heap
+
+Handles are monotonically allocated and never reused, preventing stale aliases.
+Mark/sweep roots include active Activity/content View, statics, interned strings
+and frames. Traversal follows object fields, arrays, View children and listeners.
+Collection occurs between input callbacks; no automatic in-frame collection,
+moving/generational collector or finalization exists.
+
+Bounds include one million lifetime handles, one million array elements and one
+MiB per guest string. These do not enforce overall resident memory: nested arrays
+and metadata can still be expensive. `--heap-stats` reports actual object and
+collection counts, not inferred peak bytes. Reachability/reclamation tests run
+without Android.
