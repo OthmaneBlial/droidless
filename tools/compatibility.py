@@ -364,9 +364,9 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             "--tap", "24", "22", "--advance-ms", "1000", "--click", "Create or edit folders",
             "--tap", "28", "72", "--input", "Runtime folder", "--tap", "362", "72", str(notepad),
         ], text=True, capture_output=True, timeout=120)
-        folder_blocker = "unsupported method Landroid/util/Log;->e(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I"
-        if process.returncode == 0 or folder_blocker not in process.stderr or "NewFolderViewHolder;->clickLeftButton" not in process.stderr:
-            raise SystemExit("Notepad folder creation did not reach its diagnosed original keyboard-error logging callback")
+        folder_blocker = "uncaught guest exception Ljava/lang/NullPointerException;: null reference"
+        if process.returncode == 0 or folder_blocker not in process.stderr or "Lir/cafebazaar/notepad/e/c;->a(Landroid/view/View;)V [classes.dex, PC 0x0011]" not in process.stderr or "E/Utils: can't show keyboard" not in process.stderr:
+            raise SystemExit("Notepad folder creation did not log its show-keyboard fault and reach the missing keyboard-service close callback")
         with sqlite3.connect(folder_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
             retained = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
             folders = connection.execute("SELECT id FROM Folder").fetchall()
@@ -487,7 +487,7 @@ print("PASS Notepad: original navigation tap reveals an on-screen drawer animati
 print("PASS Notepad: original drawer settles at 1000ms; Back closes it, retains Notes and preserves both exact rows")
 
 print("PASS Notepad: original Edit Folders binds its editor/listener; Back retains both exact note rows")
-print("PASS Notepad diagnosis: folder creation reaches keyboard-error logging; no folder written and both exact seed/copy notes retained")
+print("PASS Notepad diagnosis: keyboard fault logs its DEX trace; missing keyboard-service close retains both exact seed/copy notes and writes no folder")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.

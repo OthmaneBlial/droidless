@@ -88,6 +88,23 @@ public class ThrowableContract {
         return 1;
     }
     public static Throwable refresh() { return saved.fillInStackTrace(); }
+    public static int logSaved(int level) {
+        String tag = new StringBuilder().append("ThrowableContract").toString();
+        String message = new StringBuilder().append("logged original exception").toString();
+        switch (level) {
+            case 0: return android.util.Log.d(tag, message, saved);
+            case 1: return android.util.Log.i(tag, message, saved);
+            case 2: return android.util.Log.w(tag, message, saved);
+            default: return android.util.Log.e(tag, message, saved);
+        }
+    }
+    public static int logNulls() {
+        android.util.Log.d(null, null, null);
+        android.util.Log.i(null, null, null);
+        android.util.Log.w(null, null, null);
+        android.util.Log.e(null, null, null);
+        return 1;
+    }
     public static void main(String[] args) {
         verifyCauseConstructors();
         for (int mode : new int[]{0, 1, 2, 4, 5}) {

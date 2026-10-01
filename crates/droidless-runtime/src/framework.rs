@@ -5079,6 +5079,17 @@ impl Runtime {
                 self.heap.get_mut(receiver)?.fields.insert("droidless:view:padding-relative".into(), vec![Word::from(i32::from(method.name == "setPaddingRelative"))]);
                 self.invalidate_text_layout(receiver)?;
             }
+            ("Landroid/util/Log;", "d(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I"
+                | "i(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I"
+                | "w(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I"
+                | "e(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I") => {
+                let tag = if arg(0)? == Word::ZERO { String::new() } else { self.heap.text(arg(0)?)?.to_owned() };
+                let message = if arg(1)? == Word::ZERO { "null".to_owned() } else { self.heap.text(arg(1)?)?.to_owned() };
+                let trace = self.throwable_trace(arg(2)?)?;
+                eprintln!("{}/{tag}: {message}\n{trace}", method.name.to_uppercase());
+                // Host stderr sink; Android log-buffer byte counts are outside this profile.
+                result.push(Word::ZERO);
+            }
             ("Landroid/util/Log;", sig)
                 if [
                     "d(Ljava/lang/String;Ljava/lang/String;)I",

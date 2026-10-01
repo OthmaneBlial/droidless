@@ -50,7 +50,7 @@ impl Runtime {
         result?.first().copied().context("missing Throwable return")
     }
 
-    fn throwable_trace(&mut self, mut object: Word) -> Result<String> {
+    pub(crate) fn throwable_trace(&mut self, mut object: Word) -> Result<String> {
         let roots = self.native_roots.len();
         let result = (|| {
             let mut output = String::new();
@@ -228,6 +228,44 @@ mod tests {
             args,
             false,
         )
+    }
+
+    #[test]
+    fn compiled_log_throwables_callbacks_gc_nulls_and_fault_recovery() {
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
+        )
+        .unwrap();
+        for mode in [0, 1, 2, 4, 5] {
+            call(
+                &mut vm,
+                "capture",
+                &["I"],
+                THROWABLE,
+                vec![Word::from(mode)],
+            )
+            .unwrap();
+            for level in 0..4 {
+                assert_eq!(
+                    call(&mut vm, "logSaved", &["I"], "I", vec![Word::from(level)]).unwrap(),
+                    [Word::ZERO]
+                );
+                assert_eq!(vm.stack_depth(), 0);
+                assert!(vm.native_roots.is_empty());
+            }
+        }
+        assert_eq!(
+            call(&mut vm, "logNulls", &[], "I", vec![]).unwrap(),
+            [Word::from(1)]
+        );
+        call(&mut vm, "capture", &["I"], THROWABLE, vec![Word::from(3)]).unwrap();
+        let error = call(&mut vm, "logSaved", &["I"], "I", vec![Word::from(3)]).unwrap_err();
+        assert!(format!("{error:#}").contains("description failed"));
+        assert_eq!(vm.stack_depth(), 0);
+        assert!(vm.native_roots.is_empty());
+        call(&mut vm, "capture", &["I"], THROWABLE, vec![Word::ZERO]).unwrap();
+        call(&mut vm, "logSaved", &["I"], "I", vec![Word::from(3)]).unwrap();
+        assert!(vm.native_roots.is_empty());
     }
 
     #[test]
