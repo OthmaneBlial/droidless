@@ -31,6 +31,16 @@ fn call_class(vm: &mut Runtime, class: &str, name: &str, returns: &str) -> Vec<W
 }
 
 #[test]
+fn compiled_hashtable_core_nulls_synchronized_equality_gc_and_fault_cleanup() {
+    let mut vm = runtime();
+    assert_eq!(
+        call_class(&mut vm, "HashtableContract", "run", "I"),
+        [Word::from(1)]
+    );
+    assert_eq!(vm.stack_depth(), 0);
+}
+
+#[test]
 fn stable_object_array_sort_ranges_comparators_faults_mutation_gc_and_limits() {
     let mut vm = runtime();
     assert_eq!(

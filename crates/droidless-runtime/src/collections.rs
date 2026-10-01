@@ -881,10 +881,18 @@ impl Runtime {
             "Ljava/util/LinkedHashMap;",
             "Ljava/util/WeakHashMap;",
             "Ljava/util/concurrent/ConcurrentHashMap;",
+            "Ljava/util/Hashtable;",
         ]
         .contains(&method.class.as_str())
         {
             // ponytail: WeakHashMap keys remain strong until guest garbage collection is modeled.
+            let receiver = *args.first().context("map receiver missing")?;
+            if self.is_a(&self.heap.get(receiver)?.class, "Ljava/util/Hashtable;") {
+                self.enter_monitor(receiver)?;
+                let result = self.map_native(method, args);
+                self.exit_monitor(receiver)?;
+                return result;
+            }
             return self.map_native(method, args);
         }
         let cow = method.class == COPY_ON_WRITE_LIST;
@@ -1412,7 +1420,11 @@ impl Runtime {
         // ponytail: linear key lookup; use guest hash buckets when large maps are profiled.
         let entries = entries.to_vec();
         for (index, (candidate, _)) in entries.into_iter().enumerate() {
-            let equal = self.object_equal(key, candidate, true)?;
+            let equal = if self.is_a(&self.heap.get(owner)?.class, "Ljava/util/Hashtable;") {
+                self.object_equal(candidate, key, true)?
+            } else {
+                self.object_equal(key, candidate, true)?
+            };
             if self.map(owner)?.1 != version {
                 return Err(fault(
                     "Ljava/util/ConcurrentModificationException;",
@@ -1435,11 +1447,34 @@ impl Runtime {
         );
         ensure!(
             class == "Ljava/util/WeakHashMap;"
+                || self.is_a(class, "Ljava/util/Hashtable;")
                 || self.is_a(&self.heap.get(owner)?.class, "Ljava/util/HashMap;"),
-            "invalid HashMap receiver"
+            "invalid native map receiver"
         );
         let arg = |n| args.get(n).copied().context("map argument missing");
         let sig = method.signature();
+        if self.is_a(class, "Ljava/util/Hashtable;") {
+            if sig == "<init>(IFZ)V" {
+                return Ok(None);
+            }
+            let checked = match sig.as_str() {
+                "containsKey(Ljava/lang/Object;)Z"
+                | "get(Ljava/lang/Object;)Ljava/lang/Object;"
+                | "remove(Ljava/lang/Object;)Ljava/lang/Object;"
+                | "containsValue(Ljava/lang/Object;)Z" => 1,
+                "put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;" => 2,
+                _ => 0,
+            };
+            for index in 1..=checked {
+                ensure!(
+                    arg(index)? != Word::ZERO,
+                    fault(
+                        "Ljava/lang/NullPointerException;",
+                        "Hashtable rejects null keys and values"
+                    )
+                );
+            }
+        }
         let mut result = vec![];
         match sig.as_str() {
             "<init>()V" | "<init>(I)V" | "<init>(IF)V" | "<init>(IFZ)V" => {
@@ -1484,7 +1519,13 @@ impl Runtime {
                     .collect::<Vec<_>>();
                 let mut found = false;
                 for value in values {
-                    if self.object_equal(arg(1)?, value, true)? {
+                    let equal = if self.is_a(&self.heap.get(owner)?.class, "Ljava/util/Hashtable;")
+                    {
+                        self.object_equal(value, arg(1)?, true)?
+                    } else {
+                        self.object_equal(arg(1)?, value, true)?
+                    };
+                    if equal {
                         found = true;
                         break;
                     }
@@ -1540,6 +1581,7 @@ impl Runtime {
                                 | "Ljava/util/LinkedHashMap;"
                                 | "Ljava/util/WeakHashMap;"
                                 | "Ljava/util/concurrent/ConcurrentHashMap;"
+                                | "Ljava/util/Hashtable;"
                         ),
                         "unsupported putAll with custom Map implementations or subclass hooks"
                     );

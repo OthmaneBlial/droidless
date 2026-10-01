@@ -160,6 +160,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/util/Stack;",
             "Ljava/util/TreeSet;",
             "Ljava/util/HashMap;",
+            "Ljava/util/Hashtable;",
+            "Ljava/util/Dictionary;",
             "Ljava/util/ArrayList;",
             "Ljava/util/LinkedHashMap;",
             "Ljava/util/WeakHashMap;",

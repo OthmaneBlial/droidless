@@ -1053,6 +1053,7 @@ impl Runtime {
             "Ljava/util/HashSet;" => "Ljava/util/AbstractSet;",
             "Ljava/util/TreeSet;" => "Ljava/util/AbstractSet;",
             "Ljava/util/HashMap;" => "Ljava/util/AbstractMap;",
+            "Ljava/util/Hashtable;" => "Ljava/util/Dictionary;",
             "Ljava/util/WeakHashMap;" => "Ljava/util/AbstractMap;",
             "Ljava/util/LinkedHashMap;" => "Ljava/util/HashMap;",
             "Ljava/util/concurrent/ConcurrentHashMap;" => "Ljava/util/HashMap;",
@@ -1298,7 +1299,13 @@ impl Runtime {
             if current == "Ldroidless/runtime/UnmodifiableRandomAccessList;" {
                 work.push("Ljava/util/RandomAccess;".into());
             }
-            if current == "Ljava/util/HashMap;" || current == "Ljava/util/WeakHashMap;" {
+            if [
+                "Ljava/util/HashMap;",
+                "Ljava/util/WeakHashMap;",
+                "Ljava/util/Hashtable;",
+            ]
+            .contains(&current.as_str())
+            {
                 work.extend(
                     [
                         "Ljava/util/Map;",
