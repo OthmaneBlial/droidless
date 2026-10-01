@@ -441,6 +441,17 @@ and [API-21 version code](https://developer.android.com/reference/android/os/Bui
 
 ## APK classes and Java numbers
 
+The message/cause constructor is supported for Throwable, Exception,
+RuntimeException and IllegalStateException. It retains the actual String and
+Throwable references, including nulls, and invokes virtual fillInStackTrace.
+The API-21 profile assigns both fields before that callback, matching
+[libcore](https://android.googlesource.com/platform/libcore/+/android-5.0.0_r1/luni/src/main/java/java/lang/Throwable.java).
+Compiled checks cover identity, callback GC, cause-chain diagnostics and callback
+fault cleanup. Portable constructor checks also pass on Java 17; its field
+assignment order differs, so the callback-state check is API-21-only.
+Cause-only constructors, initCause, suppression and StackTraceElement arrays
+remain unsupported.
+
 APK-local Class lookup and no-argument reflective construction execute guest
 initializers/constructors with access and exception checks. Inherited field
 references resolve to their declaring owner. [Methods and limits](reflection.md).

@@ -113,15 +113,45 @@ impl Runtime {
         };
         let signature = method.signature();
         let result = match (method.class.as_str(), signature.as_str()) {
-            (class, "<init>()V" | "<init>(Ljava/lang/String;)V")
-                if exception_parent(class).is_some() =>
+            (
+                class,
+                "<init>()V"
+                | "<init>(Ljava/lang/String;)V"
+                | "<init>(Ljava/lang/String;Ljava/lang/Throwable;)V",
+            ) if exception_parent(class).is_some()
+                && (method.parameters.len() != 2
+                    || [
+                        THROWABLE,
+                        "Ljava/lang/Exception;",
+                        "Ljava/lang/RuntimeException;",
+                        "Ljava/lang/IllegalStateException;",
+                    ]
+                    .contains(&class)) =>
             {
                 let object = arg(0)?;
+                let cause = if method.parameters.len() == 2 {
+                    Some(arg(2)?)
+                } else {
+                    None
+                };
+                if let Some(cause) = cause {
+                    ensure!(
+                        cause == Word::ZERO || self.is_a(&self.heap.get(cause)?.class, THROWABLE),
+                        "invalid Throwable cause"
+                    );
+                }
+                // API-21 libcore assigns message/cause before virtual fillInStackTrace.
                 if signature != "<init>()V" {
                     self.heap
                         .get_mut(object)?
                         .fields
                         .insert("message".into(), vec![arg(1)?]);
+                }
+                if let Some(cause) = cause {
+                    self.heap
+                        .get_mut(object)?
+                        .fields
+                        .insert("cause".into(), vec![cause]);
                 }
                 self.throwable_call(object, "fillInStackTrace", THROWABLE)?;
                 vec![]
@@ -206,6 +236,27 @@ mod tests {
             Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
         )
         .unwrap();
+        assert_eq!(
+            call(&mut vm, "verifyCauseConstructors", &[], "I", vec![]).unwrap(),
+            [Word::from(1)]
+        );
+        assert_eq!(
+            call(&mut vm, "api21CauseConstructorState", &[], "I", vec![]).unwrap(),
+            [Word::from(1)]
+        );
+        vm.collect();
+        let wrapper =
+            vm.statics["Lorg/droidless/counter/ThrowableContract;->saved:Ljava/lang/Throwable;"][0];
+        let trace = vm.throwable_trace(wrapper).unwrap();
+        assert!(
+            trace.contains("CauseTrace: outer cause")
+                && trace.contains("Caused by: java.lang.IllegalArgumentException: inner cause"),
+            "{trace}"
+        );
+        let error = call(&mut vm, "causeConstructorFault", &[], "V", vec![]).unwrap_err();
+        assert!(format!("{error:#}").contains("cause trace failed"));
+        assert_eq!(vm.stack_depth(), 0);
+        assert!(vm.native_roots.is_empty());
         for mode in [0, 1, 2, 4] {
             let exception = call(
                 &mut vm,

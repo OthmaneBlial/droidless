@@ -13,6 +13,47 @@ public class ThrowableContract {
     static class NoTrace extends RuntimeException {
         @Override public Throwable fillInStackTrace() { System.gc(); return this; }
     }
+    static class CauseTrace extends RuntimeException {
+        String observedMessage;
+        Throwable observedCause;
+        CauseTrace(String message, Throwable cause) { super(message, cause); }
+        @Override public Throwable fillInStackTrace() {
+            System.gc(); observedMessage = getMessage(); observedCause = getCause();
+            return super.fillInStackTrace();
+        }
+    }
+    static class CauseTraceFault extends RuntimeException {
+        CauseTraceFault(String message, Throwable cause) { super(message, cause); }
+        @Override public Throwable fillInStackTrace() {
+            System.gc(); throw new IllegalStateException("cause trace failed");
+        }
+    }
+    public static int verifyCauseConstructors() {
+        Throwable cause = new IllegalArgumentException("inner cause");
+        String message = new StringBuilder().append("outer cause").toString();
+        Throwable[] wrappers = {new Throwable(message, cause), new Exception(message, cause),
+            new RuntimeException(message, cause), new IllegalStateException(message, cause),
+            new CauseTrace(message, cause)};
+        System.gc();
+        for (Throwable wrapper : wrappers)
+            if (wrapper.getMessage() != message || wrapper.getCause() != cause)
+                throw new AssertionError("constructor cause/message identity");
+        Throwable empty = new Throwable(null, null);
+        if (empty.getMessage() != null || empty.getCause() != null)
+            throw new AssertionError("null message/cause");
+        saved = wrappers[4];
+        return 1;
+    }
+    // API-21 libcore assigns message/cause before virtual fillInStackTrace;
+    // desktop Java 17 assigns them afterward. This check is Android-profile-only.
+    public static int api21CauseConstructorState() {
+        CauseTrace wrapper = (CauseTrace) saved;
+        return wrapper.observedMessage == wrapper.getMessage()
+            && wrapper.observedCause == wrapper.getCause() ? 1 : 0;
+    }
+    public static void causeConstructorFault() {
+        new CauseTraceFault("fault wrapper", new IllegalArgumentException("fault cause"));
+    }
     static class Chain extends RuntimeException {
         Throwable next;
         Chain(String message) { super(message); }
@@ -48,6 +89,7 @@ public class ThrowableContract {
     }
     public static Throwable refresh() { return saved.fillInStackTrace(); }
     public static void main(String[] args) {
+        verifyCauseConstructors();
         for (int mode : new int[]{0, 1, 2, 4, 5}) {
             capture(mode);
             if (printSaved() != 1) throw new IllegalStateException("printing did not return");
