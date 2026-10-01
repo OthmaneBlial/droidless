@@ -1135,11 +1135,34 @@ impl Runtime {
                                 .fields
                                 .remove("droidless:touch:pressed");
                             if pressed {
-                                self.invoke(
-                                    method(VIEW, "performClick", &[], "Z"),
-                                    vec![receiver],
-                                    true,
-                                )?;
+                                let focus_taken = if self
+                                    .focus_field(receiver, "droidless:setFocusable")?
+                                    .truth()
+                                    && self
+                                        .focus_field(receiver, "droidless:setFocusableInTouchMode")?
+                                        .truth()
+                                    && !self
+                                        .focus_field(receiver, "droidless:view:focused")?
+                                        .truth()
+                                {
+                                    self.invoke(
+                                        method(VIEW, "requestFocus", &[], "Z"),
+                                        vec![receiver],
+                                        true,
+                                    )?
+                                    .first()
+                                    .context("missing touch focus result")?
+                                    .truth()
+                                } else {
+                                    false
+                                };
+                                if !focus_taken {
+                                    self.invoke(
+                                        method(VIEW, "performClick", &[], "Z"),
+                                        vec![receiver],
+                                        true,
+                                    )?;
+                                }
                             }
                         }
                         3 => {
@@ -1180,7 +1203,9 @@ impl Runtime {
         let object = self.heap.get(word)?;
         let view = object.view.as_ref().context("expected View")?;
         Ok(object.fields.get("droidless:touch:clickable").map_or(
-            view.kind == "Button" || view.listener.is_some() || view.xml_click.is_some(),
+            matches!(view.kind.as_str(), "Button" | "EditText")
+                || view.listener.is_some()
+                || view.xml_click.is_some(),
             |v| v.first().is_some_and(|w| w.truth()),
         ))
     }

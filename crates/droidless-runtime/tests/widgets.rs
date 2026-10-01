@@ -2,6 +2,34 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_touch_focus_default_clickability_cancellation_and_callback_gc() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    assert_eq!(
+        vm.invoke(
+            Method {
+                class: "Lorg/droidless/images/TouchFocusContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "I".into(),
+            },
+            vec![activity],
+            false
+        )
+        .unwrap(),
+        [Word::from(1)]
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(activity).is_err(),
+        "touch focus leaked temporary roots"
+    );
+}
+
+#[test]
 fn compiled_background_resources_dispatch_cache_gc_and_fault_recovery() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

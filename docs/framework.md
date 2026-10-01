@@ -334,6 +334,23 @@ ahead. This is explicit guest focus ownership rather than full input parity.
 [API-21 View](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/View.java),
 [ViewGroup](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
 
+Clickable, enabled touch releases request virtual focus when the View is
+focusable in touch mode and does not already own focus. A successful focus
+request suppresses that tap's click; a later tap dispatches the real click.
+EditText has the clickable default; explicit clickability still overrides it.
+Compiled checks cover focus/click order, cancellation, disabled Views, non-touch
+focusability and callback GC. This does not add automatic traversal or host
+first-responder synchronization.
+
+Context's cached input_method service exposes a hardware-keyboard profile.
+showSoftInput(View, flags) and hideSoftInputFromWindow(token, flags) return false
+because no software input method is served. Nullable targets are accepted;
+non-null targets and flags are checked. Calls preserve text and explicit focus.
+The compiled contract checks service identity across Contexts/GC, detached and
+attached Views, window tokens, nulls and focus/text retention. Software keyboards,
+InputConnection, ResultReceiver overloads and IME editor navigation remain
+unsupported. [API-21 InputMethodManager](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/inputmethod/InputMethodManager.java).
+
 ViewGroup.offsetDescendantRectToMyCoords and offsetRectIntoDescendantCoords
 translate a Rect in place through actual managed parents, layout positions and
 retained scroll offsets. The root's position and scroll are excluded. Java
@@ -505,6 +522,15 @@ fault cleanup. Portable constructor checks also pass on Java 17; its field
 assignment order differs, so the callback-state check is API-21-only.
 Cause-only constructors, initCause, suppression and StackTraceElement arrays
 remain unsupported.
+
+Log.d/i/w/e(String, String, Throwable) write the message and retained DEX trace
+to host stderr through the existing bounded Throwable renderer. Virtual
+description/cause callbacks retain GC roots; faults propagate with cleanup.
+Null Throwable has no trace, null message becomes "null", and null tag is empty.
+The host sink returns zero; Android log-buffer byte counts, PrintWriter override
+dispatch and UnknownHostException trace suppression are outside this profile.
+Compiled checks cover all four levels, callback GC, circular causes, nulls and
+fault recovery. [API-21 Log](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/util/Log.java).
 
 APK-local Class lookup and no-argument reflective construction execute guest
 initializers/constructors with access and exception checks. Inherited field

@@ -253,6 +253,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/view/ViewParent;",
             "Landroid/view/Gravity;",
             "Landroid/view/InputEvent;",
+            "Landroid/view/inputmethod/InputMethodManager;",
             "Ldroidless/runtime/GestureTimer;",
             "Landroid/content/Intent;",
             "Landroid/net/Uri;",

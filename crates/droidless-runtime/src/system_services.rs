@@ -30,6 +30,7 @@ impl Runtime {
                     // DROIDLESS exposes an offline virtual network; host connectivity is not shared.
                     "connectivity" => "Landroid/net/ConnectivityManager;",
                     "accessibility" => "Landroid/view/accessibility/AccessibilityManager;",
+                    "input_method" => "Landroid/view/inputmethod/InputMethodManager;",
                     _ => return Ok(Some(vec![Word::ZERO])),
                 };
                 let key = format!("droidless:service:{name}");
@@ -48,6 +49,26 @@ impl Runtime {
                     service
                 };
                 Ok(Some(vec![service]))
+            }
+            (
+                "Landroid/view/inputmethod/InputMethodManager;",
+                "showSoftInput(Landroid/view/View;I)Z"
+                | "hideSoftInputFromWindow(Landroid/os/IBinder;I)Z",
+            ) => {
+                self.heap.get(argument(0)?)?;
+                let target = argument(1)?;
+                argument(2)?.int()?;
+                let class = if method.name == "showSoftInput" {
+                    "Landroid/view/View;"
+                } else {
+                    "Landroid/os/IBinder;"
+                };
+                ensure!(
+                    target == Word::ZERO || self.is_a(&self.heap.get(target)?.class, class),
+                    "invalid software-input request target"
+                );
+                // ponytail: hardware-keyboard profile has no served software IME; add a host IME bridge when needed.
+                Ok(Some(vec![Word::ZERO]))
             }
             ("Landroid/net/NetworkRequest$Builder;", "<init>()V") => {
                 self.heap.get_mut(argument(0)?)?.data = Data::NetworkRequestBuilder(vec![]);
@@ -194,6 +215,42 @@ mod tests {
             false,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn compiled_hardware_keyboard_service_identity_gc_and_negative_requests() {
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap(),
+        )
+        .unwrap();
+        vm.launch().unwrap();
+        let activity = vm.activity.unwrap();
+        let editor = vm
+            .invoke(
+                Method {
+                    class: "Lorg/droidless/images/HardwareKeyboardContract;".into(),
+                    name: "run".into(),
+                    parameters: vec!["Landroid/app/Activity;".into()],
+                    returns: "Landroid/view/View;".into(),
+                },
+                vec![activity],
+                false,
+            )
+            .unwrap()[0];
+        vm.collect();
+        assert_eq!(
+            vm.heap.get(editor).unwrap().view.as_ref().unwrap().text,
+            "Hardware text"
+        );
+        let service = vm.statics["droidless:service:input_method"][0];
+        assert_eq!(
+            vm.heap.get(service).unwrap().class,
+            "Landroid/view/inputmethod/InputMethodManager;"
+        );
+        assert!(vm.native_roots.is_empty());
+        assert_eq!(vm.stack_depth(), 0);
+        vm.close().unwrap();
+        assert!(vm.native_roots.is_empty());
     }
 
     #[test]
