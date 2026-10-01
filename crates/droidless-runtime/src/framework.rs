@@ -2146,6 +2146,12 @@ impl Runtime {
             ("Ljava/lang/Math;", "max(II)I") => {
                 result.push(Word::from(arg(0)?.int()?.max(arg(1)?.int()?)));
             }
+            ("Ljava/lang/Math;", "max(FF)F") => {
+                let left=f32::from_bits(arg(0)?.int()? as u32);
+                let right=f32::from_bits(arg(1)?.int()? as u32);
+                let value=if left.is_nan() {left} else if left==0.0 && right==0.0 && right.is_sign_positive() {right} else if left>=right {left} else {right};
+                result.push(Word::Bits(value.to_bits()));
+            }
             ("Ljava/lang/Math;", "min(FF)F") => {
                 let left=f32::from_bits(arg(0)?.int()? as u32);
                 let right=f32::from_bits(arg(1)?.int()? as u32);

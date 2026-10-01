@@ -39,8 +39,9 @@ input. Selection never toggles a checked item automatically and a false callback
 return does not undo guest effects. Native menu presentation/input remain open.
 The public Notepad's Delete callback removes the intended SQLite row and preserves
 the other row, then reaches its original Snackbar feedback. That path currently
-fails at Math.max(float, float) in its queued Snackbar callback; a complete
-delete/return/restart workflow is not yet verified. Generic `<view class="…">` layout inflation now invokes the
+gets past Snackbar float clamping, then fails at ViewGroup.removeDetachedView
+during RecyclerView layout; a complete delete/return/restart workflow is not yet
+verified. Generic `<view class="…">` layout inflation now invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree
 through callback GC. View live-region mode bits are retained; Android accessibility
@@ -94,7 +95,9 @@ unsupported. [Grid scope](framework.md#adapter-backed-grids).
 String valueOf/toString/length/hashCode/equals/startsWith/contains/
 substring/concat/charAt; StringBuilder constructors/append/toString; Integer
 parseInt/toString; Float parseFloat (decimal); Double parseDouble/valueOf(D)/doubleValue/toString/isNaN(D); Long toString(J)/rotateRight(JI); Math sqrt/cbrt/sin/cos/tan/log/
-exp/abs/pow; Log d/i/w/e. The source's exact signature table is authoritative;
+exp/abs/pow, integer min/max and float min/max; Log d/i/w/e. Float extrema retain
+NaN and distinguish signed zero, checked by the same compiled contract on DEX
+and desktop Java. The source's exact signature table is authoritative;
 other overloads remain unsupported.
 Throwable constructors/getMessage/getLocalizedMessage/getCause/toString,
 fillInStackTrace and no-argument printStackTrace retain real DEX locations and

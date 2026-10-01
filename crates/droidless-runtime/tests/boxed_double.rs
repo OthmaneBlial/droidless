@@ -5,6 +5,28 @@ use droidless_runtime::{
 };
 
 #[test]
+fn compiled_float_min_max_nan_signed_zero_and_infinity() {
+    let mut vm = Runtime::new(
+        Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
+    )
+    .unwrap();
+    let result = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/counter/MathContract;".into(),
+                name: "run".into(),
+                parameters: vec![],
+                returns: "I".into(),
+            },
+            vec![],
+            false,
+        )
+        .unwrap();
+    assert_eq!(result, [Word::from(1)]);
+    assert_eq!(vm.stack_depth(), 0);
+}
+
+#[test]
 fn boxed_double_preserves_bits_and_dispatches_through_number() {
     let mut vm = Runtime::new(
         Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),

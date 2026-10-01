@@ -1233,7 +1233,7 @@ opens one and selects its original Delete item. The actual callback executes
 SQLite DELETE; the resulting table contains only the other note with its original
 ID, title and body. EventBus description/posting and generic Snackbar-layout
 construction now execute. Returning to Notes then fails at the original
-queued Snackbar Math.max(float, float) call. This is partial deletion
+ViewGroup.removeDetachedView call during RecyclerView layout. This is partial deletion
 evidence, not a passing delete/return/restart workflow or native menu interaction.
 The regression catalog keeps the complete deletion capability false.
 
@@ -1265,8 +1265,9 @@ The compiled contract checks default state, all mode bits, out-of-range values
 and GC. Android accessibility-service event delivery is not implemented.
 
 The pinned Notepad delete probe now completes its original SnackbarLayout child
-binding and delivers its queued confirmation callback; it reaches Math.max(float,
-float). The complete workflow remains unverified, and the catalog keeps that capability false.
+binding and delivers its queued confirmation callback; it now reaches
+ViewGroup.removeDetachedView during RecyclerView layout. The complete workflow remains unverified, and the
+catalog keeps that capability false.
 
 ## Current-source Handler payload factory
 
@@ -1279,5 +1280,27 @@ and worker delivery regressions still pass. This follows the [API-21 Handler
 factory](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/os/Handler.java).
 
 The pinned Notepad Delete callback now queues and executes its original Snackbar
-Handler.Callback. It fails next at Math.max(float, float) in SwipeDismissBehavior.
+Handler.Callback. It gets past SwipeDismissBehavior float clamping, then fails at
+ViewGroup.removeDetachedView during RecyclerView layout.
 Complete delete/return/restart and native options-menu input remain unverified.
+
+## Current-source float extrema
+
+Math.max(float, float) adds the missing counterpart to the existing float minimum.
+The compiled MathContract checks both methods with ordinary/reversed/equal values,
+both orders and signs of zero, infinities, either/both NaN operands and a subnormal.
+Its signed-zero check compares reciprocal signs. The same contract passes on
+desktop Java 17, following the [Java Math contract](https://docs.oracle.com/javase/8/docs/api/java/lang/Math.html#max-float-float-).
+
+```sh
+cargo test -p droidless-runtime --test boxed_double --locked
+java -cp examples/counter/build/classes org.droidless.counter.MathContract
+```
+
+The pinned original Notepad Delete replay now gets past Snackbar float clamping
+and reaches ViewGroup.removeDetachedView during RecyclerView layout. The intended
+row is removed and the other retains its original ID/title/body, but complete
+delete/return/restart and native menu input are still unverified.
+
+Full local CI passes 101 Rust tests, warning-free Clippy, optimized CLI/replay
+builds and 4,096 seeded parser mutations. GitHub Actions remain disabled.
