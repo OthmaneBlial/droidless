@@ -10,14 +10,21 @@ use droidless_formats::{
 
 const OBSERVERS: &str = "Landroid/database/Observable;->mObservers:Ljava/util/ArrayList;";
 
-pub(crate) fn porter_duff_mode_ordinal(name: &str) -> Option<i32> {
-    [
-        "CLEAR", "SRC", "DST", "SRC_OVER", "DST_OVER", "SRC_IN", "DST_IN", "SRC_OUT", "DST_OUT",
-        "SRC_ATOP", "DST_ATOP", "XOR", "DARKEN", "LIGHTEN", "MULTIPLY", "SCREEN", "ADD", "OVERLAY",
-    ]
-    .iter()
-    .position(|mode| *mode == name)
-    .map(|ordinal| ordinal as i32)
+pub(crate) fn graphics_enum_names(class: &str) -> Option<&'static [&'static str]> {
+    Some(match class {
+        "Landroid/graphics/PorterDuff$Mode;" => &[
+            "CLEAR", "SRC", "DST", "SRC_OVER", "DST_OVER", "SRC_IN", "DST_IN", "SRC_OUT",
+            "DST_OUT", "SRC_ATOP", "DST_ATOP", "XOR", "DARKEN", "LIGHTEN", "MULTIPLY", "SCREEN",
+            "ADD", "OVERLAY",
+        ],
+        "Landroid/graphics/Paint$Cap;" => &["BUTT", "ROUND", "SQUARE"],
+        "Landroid/graphics/Paint$Join;" => &["MITER", "ROUND", "BEVEL"],
+        "Landroid/graphics/Paint$Style;" => &["FILL", "STROKE", "FILL_AND_STROKE"],
+        "Landroid/graphics/Path$FillType;" => {
+            &["WINDING", "EVEN_ODD", "INVERSE_WINDING", "INVERSE_EVEN_ODD"]
+        }
+        _ => return None,
+    })
 }
 
 // Fixed virtual API branch profile, independent of the APK and host OS.
@@ -26,6 +33,7 @@ pub(crate) const SDK_INT: i32 = 21;
 pub(crate) fn known_class(class: &str) -> bool {
     crate::ui::View::for_class(class).is_some()
         || exception_parent(class).is_some()
+        || graphics_enum_names(class).is_some()
         || [
             "Ljava/lang/Object;",
             "Ljava/lang/Enum;",
@@ -57,6 +65,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/animation/Animator;",
             "Landroid/animation/ObjectAnimator;",
             "Landroid/animation/StateListAnimator;",
+            "Landroid/animation/LayoutTransition;",
             "Ljava/lang/ThreadGroup;",
             "Landroid/view/animation/Animation;",
             "Landroid/view/animation/AnimationUtils;",
@@ -149,6 +158,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Lorg/xmlpull/v1/XmlPullParser;",
             "Landroid/graphics/Rect;",
             "Landroid/graphics/RectF;",
+            "Landroid/graphics/Matrix;",
+            "Landroid/graphics/Path;",
             "Landroid/graphics/Paint;",
             "Landroid/graphics/PorterDuff$Mode;",
             "Landroid/text/TextUtils;",
@@ -293,6 +304,38 @@ impl Runtime {
         Ok(array)
     }
 
+    fn overlay_attributes(
+        &self,
+        set: Word,
+        attributes: &mut std::collections::BTreeMap<u32, Value>,
+    ) -> Result<()> {
+        if set == Word::ZERO {
+            return Ok(());
+        }
+        match &self.heap.get(set)?.data {
+            Data::Attributes { resources, .. } => attributes.extend(resources.clone()),
+            Data::XmlPull {
+                events,
+                position,
+                closed,
+            } => {
+                ensure!(!closed, "closed XmlResourceParser");
+                let event = events
+                    .get(*position)
+                    .context("invalid XML parser position")?;
+                attributes.extend(
+                    event
+                        .attributes
+                        .iter()
+                        .filter(|a| a.name_resource != 0)
+                        .map(|a| (a.name_resource, a.value.clone())),
+                );
+            }
+            _ => bail!("uninitialized AttributeSet"),
+        }
+        Ok(())
+    }
+
     pub(crate) fn sdk_field(&self, field: &Field) -> bool {
         field.class == "Landroid/os/Build$VERSION;"
             && field.name == "SDK_INT"
@@ -345,14 +388,10 @@ impl Runtime {
         self.statics.insert(key, vec![value]);
         Ok(value)
     }
-    pub(crate) fn porter_duff_mode(&mut self, name: &str) -> Result<Word> {
-        let ordinal = porter_duff_mode_ordinal(name)
-            .with_context(|| format!("unknown PorterDuff mode {name}"))?;
-        let field = Field {
-            class: "Landroid/graphics/PorterDuff$Mode;".into(),
-            name: name.into(),
-            ty: "Landroid/graphics/PorterDuff$Mode;".into(),
-        };
+    pub(crate) fn graphics_enum_object(&mut self, field: &Field) -> Result<Word> {
+        let ordinal = graphics_enum_names(&field.class)
+            .and_then(|names| names.iter().position(|name| *name == field.name))
+            .context("unknown graphics enum value")?;
         if let Some(value) = self
             .statics
             .get(&field.key())
@@ -361,10 +400,13 @@ impl Runtime {
             return Ok(*value);
         }
         let mode = self.heap.instance(&field.class)?;
-        let name = self.intern(name.into())?;
+        let name = self.intern(field.name.clone())?;
         let fields = &mut self.heap.get_mut(mode)?.fields;
         fields.insert("droidless:enum:name".into(), vec![name]);
-        fields.insert("droidless:enum:ordinal".into(), vec![Word::from(ordinal)]);
+        fields.insert(
+            "droidless:enum:ordinal".into(),
+            vec![Word::from(ordinal as i32)],
+        );
         self.statics.insert(field.key(), vec![mode]);
         Ok(mode)
     }
@@ -395,6 +437,12 @@ impl Runtime {
             eprintln!("framework: {} {args:?}", method.key());
         }
         if let Some(result) = self.xml_resource_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.matrix_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.path_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.text_native(method, args)? {
@@ -1282,6 +1330,12 @@ impl Runtime {
             ("Landroid/graphics/drawable/Drawable;", "getConstantState()Landroid/graphics/drawable/Drawable$ConstantState;") => {
                 result.push(Word::ZERO);
             }
+            ("Landroid/graphics/drawable/Drawable;", "getChangingConfigurations()I") => {
+                result.push(self.heap.get(receiver)?.fields.get("droidless:drawable:configurations").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO));
+            }
+            ("Landroid/graphics/drawable/Drawable;", "setChangingConfigurations(I)V") => {
+                self.heap.get_mut(receiver)?.fields.insert("droidless:drawable:configurations".into(), vec![arg(1)?]);
+            }
             ("Landroid/graphics/drawable/Drawable;", "invalidateSelf()V") => {
                 self.heap.get(receiver)?;
             }
@@ -1497,6 +1551,11 @@ impl Runtime {
             }
             ("Ljava/lang/String;", "length()I") => result.push(Word::from(
                 self.heap.text(receiver)?.encode_utf16().count() as i32,
+            )),
+            ("Ljava/lang/String;", "hashCode()I") => result.push(Word::from(
+                self.heap.text(receiver)?.encode_utf16().fold(0i32, |hash, unit| {
+                    hash.wrapping_mul(31).wrapping_add(i32::from(unit))
+                }),
             )),
             ("Ljava/lang/String;", "isEmpty()Z") => {
                 result.push(Word::from(i32::from(self.heap.text(receiver)?.is_empty())))
@@ -1869,18 +1928,12 @@ impl Runtime {
             | ("Ljava/lang/Double;", "hashCode()I") => {
                 bail!("unsupported Double method {}", method.key());
             }
+            ("Ljava/lang/Float;", "parseFloat(Ljava/lang/String;)F") => {
+                let value = java_decimal_literal(self.heap.text(arg(0)?)?)?.parse::<f32>().map_err(|_| fault("Ljava/lang/NumberFormatException;", "invalid floating-point string"))?;
+                result.push(Word::Bits(value.to_bits()));
+            }
             ("Ljava/lang/Double;", "parseDouble(Ljava/lang/String;)D") => {
-                let value = self
-                    .heap
-                    .text(arg(0)?)?
-                    .trim()
-                    .parse::<f64>()
-                    .map_err(|_| {
-                        fault(
-                            "Ljava/lang/NumberFormatException;",
-                            "invalid floating-point string",
-                        )
-                    })?;
+                let value = java_decimal_literal(self.heap.text(arg(0)?)?)?.parse::<f64>().map_err(|_| fault("Ljava/lang/NumberFormatException;", "invalid floating-point string"))?;
                 result = wide(value.to_bits());
             }
             ("Ljava/lang/Integer;", "parseInt(Ljava/lang/String;)I") => {
@@ -2087,7 +2140,7 @@ impl Runtime {
             }
             ("Landroid/util/AttributeSet;", "getAttributeCount()I") => {
                 let count = match &self.heap.get(receiver)?.data {
-                    Data::Attributes(attributes) => attributes.len() as i32,
+                    Data::Attributes { named, .. } => named.len() as i32,
                     Data::XmlPull { events, position, .. } => {
                         let event = events.get(*position).context("invalid XML parser position")?;
                         if event.kind == 2 {
@@ -2330,7 +2383,10 @@ impl Runtime {
                 if method.parameters.len() == 4 {
                     styles.push(arg(4)?.int()? as u32);
                 }
-                let attributes = self.styled_attributes(&styles)?;
+                let mut attributes = self.styled_attributes(&styles)?;
+                if method.parameters.first().is_some_and(|parameter| parameter == "Landroid/util/AttributeSet;") {
+                    self.overlay_attributes(arg(1)?, &mut attributes)?;
+                }
                 result.push(self.typed_array(attrs, &attributes)?);
             }
             ("Landroid/content/res/Resources;", "newTheme()Landroid/content/res/Resources$Theme;") => {
@@ -2535,7 +2591,10 @@ impl Runtime {
                 if method.parameters.len() == 4 {
                     styles.push(arg(4)?.int()? as u32);
                 }
-                let attributes = self.styled_attributes(&styles)?;
+                let mut attributes = self.styled_attributes(&styles)?;
+                if method.parameters.first().is_some_and(|parameter| parameter == "Landroid/util/AttributeSet;") {
+                    self.overlay_attributes(arg(1)?, &mut attributes)?;
+                }
                 result.push(self.typed_array(attrs, &attributes)?);
             }
             ("Landroid/content/res/Resources$Theme;", "applyStyle(IZ)V") => {
@@ -2604,11 +2663,25 @@ impl Runtime {
                         result.push(Word::from(value.filter(|value| value.kind == 1).map_or(arg(2)?.int()?, |value| value.data as i32)));
                     }
                     "getDimension(IF)F" | "getFloat(IF)F" => {
-                        let fallback = arg(2)?.int()? as u32;
-                        let bits = value.map_or(fallback, |value| value.data);
-                        result.push(Word::Bits(bits));
+                        let number = if let Some(value) = value {
+                            let value = self.attribute(&value)?;
+                            if sig.starts_with("getDimension") { dimension(&value)? }
+                            else { match value.kind {
+                                4 => f32::from_bits(value.data),
+                                0x10..=0x1f => value.data as i32 as f32,
+                                3 => value.text.as_deref().context("missing float text")?.parse()?,
+                                _ => bail!("TypedArray value is not a float"),
+                            } }
+                        } else { f32::from_bits(arg(2)?.int()? as u32) };
+                        result.push(Word::Bits(number.to_bits()));
                     }
-                    "getDimensionPixelOffset(II)I" | "getDimensionPixelSize(II)I" => result.push(arg(2)?),
+                    "getDimensionPixelOffset(II)I" | "getDimensionPixelSize(II)I" => {
+                        let pixels = if let Some(value) = value {
+                            let pixels = dimension(&self.attribute(&value)?)?;
+                            if sig.starts_with("getDimensionPixelSize") { pixels.round() as i32 } else { pixels.trunc() as i32 }
+                        } else { arg(2)?.int()? };
+                        result.push(Word::from(pixels));
+                    }
                     "getString(I)Ljava/lang/String;" | "getText(I)Ljava/lang/CharSequence;" => {
                         if let Some(value) = value {
                             if let Some(text) = value.text {
@@ -2950,6 +3023,20 @@ impl Runtime {
                         .unwrap_or(Word::from(0xff00_0000u32 as i32)),
                 );
             }
+            ("Landroid/graphics/Paint;", "setStyle(Landroid/graphics/Paint$Style;)V")
+            | ("Landroid/graphics/Paint;", "setStrokeCap(Landroid/graphics/Paint$Cap;)V")
+            | ("Landroid/graphics/Paint;", "setStrokeJoin(Landroid/graphics/Paint$Join;)V") => {
+                let value = arg(1)?;
+                ensure!(self.is_a(&self.heap.get(value)?.class, &method.parameters[0]), "invalid Paint enum value");
+                self.heap.get_mut(receiver)?.fields.insert(format!("droidless:paint:{}", method.name), vec![value]);
+            }
+            ("Landroid/graphics/Paint;", "setStrokeWidth(F)V")
+            | ("Landroid/graphics/Paint;", "setStrokeMiter(F)V") => {
+                let value = arg(1)?;
+                let number = f32::from_bits(value.int()? as u32);
+                ensure!(number.is_finite() && number >= 0., "invalid Paint stroke dimension");
+                self.heap.get_mut(receiver)?.fields.insert(format!("droidless:paint:{}", method.name), vec![value]);
+            }
             ("Landroid/graphics/Rect;", "<init>(IIII)V")
             | ("Landroid/graphics/Rect;", "set(IIII)V") => {
                 let fields = &mut self.heap.get_mut(receiver)?.fields;
@@ -3255,6 +3342,14 @@ impl Runtime {
                 self.heap.get_mut(child)?.fields.insert("droidless:view:parent".into(), vec![receiver]);
                 self.hierarchy_change(receiver, child, true)?;
             }
+            ("Landroid/view/ViewGroup;", "setLayoutTransition(Landroid/animation/LayoutTransition;)V") => {
+                self.view_mut(receiver)?;
+                let transition = arg(1)?;
+                if transition != Word::ZERO {
+                    ensure!(self.is_a(&self.heap.get(transition)?.class, "Landroid/animation/LayoutTransition;"), "invalid layout transition");
+                }
+                self.heap.get_mut(receiver)?.fields.insert("droidless:view:layout-transition".into(), vec![transition]);
+            }
             ("Landroid/view/ViewGroup;", "addView(Landroid/view/View;I)V") => {
                 let child = arg(1)?;
                 let index = arg(2)?.int()?;
@@ -3453,6 +3548,22 @@ impl Runtime {
                 let size = f32::from_bits(arg(1)?.int()? as u32);
                 ensure!(size.is_finite() && size >= 0.0, "invalid text size");
                 self.view_mut(receiver)?.text_size = size;
+            }
+            ("Landroid/widget/TextView;", "setTextAppearance(Landroid/content/Context;I)V")
+            | ("Landroid/widget/TextView;", "setTextAppearance(I)V") => {
+                let style = arg(if args.len() == 3 { 2 } else { 1 })?.int()? as u32;
+                let attributes = self.apk.resources.style(style)?;
+                if let Some(size) = attributes.get(&0x0101_0095) {
+                    let size = dimension(&self.attribute(size)?)?;
+                    ensure!(size >= 0., "invalid text appearance size");
+                    self.view_mut(receiver)?.text_size = size;
+                }
+                if let Some(color) = attributes.get(&0x0101_0098) {
+                    let color = self.attribute(color)?;
+                    ensure!((0x1c..=0x1f).contains(&color.kind), "unsupported text appearance color state list or theme value");
+                    self.view_mut(receiver)?.text_color = color.data;
+                }
+                // ponytail: apply size and flat color; typography/state lists need a richer native text model.
             }
             ("Landroid/widget/TextView;", "setTextColor(I)V") => {
                 self.view_mut(receiver)?.text_color = arg(1)?.int()? as u32
@@ -4252,7 +4363,7 @@ impl Runtime {
     }
     fn attribute_set_value(&self, attrs: Word, name: &str) -> Result<Option<Value>> {
         match &self.heap.get(attrs)?.data {
-            Data::Attributes(attributes) => Ok(attributes.get(name).cloned()),
+            Data::Attributes { named, .. } => Ok(named.get(name).cloned()),
             Data::XmlPull {
                 events, position, ..
             } => {
@@ -4355,7 +4466,10 @@ impl Runtime {
             .any(|ty| ty == attributes_type)
         {
             let attrs = self.heap.instance(attributes_type)?;
-            self.heap.get_mut(attrs)?.data = Data::Attributes(element.attributes.clone());
+            self.heap.get_mut(attrs)?.data = Data::Attributes {
+                named: element.attributes.clone(),
+                resources: element.resource_attributes.clone(),
+            };
             args.push(attrs);
         }
         if constructor.parameters.last().is_some_and(|ty| ty == "I") {
@@ -4424,13 +4538,6 @@ impl Runtime {
         for (name, raw) in &element.attributes {
             match name.as_str() {
                 "text" => {
-                    view.text = if raw.kind == 1 {
-                        self.resource_text(raw.data)?
-                    } else {
-                        raw.display()
-                    }
-                }
-                "title" if class == "Landroid/support/v7/widget/Toolbar;" => {
                     view.text = if raw.kind == 1 {
                         self.resource_text(raw.data)?
                     } else {
@@ -4641,6 +4748,26 @@ fn rgb_to_hsv(color: u32) -> [f32; 3] {
         maximum,
     ]
 }
+fn java_decimal_literal(text: &str) -> Result<&str> {
+    static DECIMAL: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+        regex::Regex::new(r"\A[+-]?(?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?[fFdD]?|NaN|Infinity)\z").unwrap()
+    });
+    let text = text.trim_matches(|c| c <= '\u{20}');
+    let unsigned = text.trim_start_matches(['+', '-']);
+    ensure!(
+        !unsigned.starts_with("0x") && !unsigned.starts_with("0X"),
+        "hexadecimal floating-point literals are unsupported"
+    );
+    ensure!(
+        DECIMAL.is_match(text),
+        fault(
+            "Ljava/lang/NumberFormatException;",
+            "invalid floating-point string"
+        )
+    );
+    Ok(text.trim_end_matches(['f', 'F', 'd', 'D']))
+}
+
 fn java_double(v: f64) -> String {
     if v.is_nan() {
         "NaN".into()

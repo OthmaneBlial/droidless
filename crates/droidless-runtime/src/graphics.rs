@@ -1,4 +1,230 @@
-use anyhow::{Result, ensure};
+use crate::{
+    heap::{Data, PathCommand, Word, fault},
+    vm::Runtime,
+};
+use anyhow::{Context, Result, bail, ensure};
+use droidless_formats::dex::Method;
+
+const IDENTITY: [f32; 9] = [1., 0., 0., 0., 1., 0., 0., 0., 1.];
+
+fn multiply(left: [f32; 9], right: [f32; 9]) -> [f32; 9] {
+    std::array::from_fn(|i| {
+        (0..3)
+            .map(|k| left[i / 3 * 3 + k] * right[k * 3 + i % 3])
+            .sum()
+    })
+}
+
+impl Runtime {
+    pub(crate) fn path_native(
+        &mut self,
+        method: &Method,
+        args: &[Word],
+    ) -> Result<Option<Vec<Word>>> {
+        if method.class != "Landroid/graphics/Path;" {
+            return Ok(None);
+        }
+        let arg = |index| args.get(index).copied().context("Path argument missing");
+        let receiver = arg(0)?;
+        match method.signature().as_str() {
+            "<init>()V" | "reset()V" | "rewind()V" => {
+                self.heap.get_mut(receiver)?.data = Data::Path(vec![])
+            }
+            "<init>(Landroid/graphics/Path;)V" | "set(Landroid/graphics/Path;)V" => {
+                let Data::Path(commands) = &self.heap.get(arg(1)?)?.data else {
+                    bail!("uninitialized Path");
+                };
+                self.heap.get_mut(receiver)?.data = Data::Path(commands.clone());
+            }
+            "moveTo(FF)V" | "lineTo(FF)V" | "quadTo(FFFF)V" | "cubicTo(FFFFFF)V" | "close()V" => {
+                let float =
+                    |index| -> Result<f32> { Ok(f32::from_bits(arg(index)?.int()? as u32)) };
+                let command = match method.name.as_str() {
+                    "moveTo" => PathCommand::Move([float(1)?, float(2)?]),
+                    "lineTo" => PathCommand::Line([float(1)?, float(2)?]),
+                    "quadTo" => PathCommand::Quad([float(1)?, float(2)?, float(3)?, float(4)?]),
+                    "cubicTo" => PathCommand::Cubic([
+                        float(1)?,
+                        float(2)?,
+                        float(3)?,
+                        float(4)?,
+                        float(5)?,
+                        float(6)?,
+                    ]),
+                    _ => PathCommand::Close,
+                };
+                let Data::Path(commands) = &mut self.heap.get_mut(receiver)?.data else {
+                    bail!("uninitialized Path");
+                };
+                ensure!(
+                    commands.len() < 100_000,
+                    "Path command limit reached (100000)"
+                );
+                if commands.is_empty()
+                    && !matches!(command, PathCommand::Move(_) | PathCommand::Close)
+                {
+                    commands.push(PathCommand::Move([0., 0.]));
+                }
+                if !commands.is_empty() || !matches!(command, PathCommand::Close) {
+                    commands.push(command);
+                }
+            }
+            _ => bail!("unsupported Path method {}", method.key()),
+        }
+        Ok(Some(vec![]))
+    }
+
+    fn matrix_values(&self, object: Word) -> Result<[f32; 9]> {
+        let Data::Matrix(values) = self.heap.get(object)?.data else {
+            bail!("uninitialized Matrix");
+        };
+        Ok(values)
+    }
+
+    pub(crate) fn matrix_native(
+        &mut self,
+        method: &Method,
+        args: &[Word],
+    ) -> Result<Option<Vec<Word>>> {
+        if method.class != "Landroid/graphics/Matrix;" {
+            return Ok(None);
+        }
+        let arg = |index| args.get(index).copied().context("Matrix argument missing");
+        let receiver = arg(0)?;
+        let float = |index| -> Result<f32> { Ok(f32::from_bits(arg(index)?.int()? as u32)) };
+        let signature = method.signature();
+        let mut result = vec![];
+        let matrix = match signature.as_str() {
+            "<init>()V" | "reset()V" => IDENTITY,
+            "<init>(Landroid/graphics/Matrix;)V" | "set(Landroid/graphics/Matrix;)V" => {
+                if arg(1)? == Word::ZERO {
+                    IDENTITY
+                } else {
+                    self.matrix_values(arg(1)?)?
+                }
+            }
+            "isIdentity()Z" => {
+                return Ok(Some(vec![Word::from(i32::from(
+                    self.matrix_values(receiver)? == IDENTITY,
+                ))]));
+            }
+            "equals(Ljava/lang/Object;)Z" => {
+                let equal = matches!(self.heap.get(arg(1)?).map(|o| &o.data), Ok(Data::Matrix(other)) if *other == self.matrix_values(receiver)?);
+                return Ok(Some(vec![Word::from(i32::from(equal))]));
+            }
+            "getValues([F)V" | "setValues([F)V" => {
+                let matrix = self.matrix_values(receiver)?;
+                let Data::Array { element, values } = &mut self.heap.get_mut(arg(1)?)?.data else {
+                    bail!("Matrix values require float[]");
+                };
+                ensure!(element == "F", "Matrix values require float[]");
+                ensure!(
+                    values.len() >= 9,
+                    fault(
+                        "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                        "Matrix needs nine values"
+                    )
+                );
+                if method.name == "getValues" {
+                    for (slot, value) in values.iter_mut().zip(matrix) {
+                        *slot = vec![Word::Bits(value.to_bits())];
+                    }
+                    return Ok(Some(vec![]));
+                }
+                let mut matrix = [0.; 9];
+                for (slot, value) in matrix.iter_mut().zip(values) {
+                    *slot =
+                        f32::from_bits(value.first().copied().unwrap_or(Word::ZERO).int()? as u32);
+                }
+                matrix
+            }
+            "mapPoints([F)V" | "mapVectors([F)V" => {
+                let m = self.matrix_values(receiver)?;
+                let vectors = method.name == "mapVectors";
+                let Data::Array { element, values } = &mut self.heap.get_mut(arg(1)?)?.data else {
+                    bail!("Matrix coordinates require float[]");
+                };
+                ensure!(element == "F", "Matrix coordinates require float[]");
+                for pair in values.chunks_exact_mut(2) {
+                    let x = f32::from_bits(
+                        pair[0].first().copied().unwrap_or(Word::ZERO).int()? as u32
+                    );
+                    let y = f32::from_bits(
+                        pair[1].first().copied().unwrap_or(Word::ZERO).int()? as u32
+                    );
+                    let denominator = m[6] * x + m[7] * y + m[8];
+                    if vectors && m[6] == 0. && m[7] == 0. {
+                        pair[0] = vec![Word::Bits(((m[0] * x + m[1] * y) / denominator).to_bits())];
+                        pair[1] = vec![Word::Bits(((m[3] * x + m[4] * y) / denominator).to_bits())];
+                        continue;
+                    }
+                    let origin = if vectors {
+                        [m[2] / m[8], m[5] / m[8]]
+                    } else {
+                        [0., 0.]
+                    };
+                    pair[0] = vec![Word::Bits(
+                        ((m[0] * x + m[1] * y + m[2]) / denominator - origin[0]).to_bits(),
+                    )];
+                    pair[1] = vec![Word::Bits(
+                        ((m[3] * x + m[4] * y + m[5]) / denominator - origin[1]).to_bits(),
+                    )];
+                }
+                return Ok(Some(vec![]));
+            }
+            "preConcat(Landroid/graphics/Matrix;)Z"
+            | "postConcat(Landroid/graphics/Matrix;)Z"
+            | "postTranslate(FF)Z"
+            | "preTranslate(FF)Z"
+            | "setTranslate(FF)V"
+            | "postScale(FF)Z"
+            | "preScale(FF)Z"
+            | "setScale(FF)V"
+            | "postRotate(F)Z"
+            | "postRotate(FFF)Z" => {
+                let transform = if method.name.ends_with("Concat") {
+                    self.matrix_values(arg(1)?)?
+                } else if method.name.ends_with("Translate") {
+                    [1., 0., float(1)?, 0., 1., float(2)?, 0., 0., 1.]
+                } else if method.name.ends_with("Scale") {
+                    [float(1)?, 0., 0., 0., float(2)?, 0., 0., 0., 1.]
+                } else {
+                    let (sin, cos) = float(1)?.to_radians().sin_cos();
+                    let (px, py) = if args.len() == 4 {
+                        (float(2)?, float(3)?)
+                    } else {
+                        (0., 0.)
+                    };
+                    [
+                        cos,
+                        -sin,
+                        px - cos * px + sin * py,
+                        sin,
+                        cos,
+                        py - sin * px - cos * py,
+                        0.,
+                        0.,
+                        1.,
+                    ]
+                };
+                if method.name.starts_with("set") {
+                    transform
+                } else {
+                    result.push(Word::from(1));
+                    let current = self.matrix_values(receiver)?;
+                    if method.name.starts_with("pre") {
+                        multiply(current, transform)
+                    } else {
+                        multiply(transform, current)
+                    }
+                }
+            }
+            _ => bail!("unsupported Matrix method {}", method.key()),
+        };
+        self.heap.get_mut(receiver)?.data = Data::Matrix(matrix);
+        Ok(Some(result))
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ImageInfo {
@@ -142,6 +368,202 @@ fn webp_info(bytes: &[u8]) -> Result<Option<ImageInfo>> {
 #[cfg(test)]
 mod tests {
     use super::{ImageInfo, inspect};
+
+    #[test]
+    fn path_commands_copy_without_aliasing_and_reject_missing_coordinates() {
+        use super::*;
+        use droidless_formats::apk::Apk;
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
+        )
+        .unwrap();
+        let path = vm.heap.instance("Landroid/graphics/Path;").unwrap();
+        let call = |vm: &mut Runtime, name: &str, parameters: &[&str], args: Vec<Word>| {
+            vm.invoke(
+                Method {
+                    class: "Landroid/graphics/Path;".into(),
+                    name: name.into(),
+                    parameters: parameters.iter().map(|s| (*s).into()).collect(),
+                    returns: "V".into(),
+                },
+                args,
+                true,
+            )
+        };
+        call(&mut vm, "<init>", &[], vec![path]).unwrap();
+        call(
+            &mut vm,
+            "lineTo",
+            &["F", "F"],
+            vec![path, Word::Bits(2f32.to_bits()), Word::Bits(3f32.to_bits())],
+        )
+        .unwrap();
+        call(&mut vm, "close", &[], vec![path]).unwrap();
+        let copy = vm.heap.instance("Landroid/graphics/Path;").unwrap();
+        call(
+            &mut vm,
+            "<init>",
+            &["Landroid/graphics/Path;"],
+            vec![copy, path],
+        )
+        .unwrap();
+        call(&mut vm, "reset", &[], vec![path]).unwrap();
+        let Data::Path(commands) = &vm.heap.get(copy).unwrap().data else {
+            unreachable!()
+        };
+        assert_eq!(
+            commands,
+            &[
+                PathCommand::Move([0., 0.]),
+                PathCommand::Line([2., 3.]),
+                PathCommand::Close
+            ]
+        );
+        let error = call(
+            &mut vm,
+            "quadTo",
+            &["F", "F", "F", "F"],
+            vec![copy, Word::ZERO],
+        )
+        .unwrap_err();
+        assert!(format!("{error:#}").contains("Path argument missing"));
+    }
+
+    #[test]
+    fn matrix_composition_preserves_android_order_pivots_and_array_bounds() {
+        use super::*;
+        use droidless_formats::apk::Apk;
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
+        )
+        .unwrap();
+        let matrix = vm.heap.instance("Landroid/graphics/Matrix;").unwrap();
+        let call =
+            |vm: &mut Runtime, name: &str, parameters: &[&str], returns: &str, args: Vec<Word>| {
+                vm.invoke(
+                    Method {
+                        class: "Landroid/graphics/Matrix;".into(),
+                        name: name.into(),
+                        parameters: parameters.iter().map(|s| (*s).into()).collect(),
+                        returns: returns.into(),
+                    },
+                    args,
+                    true,
+                )
+            };
+        let f = |value: f32| Word::Bits(value.to_bits());
+        call(&mut vm, "<init>", &[], "V", vec![matrix]).unwrap();
+        call(
+            &mut vm,
+            "postTranslate",
+            &["F", "F"],
+            "Z",
+            vec![matrix, f(10.), f(20.)],
+        )
+        .unwrap();
+        call(
+            &mut vm,
+            "postScale",
+            &["F", "F"],
+            "Z",
+            vec![matrix, f(2.), f(3.)],
+        )
+        .unwrap();
+        assert_eq!(
+            vm.matrix_values(matrix).unwrap(),
+            [2., 0., 20., 0., 3., 60., 0., 0., 1.]
+        );
+        call(
+            &mut vm,
+            "preTranslate",
+            &["F", "F"],
+            "Z",
+            vec![matrix, f(1.), f(2.)],
+        )
+        .unwrap();
+        assert_eq!(vm.matrix_values(matrix).unwrap()[2], 22.);
+        assert_eq!(vm.matrix_values(matrix).unwrap()[5], 66.);
+        let copy = vm.heap.instance("Landroid/graphics/Matrix;").unwrap();
+        call(
+            &mut vm,
+            "<init>",
+            &["Landroid/graphics/Matrix;"],
+            "V",
+            vec![copy, matrix],
+        )
+        .unwrap();
+        call(&mut vm, "reset", &[], "V", vec![matrix]).unwrap();
+        assert_eq!(vm.matrix_values(copy).unwrap()[2], 22.);
+        call(
+            &mut vm,
+            "postRotate",
+            &["F", "F", "F"],
+            "Z",
+            vec![matrix, f(90.), f(2.), f(3.)],
+        )
+        .unwrap();
+        let points = vm.array("F".into(), 4).unwrap();
+        if let Data::Array { values, .. } = &mut vm.heap.get_mut(points).unwrap().data {
+            *values = [2., 3., 3., 3.].map(|n| vec![f(n)]).into();
+        }
+        call(&mut vm, "mapPoints", &["[F"], "V", vec![matrix, points]).unwrap();
+        let Data::Array { values, .. } = &vm.heap.get(points).unwrap().data else {
+            unreachable!()
+        };
+        for (actual, expected) in values.iter().zip([2., 3., 2., 4.]) {
+            assert!((f32::from_bits(actual[0].int().unwrap() as u32) - expected).abs() < 0.00001);
+        }
+        let short = vm.array("F".into(), 8).unwrap();
+        let error = call(&mut vm, "getValues", &["[F"], "V", vec![matrix, short]).unwrap_err();
+        assert!(format!("{error:#}").contains("ArrayIndexOutOfBoundsException"));
+        call(
+            &mut vm,
+            "set",
+            &["Landroid/graphics/Matrix;"],
+            "V",
+            vec![matrix, Word::ZERO],
+        )
+        .unwrap();
+        assert_eq!(vm.matrix_values(matrix).unwrap(), IDENTITY);
+        call(
+            &mut vm,
+            "setTranslate",
+            &["F", "F"],
+            "V",
+            vec![matrix, f(1e30), f(1e30)],
+        )
+        .unwrap();
+        if let Data::Array { values, .. } = &mut vm.heap.get_mut(points).unwrap().data {
+            *values = [1., 2., 3., 4.].map(|n| vec![f(n)]).into();
+        }
+        call(&mut vm, "mapVectors", &["[F"], "V", vec![matrix, points]).unwrap();
+        let Data::Array { values, .. } = &vm.heap.get(points).unwrap().data else {
+            unreachable!()
+        };
+        assert_eq!(*values, [1., 2., 3., 4.].map(|n| vec![f(n)]));
+        let perspective = vm.array("F".into(), 9).unwrap();
+        if let Data::Array { values, .. } = &mut vm.heap.get_mut(perspective).unwrap().data {
+            *values = [1., 0., 10., 0., 1., 20., 0.5, 0., 1.]
+                .map(|n| vec![f(n)])
+                .into();
+        }
+        call(
+            &mut vm,
+            "setValues",
+            &["[F"],
+            "V",
+            vec![matrix, perspective],
+        )
+        .unwrap();
+        if let Data::Array { values, .. } = &mut vm.heap.get_mut(points).unwrap().data {
+            *values = [2., 4.].map(|n| vec![f(n)]).into();
+        }
+        call(&mut vm, "mapVectors", &["[F"], "V", vec![matrix, points]).unwrap();
+        let Data::Array { values, .. } = &vm.heap.get(points).unwrap().data else {
+            unreachable!()
+        };
+        assert_eq!(*values, [-4., -8.].map(|n| vec![f(n)]));
+    }
 
     #[test]
     fn reads_png_jpeg_and_webp_dimensions() {

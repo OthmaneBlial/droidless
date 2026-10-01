@@ -154,8 +154,8 @@ impl Runtime {
             ("Lorg/xml/sax/Attributes;", "getValue(Ljava/lang/String;)Ljava/lang/String;") => {
                 let name = self.heap.text(arg(1)?)?;
                 let value = match &self.heap.get(arg(0)?)?.data {
-                    Data::Attributes(attributes) => {
-                        attributes.get(name).and_then(|value| value.text.clone())
+                    Data::Attributes { named, .. } => {
+                        named.get(name).and_then(|value| value.text.clone())
                     }
                     _ => bail!("uninitialized SAX Attributes"),
                 };
@@ -197,8 +197,10 @@ impl Runtime {
                                 .collect();
                             let attributes_object =
                                 self.heap.instance("Lorg/xml/sax/Attributes;")?;
-                            self.heap.get_mut(attributes_object)?.data =
-                                Data::Attributes(attributes);
+                            self.heap.get_mut(attributes_object)?.data = Data::Attributes {
+                                named: attributes,
+                                resources: Default::default(),
+                            };
                             let uri = self.heap.string(String::new())?;
                             let local_name = self.heap.string(String::new())?;
                             let qualified_name = self.heap.string(name)?;

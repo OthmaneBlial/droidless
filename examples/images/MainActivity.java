@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.os.Bundle;
 import android.content.res.XmlResourceParser;
+import android.content.res.TypedArray;
 import android.widget.ImageView;
 import android.widget.TextView;
 import org.xmlpull.v1.XmlPullParser;
@@ -18,11 +19,27 @@ public class MainActivity extends Activity {
         XmlResourceParser parser = getResources().getXml(R.xml.pull_probe);
         try {
             if (parser.next() != XmlPullParser.START_TAG || !"probe".equals(parser.getName())
-                    || parser.getDepth() != 1 || parser.getAttributeCount() != 1
+                    || parser.getDepth() != 1 || parser.getAttributeCount() != 5
                     || !"parsed".equals(parser.getAttributeValue(0))
+                    || parser.getAttributeNameResource(0) != android.R.attr.label
                     || parser.getNamespaceCount(1) != 1
                     || !"http://schemas.android.com/apk/res/android".equals(parser.getNamespaceUri(0))) {
                 throw new IllegalStateException("XML pull parser root mismatch");
+            }
+            int[] requested = {android.R.attr.label, android.R.attr.width,
+                android.R.attr.height, android.R.attr.viewportWidth, android.R.attr.alpha};
+            TypedArray[] arrays = {
+                getResources().obtainAttributes(parser, requested),
+                getTheme().obtainStyledAttributes(parser, requested, 0, 0),
+                obtainStyledAttributes(parser, requested)
+            };
+            for (TypedArray array : arrays) {
+                if (!"parsed".equals(array.getString(0)) || array.getDimension(1, 0) != 24
+                        || array.getDimensionPixelSize(2, 0) != 18
+                        || array.getFloat(3, 0) != 24 || array.getFloat(4, 0) != 0.75f) {
+                    throw new IllegalStateException("XML typed attributes mismatch");
+                }
+                array.recycle();
             }
             if (parser.nextTag() != XmlPullParser.START_TAG || !"child".equals(parser.getName())
                     || parser.getDepth() != 2 || !"nested".equals(parser.getAttributeValue(0))
@@ -86,7 +103,9 @@ public class MainActivity extends Activity {
         if (pngView.getDrawable() == null) throw new IllegalStateException("ImageView lost its Bitmap Drawable");
         ((ImageView) findViewById(R.id.jpeg)).setImageBitmap(jpeg);
         ((ImageView) findViewById(R.id.webp)).setImageBitmap(webp);
-        ((TextView) findViewById(R.id.status)).setText(
+        TextView status = (TextView) findViewById(R.id.status);
+        status.setTextAppearance(this, R.style.ProbeText);
+        status.setText(
             "PNG " + png.getWidth() + "x" + png.getHeight()
                 + " | JPEG " + jpeg.getWidth() + "x" + jpeg.getHeight()
                 + " | WebP " + webp.getWidth() + "x" + webp.getHeight()

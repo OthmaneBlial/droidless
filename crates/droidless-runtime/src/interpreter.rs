@@ -757,8 +757,8 @@ impl Runtime {
                         vec![self.text_truncate_at_object(&field)?]
                     } else if let Some(unit) = self.time_unit_field(&field) {
                         vec![self.time_unit_object(unit)?]
-                    } else if field.class == "Landroid/graphics/PorterDuff$Mode;" {
-                        vec![self.porter_duff_mode(&field.name)?]
+                    } else if crate::framework::graphics_enum_names(&field.class).is_some() {
+                        vec![self.graphics_enum_object(&field)?]
                     } else if static_field {
                         self.statics
                             .get(&key)
@@ -779,6 +779,7 @@ impl Runtime {
                         || self.collections_empty_list_field(&field)
                         || self.view_outline_provider_field(&field)
                         || self.time_unit_field(&field).is_some()
+                        || crate::framework::graphics_enum_names(&field.class).is_some()
                     {
                         return Err(fault(
                             "Ljava/lang/IllegalAccessError;",

@@ -121,7 +121,8 @@ There is no APK-specific mathematical output or emulator fallback.
 resources.arsc parsing covers package/type/key pools, simple typed values,
 reference chains and map entries, including sparse/16-bit offsets. Default
 configuration wins; otherwise the first variant is used. Qualifier matching,
-themes/style inheritance and compact entries are not implemented. Stable public
+full theme resolution and compact entries are not implemented. Supported style
+bags merge explicit and implicit parents, with cycle/depth checks. Stable public
 framework IDs supply OK/Cancel strings; there is no embedded Android resource
 installation. String/color/dimension/layout resolution belongs to DROIDLESS.
 
@@ -135,8 +136,23 @@ onClick. Recursive include is bounded. px/dp/sp resolve at density 1.
 `Resources.getXml` opens packaged binary XML as an `XmlResourceParser` cursor.
 The current subset covers document/tag/text events, namespaces, depth and line
 numbers, named and indexed attributes, `nextTag`, `nextText`, and `close`.
-An authored APK checks start-tag traversal, depth, attributes and closing. This
-does not inflate vector drawables or implement general Android XML parsing APIs.
+Binary XML resource maps retain attribute IDs. Resources, Theme and Context
+attribute arrays overlay explicit XML values on supported styles and convert
+float/dimension values. The authored APK checks all three entry points.
+TextView.setTextAppearance applies inherited size and flat color; typography
+and stateful text colors remain incomplete. Paint retains graphics style/stroke
+configuration. LayoutTransition retains stagger/parent settings and ViewGroup
+ownership; native layout changes remain immediate without animation callbacks.
+
+`String.hashCode` uses Java UTF-16 value hashing. Decimal Float/Double parsing
+accepts Java whitespace, suffixes and special values; hexadecimal literals fail
+explicitly. A Matrix subset implements identity/copy, values, concatenation,
+translation/scale/rotation and in-place point/vector mapping in
+[Android multiplication order](https://developer.android.com/reference/android/graphics/Matrix).
+Bounded Path move/line/quadratic/cubic/close commands are retained, and graphics
+enum constants have canonical identity and Java Enum metadata. This lets the
+unchanged SwpieView APK inflate its bundled vector test in guest DEX; rendering
+vectors through Canvas remains unsupported.
 
 Weighted linear children divide remaining primary-axis space. Measurement is
 approximate for explicit weighted base sizes and many Android constraints.

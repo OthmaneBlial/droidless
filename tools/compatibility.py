@@ -82,14 +82,19 @@ if "PNG 96x64 | JPEG 96x64 | WebP 96x64 | XML pull OK" not in image_labels:
     raise SystemExit("BitmapFactory did not decode all three fixture image formats")
 if sum(node["view"]["kind"] == "ImageView" for node in image_nodes) != 4:
     raise SystemExit("Image fixture did not produce all four ImageViews")
+image_status = next(node["view"] for node in image_nodes if "XML pull OK" in node["view"]["text"])
+if image_status["text_size"] != 20 or image_status["text_color"] != 0xff202a36:
+    raise SystemExit("Text appearance did not apply inherited size and explicit color")
 (root / "artifacts/images-compatibility.json").write_text(json.dumps({
     "formats": ["PNG", "JPEG", "WebP"],
     "decode_paths": ["resource", "stream", "byte-array"],
     "xml_resource_parser": "start tags, depth, attributes, and close",
+    "typed_xml_attributes": "Resources, Theme and Context: string, dimension and float values",
+    "text_appearance": "inherited 20sp size and explicit #202a36 color",
     "image_views": 4,
     "native_visual_check": "artifacts/images-native.png",
 }, indent=2) + "\n")
-print("PASS Images fixture: PNG/JPEG/WebP bounds and BitmapFactory paths; four ImageViews")
+print("PASS Images fixture: typed XML attributes, PNG/JPEG/WebP decoding; four ImageViews")
 
 notepad = root / "artifacts/apks/notepad-v1.0.0.apk"
 notepad_digest = "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f"
@@ -115,7 +120,10 @@ editable = [node for node in nodes if node["view"]["kind"] == "EditText"]
 labels = [node["view"]["text"] for node in nodes]
 if len(editable) != 2 or editable[0]["view"]["text"] != "Hello, desktop":
     raise SystemExit("Notepad did not expose both editor fields and the entered title")
-if "Notepad" not in labels or "Created moments ago" not in labels:
+# activity_note.xml explicitly gives its Toolbar a space as app:title.
+toolbar = next(node for node in nodes if node["view"]["id"] == 0x7f0c0072)
+toolbar_labels = [node["view"]["text"] for node in flatten(toolbar)]
+if " " not in toolbar_labels or "Created moments ago" not in labels:
     raise SystemExit("Notepad editor screen labels were not rendered")
 report = {
     "screens": ["notes-list", "note-editor"],

@@ -15,6 +15,7 @@ pub struct PullAttribute {
     pub namespace: Option<String>,
     pub prefix: Option<String>,
     pub name: String,
+    pub name_resource: u32,
     pub value: Value,
 }
 
@@ -44,6 +45,7 @@ impl Value {
 pub struct Element {
     pub name: String,
     pub attributes: BTreeMap<String, Value>,
+    pub resource_attributes: BTreeMap<u32, Value>,
     pub children: Vec<Element>,
 }
 impl Element {
@@ -73,6 +75,7 @@ fn parse_document(data: &[u8]) -> Result<(Element, Vec<PullEvent>)> {
         "expected binary Android XML"
     );
     let mut strings = vec![];
+    let mut resource_map = None;
     let mut stack: Vec<Element> = vec![];
     let mut document = None;
     let mut namespaces: Vec<(usize, Option<String>, String)> = vec![];
@@ -123,7 +126,19 @@ fn parse_document(data: &[u8]) -> Result<(Element, Vec<PullEvent>)> {
                     "unbalanced XML namespace"
                 );
             }
-            0x180 => {}
+            0x180 => {
+                let payload = b.0.len() - chunk.header;
+                ensure!(
+                    chunk.header == 8 && payload % 4 == 0 && payload / 4 <= strings.len(),
+                    "invalid XML resource map"
+                );
+                ensure!(resource_map.is_none(), "duplicate XML resource map");
+                resource_map = Some(
+                    (0..payload / 4)
+                        .map(|i| b.u32(chunk.header + i * 4))
+                        .collect::<Result<Vec<_>>>()?,
+                );
+            }
             0x102 => {
                 ensure!(chunk.header == 16, "invalid start element header");
                 ensure!(events.len() < 100_000, "XML event limit reached (100000)");
@@ -148,6 +163,7 @@ fn parse_document(data: &[u8]) -> Result<(Element, Vec<PullEvent>)> {
                 );
                 b.table(start, count, stride)?;
                 let mut attributes = BTreeMap::new();
+                let mut resource_attributes = BTreeMap::new();
                 let mut pull_attributes = Vec::with_capacity(count);
                 for i in 0..count {
                     let at = start + i * stride;
@@ -155,7 +171,13 @@ fn parse_document(data: &[u8]) -> Result<(Element, Vec<PullEvent>)> {
                     let attribute_namespace = (attribute_namespace != u32::MAX)
                         .then(|| string_at(&strings, attribute_namespace).map(str::to_owned))
                         .transpose()?;
-                    let key = string_at(&strings, b.u32(at + 4)?)?.to_owned();
+                    let name_index = b.u32(at + 4)?;
+                    let key = string_at(&strings, name_index)?.to_owned();
+                    let name_resource = resource_map
+                        .as_ref()
+                        .and_then(|map| map.get(name_index as usize))
+                        .copied()
+                        .unwrap_or(0);
                     let raw = b.u32(at + 8)?;
                     ensure!(b.u16(at + 12)? == 8, "invalid XML typed value");
                     let kind = b.u8(at + 15)?;
@@ -178,12 +200,23 @@ fn parse_document(data: &[u8]) -> Result<(Element, Vec<PullEvent>)> {
                         namespace: attribute_namespace,
                         prefix,
                         name: key.clone(),
+                        name_resource,
                         value: Value {
                             kind,
                             data: value,
                             text: text.clone(),
                         },
                     });
+                    if name_resource != 0 {
+                        resource_attributes.insert(
+                            name_resource,
+                            Value {
+                                kind,
+                                data: value,
+                                text: text.clone(),
+                            },
+                        );
+                    }
                     ensure!(
                         attributes
                             .insert(
@@ -212,6 +245,7 @@ fn parse_document(data: &[u8]) -> Result<(Element, Vec<PullEvent>)> {
                 stack.push(Element {
                     name,
                     attributes,
+                    resource_attributes,
                     children: vec![],
                 });
             }

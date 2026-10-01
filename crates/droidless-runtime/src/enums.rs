@@ -156,6 +156,54 @@ mod tests {
     use droidless_formats::{apk::Apk, dex::Method};
 
     #[test]
+    fn graphics_enum_constants_are_canonical_and_dispatch_through_enum() {
+        use droidless_formats::dex::Field;
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap(),
+        )
+        .unwrap();
+        for (class, name, expected) in [
+            ("Landroid/graphics/Paint$Cap;", "BUTT", 0),
+            ("Landroid/graphics/Paint$Join;", "BEVEL", 2),
+            ("Landroid/graphics/Paint$Style;", "STROKE", 1),
+            ("Landroid/graphics/Path$FillType;", "EVEN_ODD", 1),
+            ("Landroid/graphics/PorterDuff$Mode;", "SRC_IN", 5),
+        ] {
+            let field = Field {
+                class: class.into(),
+                name: name.into(),
+                ty: class.into(),
+            };
+            assert_eq!(vm.resolve_field(&field, true).unwrap().key(), field.key());
+            assert!(vm.resolve_field(&field, false).is_err());
+            let value = vm.graphics_enum_object(&field).unwrap();
+            assert_eq!(value, vm.graphics_enum_object(&field).unwrap());
+            assert!(vm.is_a(class, "Ljava/lang/Enum;"));
+            let ordinal = vm
+                .invoke(
+                    Method {
+                        class: "Ljava/lang/Enum;".into(),
+                        name: "ordinal".into(),
+                        parameters: vec![],
+                        returns: "I".into(),
+                    },
+                    vec![value],
+                    true,
+                )
+                .unwrap();
+            assert_eq!(ordinal, vec![Word::from(expected)]);
+            let invalid = Field {
+                name: "INVALID".into(),
+                ..field
+            };
+            assert!(
+                format!("{:#}", vm.resolve_field(&invalid, true).unwrap_err())
+                    .contains("NoSuchFieldError")
+            );
+        }
+    }
+
+    #[test]
     fn enum_construction_retains_name_ordinal_and_identity() {
         let mut vm = Runtime::new(
             Apk::parse(include_bytes!("../../../fixtures/generated/intents.apk")).unwrap(),

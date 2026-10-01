@@ -8,6 +8,7 @@ import zipfile
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
+parser.add_argument("--app", choices=sorted(app.name for app in (root / "examples").iterdir() if (app / "AndroidManifest.xml").exists()))
 parser.add_argument("--sdk", default=os.environ.get("ANDROID_SDK_ROOT", os.environ.get("ANDROID_HOME", "/opt/homebrew/share/android-commandlinetools")))
 args = parser.parse_args()
 sdk = Path(args.sdk)
@@ -18,6 +19,8 @@ def run(*cmd):
     subprocess.run([str(c) for c in cmd], check=True)
 
 for app in sorted((root / "examples").iterdir()):
+    if args.app and app.name != args.app:
+        continue
     if not (app / "AndroidManifest.xml").exists():
         continue
     build = app / "build"

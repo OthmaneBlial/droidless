@@ -12,6 +12,7 @@ const DECELERATE: &str = "Landroid/view/animation/DecelerateInterpolator;";
 const LINEAR: &str = "Landroid/view/animation/LinearInterpolator;";
 const ANIMATION: &str = "Landroid/view/animation/Animation;";
 const ANIMATION_UTILS: &str = "Landroid/view/animation/AnimationUtils;";
+const LAYOUT_TRANSITION: &str = "Landroid/animation/LayoutTransition;";
 
 impl Runtime {
     pub(crate) fn animation_native(
@@ -27,6 +28,55 @@ impl Runtime {
         };
         let class = method.class.as_str();
         let signature = method.signature();
+        if class == LAYOUT_TRANSITION {
+            let result = match signature.as_str() {
+                "<init>()V" => {
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert("droidless:transition:parent".into(), vec![Word::from(1)]);
+                    vec![]
+                }
+                "setStagger(IJ)V" | "getStagger(I)J" => {
+                    let kind = argument(1)?.int()?;
+                    self.heap.get(receiver)?;
+                    // API 21 staggers apply only to CHANGE_APPEARING, CHANGE_DISAPPEARING and CHANGING.
+                    if ![0, 1, 4].contains(&kind) {
+                        return Ok(Some(if method.name == "getStagger" {
+                            wide(0)
+                        } else {
+                            vec![]
+                        }));
+                    }
+                    let key = format!("droidless:transition:stagger:{kind}");
+                    if method.name == "getStagger" {
+                        self.heap
+                            .get(receiver)?
+                            .fields
+                            .get(&key)
+                            .cloned()
+                            .unwrap_or_else(|| wide(0))
+                    } else {
+                        let stagger = bits64(&[argument(2)?, argument(3)?])?;
+                        self.heap
+                            .get_mut(receiver)?
+                            .fields
+                            .insert(key, wide(stagger));
+                        vec![]
+                    }
+                }
+                "setAnimateParentHierarchy(Z)V" => {
+                    self.heap.get_mut(receiver)?.fields.insert(
+                        "droidless:transition:parent".into(),
+                        vec![Word::from(i32::from(argument(1)?.truth()))],
+                    );
+                    vec![]
+                }
+                _ => return Ok(None),
+            };
+            // ponytail: retain transition configuration; native layouts snap to final geometry until timed rendering/listener delivery exists.
+            return Ok(Some(result));
+        }
         if class == ANIMATION_UTILS
             && signature
                 == "loadAnimation(Landroid/content/Context;I)Landroid/view/animation/Animation;"
@@ -159,6 +209,122 @@ impl Runtime {
 mod tests {
     use super::*;
     use droidless_formats::apk::Apk;
+
+    #[test]
+    fn layout_transition_staggers_follow_change_types_and_survive_view_group_gc() {
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/intents.apk")).unwrap(),
+        )
+        .unwrap();
+        let transition = vm.heap.instance(LAYOUT_TRANSITION).unwrap();
+        let group = vm.heap.instance("Landroid/widget/FrameLayout;").unwrap();
+        let call = |vm: &mut Runtime,
+                    class: &str,
+                    name: &str,
+                    parameters: &[&str],
+                    returns: &str,
+                    args: Vec<Word>| {
+            vm.invoke(
+                Method {
+                    class: class.into(),
+                    name: name.into(),
+                    parameters: parameters.iter().map(|s| (*s).into()).collect(),
+                    returns: returns.into(),
+                },
+                args,
+                true,
+            )
+        };
+        call(
+            &mut vm,
+            LAYOUT_TRANSITION,
+            "<init>",
+            &[],
+            "V",
+            vec![transition],
+        )
+        .unwrap();
+        call(
+            &mut vm,
+            LAYOUT_TRANSITION,
+            "setStagger",
+            &["I", "J"],
+            "V",
+            [vec![transition, Word::from(0)], wide(200)].concat(),
+        )
+        .unwrap();
+        call(
+            &mut vm,
+            "Landroid/view/ViewGroup;",
+            "setLayoutTransition",
+            &[LAYOUT_TRANSITION],
+            "V",
+            vec![group, transition],
+        )
+        .unwrap();
+        vm.heap.collect([group]);
+        let result = call(
+            &mut vm,
+            LAYOUT_TRANSITION,
+            "getStagger",
+            &["I"],
+            "J",
+            vec![transition, Word::from(0)],
+        )
+        .unwrap();
+        assert_eq!(bits64(&result).unwrap(), 200);
+        call(
+            &mut vm,
+            LAYOUT_TRANSITION,
+            "setStagger",
+            &["I", "J"],
+            "V",
+            [vec![transition, Word::from(0)], wide((-1i64) as u64)].concat(),
+        )
+        .unwrap();
+        let negative = call(
+            &mut vm,
+            LAYOUT_TRANSITION,
+            "getStagger",
+            &["I"],
+            "J",
+            vec![transition, Word::from(0)],
+        )
+        .unwrap();
+        assert_eq!(bits64(&negative).unwrap() as i64, -1);
+        for kind in [2, 3, 9, -1] {
+            call(
+                &mut vm,
+                LAYOUT_TRANSITION,
+                "setStagger",
+                &["I", "J"],
+                "V",
+                [vec![transition, Word::from(kind)], wide(200)].concat(),
+            )
+            .unwrap();
+            let ignored = call(
+                &mut vm,
+                LAYOUT_TRANSITION,
+                "getStagger",
+                &["I"],
+                "J",
+                vec![transition, Word::from(kind)],
+            )
+            .unwrap();
+            assert_eq!(bits64(&ignored).unwrap(), 0);
+        }
+        call(
+            &mut vm,
+            "Landroid/view/ViewGroup;",
+            "setLayoutTransition",
+            &[LAYOUT_TRANSITION],
+            "V",
+            vec![group, Word::ZERO],
+        )
+        .unwrap();
+        vm.heap.collect([group]);
+        assert!(vm.heap.get(transition).is_err());
+    }
 
     #[test]
     fn decelerate_interpolator_applies_its_factor() {

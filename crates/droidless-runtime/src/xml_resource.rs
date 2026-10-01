@@ -204,7 +204,9 @@ impl Runtime {
                     "getAttributeType(I)Ljava/lang/String;" => {
                         vec![self.heap.string("CDATA".into())?]
                     }
-                    "getAttributeNameResource(I)I" => vec![Word::ZERO],
+                    "getAttributeNameResource(I)I" => {
+                        vec![Word::from(attribute.name_resource as i32)]
+                    }
                     "getAttributeResourceValue(II)I" => {
                         vec![Word::from(if attribute.value.kind == 1 {
                             attribute.value.data as i32

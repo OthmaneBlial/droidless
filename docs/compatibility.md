@@ -30,15 +30,16 @@ KeyEvent action/keycode. Long.rotateRight(JI)J is implemented for 64-bit values.
 BitmapFactory decodes packaged PNG/JPEG/WebP through resource, stream and byte-array
 paths; Bitmap bounds options, dimensions and ImageView resource/bitmap/drawable
 assignment reach AppKit image views. `Resources.getXml` exposes a bounded binary
-XML pull cursor, tested by an authored APK. This is authored-fixture evidence;
-bitmap pixel manipulation, Android Canvas drawing and vector drawable inflation
-remain unsupported.
+XML pull cursor and resource-ID-backed typed attributes, tested by an authored
+APK. SwpieView passes its bundled vector configuration check, then stops at
+Activity.getFragmentManager. Bitmap pixel manipulation, Android Canvas/vector
+drawing and an independent image workflow remain unproven.
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does
 not establish general RecyclerView or AndroidX compatibility.
-String valueOf/toString/length/equals/startsWith/contains/
+String valueOf/toString/length/hashCode/equals/startsWith/contains/
 substring/concat/charAt; StringBuilder constructors/append/toString; Integer
-parseInt/toString; Double parseDouble/valueOf(D)/doubleValue/toString/isNaN(D); Long toString(J)/rotateRight(JI); Math sqrt/cbrt/sin/cos/tan/log/
+parseInt/toString; Float parseFloat (decimal); Double parseDouble/valueOf(D)/doubleValue/toString/isNaN(D); Long toString(J)/rotateRight(JI); Math sqrt/cbrt/sin/cos/tan/log/
 exp/abs/pow; Log d/i/w/e. The source's exact signature table is authoritative;
 other overloads remain unsupported.
 Throwable constructors/getMessage/getCause/toString and common runtime exception types

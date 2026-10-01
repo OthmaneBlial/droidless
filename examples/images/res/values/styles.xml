@@ -1,0 +1,4 @@
+<resources>
+    <style name="ProbeTextBase"><item name="android:textSize">20sp</item></style>
+    <style name="ProbeText" parent="ProbeTextBase"><item name="android:textColor">#202a36</item></style>
+</resources>

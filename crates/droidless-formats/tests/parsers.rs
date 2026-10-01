@@ -43,6 +43,7 @@ fn binary_xml_pull_events_keep_namespaces_and_android_attributes() {
         Some("http://schemas.android.com/apk/res/android")
     );
     assert_eq!(name.prefix.as_deref(), Some("a"));
+    assert_eq!(name.name_resource, 0x0101_0003);
     assert_eq!(
         name.value.text.as_deref(),
         Some("android.intent.action.MAIN")

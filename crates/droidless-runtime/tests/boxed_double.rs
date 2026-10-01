@@ -106,3 +106,60 @@ fn boxed_double_preserves_bits_and_dispatches_through_number() {
         assert_eq!(vm.heap.text(text).unwrap(), value.to_string());
     }
 }
+
+#[test]
+fn java_decimal_float_parsing_handles_suffixes_overflow_and_guest_faults() {
+    let mut vm = Runtime::new(
+        Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
+    )
+    .unwrap();
+    for (class, name, returns) in [
+        ("Ljava/lang/Float;", "parseFloat", "F"),
+        ("Ljava/lang/Double;", "parseDouble", "D"),
+    ] {
+        let method = Method {
+            class: class.into(),
+            name: name.into(),
+            parameters: vec!["Ljava/lang/String;".into()],
+            returns: returns.into(),
+        };
+        for (text, expected) in [
+            ("12.5", 12.5),
+            (" -0.0F ", -0.0),
+            ("1e+3D", 1000.),
+            (".5", 0.5),
+            ("\t+Infinity\n", f64::INFINITY),
+            ("+NaN", f64::NAN),
+            ("3.4028236e38", 3.4028236e38),
+            ("1e-50", 1e-50),
+        ] {
+            let text = vm.heap.string(text.into()).unwrap();
+            let words = vm.invoke(method.clone(), vec![text], false).unwrap();
+            if returns == "F" {
+                let value = f32::from_bits(words[0].int().unwrap() as u32);
+                if expected.is_nan() {
+                    assert!(value.is_nan());
+                } else {
+                    assert_eq!(value.to_bits(), (expected as f32).to_bits());
+                }
+            } else {
+                let value = f64::from_bits(bits64(&words).unwrap());
+                if expected.is_nan() {
+                    assert!(value.is_nan());
+                } else {
+                    assert_eq!(value.to_bits(), expected.to_bits());
+                }
+            }
+        }
+        for text in ["nan", "inf", "12ff", "1e", "--1", "\u{a0}23\u{a0}"] {
+            let text = vm.heap.string(text.into()).unwrap();
+            let error = vm.invoke(method.clone(), vec![text], false).unwrap_err();
+            assert!(format!("{error:#}").contains("NumberFormatException"));
+        }
+        let hex = vm.heap.string("0x1p1".into()).unwrap();
+        assert!(
+            format!("{:#}", vm.invoke(method, vec![hex], false).unwrap_err())
+                .contains("hexadecimal floating-point literals are unsupported")
+        );
+    }
+}

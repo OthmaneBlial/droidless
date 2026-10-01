@@ -134,7 +134,10 @@ pub enum Data {
     },
     Bundle(BTreeMap<String, (String, Vec<Word>)>),
     TypedArray(Vec<Option<droidless_formats::xml::Value>>),
-    Attributes(std::collections::BTreeMap<String, droidless_formats::xml::Value>),
+    Attributes {
+        named: BTreeMap<String, droidless_formats::xml::Value>,
+        resources: BTreeMap<u32, droidless_formats::xml::Value>,
+    },
     XmlPull {
         events: Vec<droidless_formats::xml::PullEvent>,
         position: usize,
@@ -163,6 +166,8 @@ pub enum Data {
         mime: &'static str,
         recycled: bool,
     },
+    Matrix([f32; 9]),
+    Path(Vec<PathCommand>),
     AtomicInteger(std::sync::Arc<std::sync::atomic::AtomicI32>),
     AtomicLong(std::sync::Arc<std::sync::atomic::AtomicI64>),
     AtomicBoolean(std::sync::Arc<std::sync::atomic::AtomicBool>),
@@ -187,6 +192,15 @@ pub enum Data {
     ContentValues(BTreeMap<String, SqlValue>),
     NetworkRequestBuilder(Vec<i32>),
     NetworkRequest(Vec<i32>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PathCommand {
+    Move([f32; 2]),
+    Line([f32; 2]),
+    Quad([f32; 4]),
+    Cubic([f32; 6]),
+    Close,
 }
 
 #[derive(Clone, Debug, PartialEq)]

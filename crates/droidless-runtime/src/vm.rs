@@ -622,16 +622,14 @@ impl Runtime {
             }
             return Ok(field.clone());
         }
-        if field.class == "Landroid/graphics/PorterDuff$Mode;" {
+        if let Some(names) = crate::framework::graphics_enum_names(&field.class) {
             if !static_field {
                 return Err(fault(
                     "Ljava/lang/IncompatibleClassChangeError;",
                     field.key(),
                 ));
             }
-            if field.ty != "Landroid/graphics/PorterDuff$Mode;"
-                || crate::framework::porter_duff_mode_ordinal(&field.name).is_none()
-            {
+            if field.ty != field.class || !names.contains(&field.name.as_str()) {
                 return Err(fault("Ljava/lang/NoSuchFieldError;", field.key()));
             }
             return Ok(field.clone());
@@ -821,6 +819,9 @@ impl Runtime {
         Err(fault("Ljava/lang/NoSuchFieldError;", field.key()))
     }
     pub(crate) fn parent(&self, class: &str) -> Option<String> {
+        if crate::framework::graphics_enum_names(class).is_some() {
+            return Some("Ljava/lang/Enum;".into());
+        }
         if let Some(interface) = class.strip_prefix("Ldroidless/runtime/annotation/") {
             return Some(format!("L{interface}"));
         }
