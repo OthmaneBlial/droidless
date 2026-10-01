@@ -72,8 +72,11 @@ substring/concat/charAt; StringBuilder constructors/append/toString; Integer
 parseInt/toString; Float parseFloat (decimal); Double parseDouble/valueOf(D)/doubleValue/toString/isNaN(D); Long toString(J)/rotateRight(JI); Math sqrt/cbrt/sin/cos/tan/log/
 exp/abs/pow; Log d/i/w/e. The source's exact signature table is authoritative;
 other overloads remain unsupported.
-Throwable constructors/getMessage/getCause/toString and common runtime exception types
-are implemented for the fault paths covered by conformance tests.
+Throwable constructors/getMessage/getLocalizedMessage/getCause/toString,
+fillInStackTrace and no-argument printStackTrace retain real DEX locations and
+causes for the covered fault paths. Guest diagnostic overrides execute DEX and
+their faults propagate. PrintStream/PrintWriter overloads, source-line decoding,
+StackTraceElement arrays and suppression remain unsupported. [Diagnostic scope](dex-vm.md).
 Android `CharSequence`/`Spanned`/`SpannableStringBuilder` text and a bounded SAX
 event parser cover Notepad's rich-text serialization path. DTDs are rejected.
 SQLite support includes `SQLiteOpenHelper`, SQL statements/transactions,
@@ -85,6 +88,9 @@ editor process. Object-array sort executes stable guest Comparator/Comparable
 callbacks. TextUtils UTF-16 search and disjoint plain-text replacement support
 this save path. These narrow paths do not imply general text/XML/database
 compatibility.
+Malformed-body replay separately verifies the original APK logs its SAX fault,
+displays its own !ERROR! marker and preserves the raw stored row when opened.
+XML metacharacters still do not round-trip through the APK's serializer.
 Current source adds explicit same-APK Intent constructors/setClass/setClassName,
 startActivity/startActivityForResult, getIntent, action/type/data metadata,
 setResult, finish/isFinishing/onBackPressed, Bundle typed extras and back-stack

@@ -70,6 +70,24 @@ matching, cross-frame propagation, catch-all/finally and getMessage are tested.
 Malformed bytecode, resource ceilings and unsupported APIs remain terminal host
 diagnostics; they do not become fake catchable successes.
 
+Throwable constructors and implicit Java faults retain their original DEX method,
+module and instruction locations. `fillInStackTrace` refreshes those locations;
+the no-argument `printStackTrace` prints them to host standard error after the
+original frames have unwound. Cause chains include actual retained causes and
+terminate cycles. Guest `toString`, `getLocalizedMessage`, `getMessage`,
+`getCause` and constructor `fillInStackTrace` overrides still execute guest DEX;
+callback faults propagate and callback GC retains the diagnostic objects.
+
+The compiled [ThrowableContract](../examples/counter/ThrowableContract.java)
+checks explicit/implicit faults, printing after unwind and GC, localization,
+cause cycles, refreshed traces and failing overrides. Its portable driver also
+passes on desktop Java. Printed locations use DEX PCs rather than source-file
+lines; common cause frames are printed in full. Limits are 128 causes and 1 MiB
+per formatted diagnostic. PrintStream/PrintWriter overloads, StackTraceElement
+arrays and suppressed exceptions remain unsupported. This is a bounded subset of
+the [Java Throwable API](https://docs.oracle.com/javase/8/docs/api/java/lang/Throwable.html),
+not Android reference-device or full JVM diagnostic parity.
+
 ## Heap
 
 Handles are monotonically allocated and never reused, preventing stale aliases.

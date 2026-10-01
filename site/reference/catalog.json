@@ -52,9 +52,11 @@
       "native_keyboard_verified": true,
       "native_close_exit_zero": true,
       "source": "examples/counter",
-      "notes": "Earlier native text-copy/key listener and clean close; current headless VM conformance adds FrameContract and instruction-slice/GC checks. The normal FrameContract passes on desktop Java 17. No worker or independent APK compatibility claim.",
+      "notes": "Earlier native text-copy/key listener and clean close; current headless VM conformance adds FrameContract and instruction-slice/GC checks. The normal FrameContract passes on desktop Java 17. No worker or independent APK compatibility claim. Retained DEX Throwable traces, explicit/implicit faults, GC, localized descriptions, refreshed traces, cause cycles and callback fault cleanup pass compiled checks. The portable ThrowableContract passes on desktop Java; source lines, StackTraceElement arrays, stream/writer overloads and suppression remain unsupported.",
       "desktop_java_frame_differential_verified": true,
-      "managed_frame_continuations_verified": true
+      "managed_frame_continuations_verified": true,
+      "headless_throwable_diagnostics_verified": true,
+      "desktop_java_throwable_contract_verified": true
     },
     {
       "package": "org.droidless.intents",
@@ -92,7 +94,7 @@
       "native_ui": false,
       "headless_conformance_verified": true,
       "source": "examples/collections",
-      "notes": "Authored compiled fixture: ordered/indexed lists, immediate FIFO queues, duplicate/null/capacity behavior, guest equals, Set/Map operations, iterator and inherited queue override dispatch, live read-only views, GC retention, limits and rejected eviction hooks. Native map copying, live/nested read-only List views, shared iterator aliases, snapshot GC roots and error cleanup are checked. Same ListContract, MapCopyContract and immediate QueueContract pass on desktop Java 17 with Java 8 source/target. Queue waits/workers are covered by the separate Scheduling fixture; queue iterators remain unsupported. No native interaction or independent notes-app evidence. SnapshotContract also passes on Java 17: immutable snapshot iteration across live changes, read-only wrapping, nulls/indexes and guest equality. Rust checks cover GC retention/release, serial guest worker writes, entry ceilings and explicit reentrant-remove rejection with root cleanup. Snapshot creation copies O(n) references; guest join and parallel CPU execution remain unsupported. ArraySortContract verifies stable natural/custom order, ranges and catchable comparison errors on DROIDLESS and desktop Java; Rust adds GC, mutation rejection and the 16384-element limit.",
+      "notes": "Authored compiled fixture: ordered/indexed lists, immediate FIFO queues, duplicate/null/capacity behavior, guest equals, Set/Map operations, iterator and inherited queue override dispatch, live read-only views, GC retention, limits and rejected eviction hooks. Native map copying, live/nested read-only List views, shared iterator aliases, snapshot GC roots and error cleanup are checked. Same ListContract, MapCopyContract and immediate QueueContract pass on desktop Java 17 with Java 8 source/target. Queue waits/workers are covered by the separate Scheduling fixture; queue iterators remain unsupported. No native interaction or independent notes-app evidence. SnapshotContract also passes on Java 17: immutable snapshot iteration across live changes, read-only wrapping, nulls/indexes and guest equality. Rust checks cover GC retention/release, serial guest worker writes, entry ceilings and explicit reentrant-remove rejection with root cleanup. Snapshot creation copies O(n) references; main blocking join and parallel CPU execution remain unsupported. ArraySortContract verifies stable natural/custom order, ranges and catchable comparison errors on DROIDLESS and desktop Java; Rust adds GC, mutation rejection and the 16384-element limit.",
       "desktop_java_list_differential_verified": true,
       "desktop_java_immediate_queue_differential_verified": true,
       "android_reference_verified": false,
@@ -173,7 +175,7 @@
       "native_keyboard_verified": true,
       "native_save_verified": true,
       "multi_note_restart_verified": true,
-      "notes": "Original release APK unmodified. Headless replay saves two notes, reopens one through its row listener, edits title and multiline body, refreshes the list and restores both fields after restart with the original row ID. Native AppKit checks select an existing row with the mouse, edit its title/body with keyboard input, save through Back and reopen both exact fields in a fresh process. Both native processes close with exit status zero. Bodies with XML metacharacters reach a SAX loading/printStackTrace limit; rich formatting, drawing, worker flow and visual fidelity remain unverified. Not redistributed.",
+      "notes": "Original release APK unmodified. Headless replay saves two notes, reopens one through its row listener, edits title and multiline body, refreshes the list and restores both fields after restart with the original row ID. Native AppKit checks select an existing row with the mouse, edit its title/body with keyboard input, save through Back and reopen both exact fields in a fresh process. Both native processes close with exit status zero. Headless malformed-body replay logs the real SAX fault with its retained DEX PC, displays the APK's own !ERROR! marker and leaves the stored row unchanged when opened. XML metacharacters still do not round-trip through the original serializer; rich formatting, drawing, worker flow and visual fidelity remain unverified. Not redistributed.",
       "release_tag": "v1.0.0",
       "headless_viewport": [
         390,
@@ -190,7 +192,10 @@
       "native_existing_note_selection_verified": true,
       "native_existing_note_edit_verified": true,
       "native_title_body_restart_verified": true,
-      "native_close_exit_zero": true
+      "native_close_exit_zero": true,
+      "headless_malformed_body_error_fallback_verified": true,
+      "headless_malformed_body_open_preserves_row_verified": true,
+      "native_malformed_body_error_fallback_verified": false
     },
     {
       "package": "org.droidless.grids",
