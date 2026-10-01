@@ -36,6 +36,25 @@ fn compiled_text_layout_measurement_invalidation_and_callback_gc() {
         .unwrap()
     };
     let root = call(&mut vm, "root", "Landroid/view/View;")[0];
+    let failure = vm
+        .invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: "setPaddingRelative".into(),
+                parameters: vec!["I".into(); 4],
+                returns: "V".into(),
+            },
+            vec![root, Word::from(-1), Word::ZERO, Word::ZERO, Word::ZERO],
+            true,
+        )
+        .unwrap_err();
+    assert!(format!("{failure:#}").contains("padding must have four non-negative values"));
+    assert_eq!(
+        vm.heap.get(root).unwrap().view.as_ref().unwrap().padding,
+        [6.0, 3.0, 6.0, 3.0]
+    );
+    assert!(!vm.heap.get(root).unwrap().fields["droidless:view:padding-relative"][0].truth());
+    assert_eq!(vm.stack_depth(), 0);
     let tree = droidless_runtime::ui::layout(&vm.heap, root, 162.0, 1000.0).unwrap();
     let row = &tree.children[0];
     assert_eq!(

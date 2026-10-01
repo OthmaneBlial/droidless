@@ -4547,11 +4547,18 @@ impl Runtime {
                 self.request_view_layout(receiver)?;
             }
             ("Landroid/view/View;", "getPaddingLeft()I")
+            | ("Landroid/view/View;", "getPaddingStart()I")
             | ("Landroid/view/View;", "getPaddingTop()I")
             | ("Landroid/view/View;", "getPaddingRight()I")
+            | ("Landroid/view/View;", "getPaddingEnd()I")
             | ("Landroid/view/View;", "getPaddingBottom()I") => {
-                let edge = match method.name.as_str() {"getPaddingLeft"=>0,"getPaddingTop"=>1,"getPaddingRight"=>2,_=>3};
+                // ponytail: the current layout profile is LTR; resolve start/end again when RTL is supported.
+                let edge = match method.name.as_str() {"getPaddingLeft"|"getPaddingStart"=>0,"getPaddingTop"=>1,"getPaddingRight"|"getPaddingEnd"=>2,_=>3};
                 result.push(Word::from(self.view_mut(receiver)?.padding[edge] as i32));
+            }
+            ("Landroid/view/View;", "isPaddingRelative()Z") => {
+                self.view_mut(receiver)?;
+                result.push(self.heap.get(receiver)?.fields.get("droidless:view:padding-relative").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO));
             }
             ("Landroid/view/View;", "setVisibility(I)V") => {
                 let v = arg(1)?.int()?;
@@ -4938,7 +4945,7 @@ impl Runtime {
                     result.push(self.heap.get(receiver)?.fields.get(key).and_then(|v|v.first()).copied().unwrap_or(Word::ZERO));
                 }
             }
-            ("Landroid/view/View;", "setPadding(IIII)V") => {
+            ("Landroid/view/View;", "setPadding(IIII)V" | "setPaddingRelative(IIII)V") => {
                 let values = args[1..]
                     .iter()
                     .map(|w| w.int())
@@ -4948,6 +4955,7 @@ impl Runtime {
                     "padding must have four non-negative values"
                 );
                 self.view_mut(receiver)?.padding = [values[0] as f32, values[1] as f32, values[2] as f32, values[3] as f32];
+                self.heap.get_mut(receiver)?.fields.insert("droidless:view:padding-relative".into(), vec![Word::from(i32::from(method.name == "setPaddingRelative"))]);
                 self.invalidate_text_layout(receiver)?;
             }
             ("Landroid/util/Log;", sig)
@@ -5762,6 +5770,18 @@ impl Runtime {
                     view.editable = false;
                 }
                 _ => {} // Styling outside this subset is documented; execution APIs still fail explicitly.
+            }
+        }
+        // Resolve relative XML edges after physical edges, independent of attribute ordering.
+        for (name, edge) in [("paddingStart", 0), ("paddingEnd", 2)] {
+            if let Some(raw) = element.attributes.get(name) {
+                let padding = dimension(&self.attribute(raw)?)?;
+                ensure!(padding >= 0.0, "relative padding must be non-negative");
+                view.padding[edge] = padding;
+                self.heap.get_mut(word)?.fields.insert(
+                    "droidless:view:padding-relative".into(),
+                    vec![Word::from(1)],
+                );
             }
         }
         ensure!(
