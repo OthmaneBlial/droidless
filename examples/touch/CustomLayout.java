@@ -201,10 +201,12 @@ public class CustomLayout extends FrameLayout {
             || checked.getCompoundDrawablesRelative()[1]!=slots[2] || checked.getCompoundDrawables()[0]!=slots[0]) throw new AssertionError("absolute setter clears relative edges/preserves top");
         slots[0].setTintList(null);checked.setCompoundDrawables(null,null,null,null);System.gc();
         if (checked.getCompoundDrawablesRelative()[0]!=null) throw new AssertionError("compound drawable clear");
-        if (drawableChanges!=1 || childChanges!=1 || !hasState(checked,android.R.attr.state_checked)
+        // The checked change notifies once; the parent's refresh also refreshes
+        // its duplicateParentState child, which sends the second notification.
+        if (drawableChanges!=1 || childChanges!=2 || !hasState(checked,android.R.attr.state_checked)
             || !hasState(checked,android.R.attr.state_selected) || checked.getCurrentTextColor()!=0xff123456) throw new AssertionError("guest drawable callbacks/parent state/color");
         checked.setChecked(false);
-        if (childChanges!=2 || hasState(checked,android.R.attr.state_checked)) throw new AssertionError("checked state refresh");
+        if (childChanges!=3 || hasState(checked,android.R.attr.state_checked)) throw new AssertionError("checked state refresh");
         probe.setMinimumWidth(12);probe.setMinimumHeight(14);
         probe.setBackgroundColor(0xff112233);
         if (probe.getSuggestedMinimumWidth()!=12 || probe.getSuggestedMinimumHeight()!=14) throw new AssertionError("suggested minimum");
