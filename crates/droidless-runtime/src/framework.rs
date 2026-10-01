@@ -237,6 +237,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/view/LayoutInflater;",
             "Landroid/view/LayoutInflater$Factory;",
             "Landroid/view/LayoutInflater$Factory2;",
+            crate::inflater::MERGER,
             "Landroid/os/Bundle;",
             "Landroid/os/Parcel;",
             "Landroid/os/Parcelable;",
@@ -500,6 +501,9 @@ impl Runtime {
         // Keep recursive focus notifications out of the large fallback dispatcher's
         // debug stack frame; focus_native retains the same UI-thread guard.
         if let Some(result) = self.focus_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.inflater_native(method, args)? {
             return Ok(Some(result));
         }
         self.native_framework(method, args)
@@ -2300,7 +2304,17 @@ impl Runtime {
                 self.set_content(receiver, view)?;
             }
             ("Landroid/app/Activity;", "setContentView(I)V") => {
-                let root = self.inflate_id(arg(1)?.int()? as u32, 0, receiver, None)?;
+                let inflater = self.layout_inflater_from(receiver)?;
+                let root = *self.invoke(
+                    Method {
+                        class: "Landroid/view/LayoutInflater;".into(),
+                        name: "inflate".into(),
+                        parameters: vec!["I".into(), "Landroid/view/ViewGroup;".into(), "Z".into()],
+                        returns: "Landroid/view/View;".into(),
+                    },
+                    vec![inflater, arg(1)?, Word::ZERO, Word::ZERO],
+                    true,
+                )?.first().context("Activity inflater returned no View")?;
                 self.set_content(receiver, root)?;
             }
             ("Landroid/app/Activity;", "findViewById(I)Landroid/view/View;")
@@ -3089,117 +3103,6 @@ impl Runtime {
             ("Landroid/view/WindowManager;", "getDefaultDisplay()Landroid/view/Display;") => {
                 result.push(self.heap.instance("Landroid/view/Display;")?)
             }
-            (
-                "Landroid/view/LayoutInflater;",
-                "from(Landroid/content/Context;)Landroid/view/LayoutInflater;",
-            ) => {
-                let context = arg(0)?;
-                let inflater = self
-                    .heap
-                    .get(context)?
-                    .fields
-                    .get("droidless:layout-inflater")
-                    .and_then(|values| values.first())
-                    .copied();
-                result.push(if let Some(inflater) = inflater {
-                    inflater
-                } else {
-                    let inflater = self.heap.instance("Landroid/view/LayoutInflater;")?;
-                    self.heap
-                        .get_mut(inflater)?
-                        .fields
-                        .insert("droidless:layout-inflater:context".into(), vec![context]);
-                    self.heap
-                        .get_mut(context)?
-                        .fields
-                        .insert("droidless:layout-inflater".into(), vec![inflater]);
-                    inflater
-                });
-            }
-            (
-                "Landroid/view/LayoutInflater;",
-                "cloneInContext(Landroid/content/Context;)Landroid/view/LayoutInflater;",
-            ) => {
-                let clone = self.heap.instance("Landroid/view/LayoutInflater;")?;
-                self.heap.get_mut(clone)?.fields = self.heap.get(receiver)?.fields.clone();
-                self.heap
-                    .get_mut(clone)?
-                    .fields
-                    .insert("droidless:layout-inflater:context".into(), vec![arg(1)?]);
-                result.push(clone);
-            }
-            (
-                "Landroid/view/LayoutInflater;",
-                "getFactory()Landroid/view/LayoutInflater$Factory;",
-            ) => {
-                result.push(
-                    self.heap
-                        .get(receiver)?
-                        .fields
-                        .get("droidless:layout-inflater:factory")
-                        .and_then(|values| values.first())
-                        .copied()
-                        .unwrap_or(Word::ZERO),
-                );
-            }
-            (
-                "Landroid/view/LayoutInflater;",
-                "setFactory(Landroid/view/LayoutInflater$Factory;)V",
-            )
-            | (
-                "Landroid/view/LayoutInflater;",
-                "setFactory2(Landroid/view/LayoutInflater$Factory2;)V",
-            ) => {
-                self.heap
-                    .get_mut(receiver)?
-                    .fields
-                    .insert("droidless:layout-inflater:factory".into(), vec![arg(1)?]);
-            }
-            (
-                "Landroid/view/LayoutInflater;",
-                "inflate(ILandroid/view/ViewGroup;)Landroid/view/View;",
-            )
-            | (
-                "Landroid/view/LayoutInflater;",
-                "inflate(ILandroid/view/ViewGroup;Z)Landroid/view/View;",
-            ) => {
-                let resource = arg(1)?.int()? as u32;
-                let parent = arg(2)?;
-                let attach = if method.parameters.len() == 2 {
-                    parent != Word::ZERO
-                } else {
-                    arg(3)?.int()? != 0
-                };
-                let context = self
-                    .heap
-                    .get(receiver)?
-                    .fields
-                    .get("droidless:layout-inflater:context")
-                    .and_then(|values| values.first())
-                    .copied()
-                    .context("LayoutInflater has no Context")?;
-                let view = self.inflate_id(resource, 0, context, if attach && parent != Word::ZERO { Some(parent) } else { None })?;
-                let roots = self.native_roots.len();
-                self.native_roots.extend([parent, view]);
-                let generated = if parent != Word::ZERO && parent != view { self.inflated_layout_params(parent, view) } else { Ok(()) };
-                self.native_roots.truncate(roots);
-                generated?;
-                if attach && parent != Word::ZERO && parent != view {
-                    self.invoke(
-                        Method {
-                            class: "Landroid/view/ViewGroup;".into(),
-                            name: "addView".into(),
-                            parameters: vec!["Landroid/view/View;".into()],
-                            returns: "V".into(),
-                        },
-                        vec![parent, view],
-                        true,
-                    )?;
-                    result.push(parent);
-                } else {
-                    result.push(view);
-                }
-            }
             ("Landroid/util/DisplayMetrics;", "<init>()V") => {
                 self.heap.get(receiver)?;
             }
@@ -3616,6 +3519,15 @@ impl Runtime {
             }
             ("Landroid/view/ViewStub;", "inflate()Landroid/view/View;") => {
                 result.push(self.inflate_view_stub(receiver)?);
+            }
+            ("Landroid/view/ViewStub;", "getLayoutInflater()Landroid/view/LayoutInflater;") => {
+                result.push(self.heap.get(receiver)?.fields.get("droidless:stub:inflater")
+                    .and_then(|values| values.first()).copied().unwrap_or(Word::ZERO));
+            }
+            ("Landroid/view/ViewStub;", "setLayoutInflater(Landroid/view/LayoutInflater;)V") => {
+                let inflater = arg(1)?;
+                ensure!(inflater == Word::ZERO || self.is_a(&self.heap.get(inflater)?.class, "Landroid/view/LayoutInflater;"), "invalid ViewStub inflater");
+                self.heap.get_mut(receiver)?.fields.insert("droidless:stub:inflater".into(), vec![inflater]);
             }
             ("Landroid/view/ViewStub;", "setVisibility(I)V") => {
                 let visibility=arg(1)?.int()?;
@@ -5334,12 +5246,14 @@ impl Runtime {
         }
         Ok(false)
     }
-    fn inflate_id(
+    pub(crate) fn inflate_id(
         &mut self,
         id: u32,
         depth: usize,
         context: Word,
-        attach_to: Option<Word>,
+        inflater: Word,
+        parent: Word,
+        attach: bool,
     ) -> Result<Word> {
         ensure!(depth < 64, "layout inflation nesting limit");
         let name = self.apk.resources.text(id)?;
@@ -5350,12 +5264,15 @@ impl Runtime {
             .with_context(|| format!("layout file {name} missing"))?;
         let element = droidless_formats::xml::parse(data)?;
         if element.name == "merge" {
-            let parent = attach_to.context("merge requires an attached parent")?;
+            ensure!(
+                attach && parent != Word::ZERO,
+                "merge requires an attached parent"
+            );
             let roots = self.native_roots.len();
-            self.native_roots.extend([parent, context]);
+            self.native_roots.extend([parent, context, inflater]);
             let attached = (|| -> Result<()> {
                 for child in &element.children {
-                    self.inflate_child(parent, child, depth + 1, context)?;
+                    self.inflate_child(parent, child, depth + 1, context, inflater)?;
                 }
                 Ok(())
             })();
@@ -5363,20 +5280,15 @@ impl Runtime {
             attached?;
             return Ok(parent);
         }
-        self.inflate(&element, depth + 1, context)
+        self.inflate(&element, depth + 1, context, inflater, parent)
     }
     fn construct_inflated_view(
         &mut self,
         view: Word,
         class: &str,
         context: Word,
-        element: &Element,
+        attrs: Word,
     ) -> Result<()> {
-        let attrs = self.heap.instance("Landroid/util/AttributeSet;")?;
-        self.heap.get_mut(attrs)?.data = Data::Attributes {
-            named: element.attributes.clone(),
-            resources: element.resource_attributes.clone(),
-        };
         self.heap
             .get_mut(view)?
             .fields
@@ -5464,6 +5376,11 @@ impl Runtime {
             .and_then(|values| values.first())
             .copied()
             .unwrap_or(Word::ZERO);
+        let inflater = fields
+            .get("droidless:stub:inflater")
+            .and_then(|values| values.first())
+            .copied()
+            .unwrap_or(Word::ZERO);
         let layout = self
             .attribute_set_value(attrs, "layout")?
             .filter(|value| value.kind == 1 && value.data != 0)
@@ -5487,9 +5404,26 @@ impl Runtime {
         self.native_roots
             .extend([stub, parent, context, attrs, params]);
         let inflated = (|| -> Result<Word> {
-            let view = self.inflate_id(layout, 0, context, None)?;
+            let inflater = if inflater == Word::ZERO {
+                self.layout_inflater_from(context)?
+            } else {
+                inflater
+            };
+            self.native_roots.push(inflater);
+            let view = *self
+                .invoke(
+                    Method {
+                        class: "Landroid/view/LayoutInflater;".into(),
+                        name: "inflate".into(),
+                        parameters: vec!["I".into(), "Landroid/view/ViewGroup;".into(), "Z".into()],
+                        returns: "Landroid/view/View;".into(),
+                    },
+                    vec![inflater, Word::from(layout as i32), parent, Word::ZERO],
+                    true,
+                )?
+                .first()
+                .context("ViewStub inflater returned no View")?;
             self.native_roots.push(view);
-            self.inflated_layout_params(parent, view)?;
             let params = if params == Word::ZERO {
                 self.heap
                     .get(view)?
@@ -5705,10 +5639,17 @@ impl Runtime {
             Ok(value.clone())
         }
     }
-    fn inflate(&mut self, element: &Element, depth: usize, context: Word) -> Result<Word> {
+    fn inflate(
+        &mut self,
+        element: &Element,
+        depth: usize,
+        context: Word,
+        inflater: Word,
+        parent: Word,
+    ) -> Result<Word> {
         let roots = self.native_roots.len();
-        self.native_roots.push(context);
-        let result = self.inflate_inner(element, depth, context);
+        self.native_roots.extend([context, inflater, parent]);
+        let result = self.inflate_inner(element, depth, context, inflater, parent);
         self.native_roots.truncate(roots);
         result
     }
@@ -5718,16 +5659,19 @@ impl Runtime {
         element: &Element,
         depth: usize,
         context: Word,
+        inflater: Word,
     ) -> Result<()> {
         let child = if element.name == "include" {
             self.inflate_id(
                 element.number("layout").context("include missing layout")?,
                 depth,
                 context,
-                Some(parent),
+                inflater,
+                parent,
+                true,
             )?
         } else {
-            self.inflate(element, depth, context)?
+            self.inflate(element, depth, context, inflater, parent)?
         };
         if child == parent {
             return Ok(());
@@ -5746,7 +5690,7 @@ impl Runtime {
         )?;
         Ok(())
     }
-    fn inflated_layout_params(&mut self, parent: Word, child: Word) -> Result<()> {
+    pub(crate) fn inflated_layout_params(&mut self, parent: Word, child: Word) -> Result<()> {
         let attrs = self
             .heap
             .get(child)?
@@ -5780,7 +5724,14 @@ impl Runtime {
             .insert("droidless:view:layout-params".into(), params);
         Ok(())
     }
-    fn inflate_inner(&mut self, element: &Element, depth: usize, context: Word) -> Result<Word> {
+    fn inflate_inner(
+        &mut self,
+        element: &Element,
+        depth: usize,
+        context: Word,
+        inflater: Word,
+        parent: Word,
+    ) -> Result<Word> {
         ensure!(depth < 64, "layout XML nesting limit");
         ensure!(element.name != "merge", "merge requires an attached parent");
         if element.name == "include" {
@@ -5788,7 +5739,9 @@ impl Runtime {
                 element.number("layout").context("include missing layout")?,
                 depth + 1,
                 context,
-                None,
+                inflater,
+                parent,
+                false,
             );
         }
         let name = if element.name == "view" {
@@ -5806,9 +5759,41 @@ impl Runtime {
         } else {
             format!("Landroid/widget/{name};")
         };
-        let word = self.new_instance(&class)?;
+        let attrs = self.heap.instance("Landroid/util/AttributeSet;")?;
+        self.heap.get_mut(attrs)?.data = Data::Attributes {
+            named: element.attributes.clone(),
+            resources: element.resource_attributes.clone(),
+        };
+        self.native_roots.push(attrs);
+        let supplied = self.create_inflater_view(inflater, parent, &name, context, attrs)?;
+        let word = if supplied == Word::ZERO {
+            self.new_instance(&class)?
+        } else {
+            supplied
+        };
         self.native_roots.push(word);
-        self.construct_inflated_view(word, &class, context, element)?;
+        if supplied == Word::ZERO {
+            self.construct_inflated_view(word, &class, context, attrs)?;
+        }
+        self.heap
+            .get_mut(word)?
+            .fields
+            .insert("droidless:view:xml-attributes".into(), vec![attrs]);
+        if self.is_a(&self.heap.get(word)?.class, "Landroid/view/ViewStub;") {
+            let view_context = self
+                .heap
+                .get(word)?
+                .fields
+                .get("droidless:view:context")
+                .and_then(|values| values.first())
+                .copied()
+                .unwrap_or(context);
+            let clone = self.clone_layout_inflater(inflater, view_context)?;
+            self.heap
+                .get_mut(word)?
+                .fields
+                .insert("droidless:stub:inflater".into(), vec![clone]);
+        }
         let mut view = self
             .heap
             .get(word)?
@@ -6016,7 +6001,7 @@ impl Runtime {
         );
         self.heap.get_mut(word)?.view = Some(view);
         for child in &element.children {
-            self.inflate_child(word, child, depth + 1, context)?;
+            self.inflate_child(word, child, depth + 1, context, inflater)?;
         }
         self.invoke(
             Method {

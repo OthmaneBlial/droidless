@@ -23,6 +23,9 @@ impl Runtime {
                 "getSystemService(Ljava/lang/String;)Ljava/lang/Object;",
             ) => {
                 let name = self.heap.text(argument(1)?)?.to_owned();
+                if name == "layout_inflater" {
+                    return Ok(Some(vec![self.cached_layout_inflater(argument(0)?)?]));
+                }
                 let class = match name.as_str() {
                     // DROIDLESS exposes an offline virtual network; host connectivity is not shared.
                     "connectivity" => "Landroid/net/ConnectivityManager;",

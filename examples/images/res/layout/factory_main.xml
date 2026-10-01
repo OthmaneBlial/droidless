@@ -1,0 +1,7 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+    <ImageButton android:id="@+id/factory_button" android:layout_width="40dp" android:layout_height="40dp" />
+    <include layout="@layout/factory_include" />
+    <ViewStub android:id="@+id/factory_stub" android:layout="@layout/factory_leaf"
+        android:layout_width="40dp" android:layout_height="40dp" />
+</LinearLayout>

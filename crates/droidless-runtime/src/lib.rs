@@ -15,6 +15,7 @@ mod framework;
 mod graphics;
 mod grids;
 pub mod heap;
+mod inflater;
 mod interpreter;
 mod looper;
 mod menus;

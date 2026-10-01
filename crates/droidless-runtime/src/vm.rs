@@ -1158,6 +1158,14 @@ impl Runtime {
             if current == "Landroid/view/ViewGroup;" {
                 work.push("Landroid/view/ViewParent;".into());
             }
+            if current == "Landroid/view/LayoutInflater$Factory2;"
+                || current == crate::inflater::MERGER
+            {
+                work.push("Landroid/view/LayoutInflater$Factory;".into());
+            }
+            if current == crate::inflater::MERGER {
+                work.push("Landroid/view/LayoutInflater$Factory2;".into());
+            }
             if ["Landroid/net/Uri;", "Landroid/os/Bundle;"].contains(&current.as_str()) {
                 work.push("Landroid/os/Parcelable;".into());
             }

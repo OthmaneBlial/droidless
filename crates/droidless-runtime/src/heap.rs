@@ -65,6 +65,7 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
             "Ljava/lang/IncompatibleClassChangeError;"
         }
         "Ljava/lang/IncompatibleClassChangeError;" => "Ljava/lang/LinkageError;",
+        "Ljava/lang/AssertionError;" => "Ljava/lang/Error;",
         "Ljava/lang/Error;" => "Ljava/lang/Throwable;",
         "Ljava/lang/Exception;" => "Ljava/lang/Throwable;",
         "Ljava/lang/Throwable;" => "Ljava/lang/Object;",
