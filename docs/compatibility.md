@@ -24,7 +24,8 @@ annotation coverage remains pending. Reserved/newer opcodes fail with method/PC.
 Activity constructors/lifecycle/content/title/findViewById/window metrics;
 Context/Resources strings/resources; View ID/visibility/enabled/background/
 per-side padding/click/key listeners, scroll offsets and the default scroll-change
-callback; ViewGroup add/detach/attach child operations; LinearLayout orientation;
+callback; ViewGroup add/detach/attach child operations and unanimated permanent
+detached removal through virtual onViewRemoved and hierarchy-listener callbacks; LinearLayout orientation;
 TextView text/append/size/color/gravity; EditText text/null key listener/selection;
 KeyEvent action/keycode. Long.rotateRight(JI)J is implemented for 64-bit values.
 Platform Menu/MenuItem state and MenuInflater load packaged flat menu XML, with
@@ -39,9 +40,9 @@ input. Selection never toggles a checked item automatically and a false callback
 return does not undo guest effects. Native menu presentation/input remain open.
 The public Notepad's Delete callback removes the intended SQLite row and preserves
 the other row, then reaches its original Snackbar feedback. That path currently
-gets past Snackbar float clamping, then fails at ViewGroup.removeDetachedView
-during RecyclerView layout; a complete delete/return/restart workflow is not yet
-verified. Generic `<view class="…">` layout inflation now invokes the
+gets past Snackbar float clamping and detached-child removal, then fails at
+TextView.getLayout during Snackbar measurement; a complete delete/return/restart
+workflow is not yet verified. Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree
 through callback GC. View live-region mode bits are retained; Android accessibility

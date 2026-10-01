@@ -42,6 +42,79 @@ fn compiled_menu_xml_ordering_groups_and_tint_gc_contract() {
         ),
         [Word::from(1)]
     );
+    let parent = vm.root.unwrap();
+    let children = vm
+        .heap
+        .get(parent)
+        .unwrap()
+        .view
+        .as_ref()
+        .unwrap()
+        .children
+        .clone();
+    let child = children[0];
+    let params = vm.heap.get(child).unwrap().fields["droidless:view:layout-params"][0];
+    call(
+        &mut vm,
+        "Landroid/view/ViewGroup;",
+        "detachViewFromParent",
+        &["I"],
+        "V",
+        vec![parent, Word::ZERO],
+    );
+    let transition = vm
+        .heap
+        .instance("Landroid/animation/LayoutTransition;")
+        .unwrap();
+    for (field, value, boundary) in [
+        ("droidless:touch:child", child, "active touch target"),
+        (
+            "droidless:view:layout-transition",
+            transition,
+            "LayoutTransition",
+        ),
+    ] {
+        vm.heap
+            .get_mut(parent)
+            .unwrap()
+            .fields
+            .insert(field.into(), vec![value]);
+        let error = vm
+            .invoke(
+                Method {
+                    class: "Landroid/view/ViewGroup;".into(),
+                    name: "removeDetachedView".into(),
+                    parameters: vec!["Landroid/view/View;".into(), "Z".into()],
+                    returns: "V".into(),
+                },
+                vec![parent, child, Word::ZERO],
+                false,
+            )
+            .unwrap_err();
+        assert!(format!("{error:#}").contains(boundary));
+        assert_eq!(vm.stack_depth(), 0);
+        assert_eq!(
+            vm.heap.get(parent).unwrap().view.as_ref().unwrap().children,
+            children[1..]
+        );
+        vm.heap.get_mut(parent).unwrap().fields.remove(field);
+    }
+    call(
+        &mut vm,
+        "Landroid/view/ViewGroup;",
+        "attachViewToParent",
+        &[
+            "Landroid/view/View;",
+            "I",
+            "Landroid/view/ViewGroup$LayoutParams;",
+        ],
+        "V",
+        vec![parent, child, Word::ZERO, params],
+    );
+    assert_eq!(
+        vm.heap.get(parent).unwrap().view.as_ref().unwrap().children,
+        children
+    );
     vm.collect();
     let items = match &vm.heap.get(menu).unwrap().data {
         droidless_runtime::heap::Data::Menu(items) => items.clone(),

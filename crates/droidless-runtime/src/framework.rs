@@ -778,7 +778,54 @@ impl Runtime {
                         index >= 0 && (index as usize) < children.len(),
                         "View child index is out of bounds"
                     );
-                    children.remove(index as usize);
+                    let child = children.remove(index as usize);
+                    self.heap
+                        .get_mut(child)?
+                        .fields
+                        .remove("droidless:view:parent");
+                    return Ok(Some(result));
+                }
+                "removeDetachedView(Landroid/view/View;Z)V" => {
+                    self.require_main_thread()?;
+                    let child = arg(1)?;
+                    self.view_mut(child)?;
+                    arg(2)?.int()?;
+                    let fields = &self.heap.get(receiver)?.fields;
+                    ensure!(
+                        fields
+                            .get("droidless:touch:child")
+                            .and_then(|v| v.first())
+                            .copied()
+                            .unwrap_or(Word::ZERO)
+                            != child,
+                        "removing a detached active touch target is unsupported"
+                    );
+                    ensure!(
+                        fields
+                            .get("droidless:view:layout-transition")
+                            .and_then(|v| v.first())
+                            .copied()
+                            .unwrap_or(Word::ZERO)
+                            == Word::ZERO,
+                        "detached removal with LayoutTransition is unsupported"
+                    );
+                    // ponytail: unanimated removal; window attachment and disappearing-view animations need their own lifecycle.
+                    self.invoke(
+                        Method {
+                            class: "Landroid/view/ViewGroup;".into(),
+                            name: "onViewRemoved".into(),
+                            parameters: vec!["Landroid/view/View;".into()],
+                            returns: "V".into(),
+                        },
+                        vec![receiver, child],
+                        true,
+                    )?;
+                    return Ok(Some(result));
+                }
+                "onViewRemoved(Landroid/view/View;)V" => {
+                    self.require_main_thread()?;
+                    self.view_mut(arg(1)?)?;
+                    self.hierarchy_change(receiver, arg(1)?, false)?;
                     return Ok(Some(result));
                 }
                 "attachViewToParent(Landroid/view/View;ILandroid/view/ViewGroup$LayoutParams;)V" => {

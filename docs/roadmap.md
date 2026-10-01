@@ -46,8 +46,8 @@ The following are objectives, not completed capability claims.
    through headless menu replay, with invalidation, stale input and GC checks.
    Notepad's original Delete removes the intended row. Its Snackbar now completes
    child binding through onFinishInflate and delivers its queued confirmation
-   callback, then reaches ViewGroup.removeDetachedView during RecyclerView layout;
-   complete delete/restart and
+   callback and completes detached-child removal. Snackbar measurement now reaches
+   TextView.getLayout; complete delete/restart and
    native menu input remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.

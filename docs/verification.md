@@ -1,5 +1,8 @@
 # First interactive milestone evidence
 
+Latest local source gate: 101 Rust tests, warning-free Clippy, optimized builds
+and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
+
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
 plus AppKit controls. Native observations and headless tests are separated below.
 
@@ -1233,7 +1236,7 @@ opens one and selects its original Delete item. The actual callback executes
 SQLite DELETE; the resulting table contains only the other note with its original
 ID, title and body. EventBus description/posting and generic Snackbar-layout
 construction now execute. Returning to Notes then fails at the original
-ViewGroup.removeDetachedView call during RecyclerView layout. This is partial deletion
+TextView.getLayout call during Snackbar measurement. This is partial deletion
 evidence, not a passing delete/return/restart workflow or native menu interaction.
 The regression catalog keeps the complete deletion capability false.
 
@@ -1266,8 +1269,8 @@ and GC. Android accessibility-service event delivery is not implemented.
 
 The pinned Notepad delete probe now completes its original SnackbarLayout child
 binding and delivers its queued confirmation callback; it now reaches
-ViewGroup.removeDetachedView during RecyclerView layout. The complete workflow remains unverified, and the
-catalog keeps that capability false.
+TextView.getLayout during Snackbar measurement. The complete workflow remains
+unverified, and the catalog keeps that capability false.
 
 ## Current-source Handler payload factory
 
@@ -1281,7 +1284,7 @@ factory](https://android.googlesource.com/platform/frameworks/base/+/android-5.0
 
 The pinned Notepad Delete callback now queues and executes its original Snackbar
 Handler.Callback. It gets past SwipeDismissBehavior float clamping, then fails at
-ViewGroup.removeDetachedView during RecyclerView layout.
+TextView.getLayout during Snackbar measurement.
 Complete delete/return/restart and native options-menu input remain unverified.
 
 ## Current-source float extrema
@@ -1298,9 +1301,34 @@ java -cp examples/counter/build/classes org.droidless.counter.MathContract
 ```
 
 The pinned original Notepad Delete replay now gets past Snackbar float clamping
-and reaches ViewGroup.removeDetachedView during RecyclerView layout. The intended
+and completes detached-child removal; it reaches TextView.getLayout during
+Snackbar measurement. The intended
 row is removed and the other retains its original ID/title/body, but complete
 delete/return/restart and native menu input are still unverified.
 
 Full local CI passes 101 Rust tests, warning-free Clippy, optimized CLI/replay
 builds and 4,096 seeded parser mutations. GitHub Actions remain disabled.
+
+## Current-source detached ViewGroup removal
+
+Temporary detach now removes the child from the visible array and clears its
+parent, following the [API-21 ViewGroup contract](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
+Reattachment restores the parent, index and layout parameters without issuing
+another hierarchy-added callback. Permanent removeDetachedView runs the actual
+APK onViewRemoved override; its base implementation notifies the hierarchy listener.
+The compiled contract checks remaining-child identity, suppressed temporary-detach
+notifications, reattachment, callback GC and retained state after a thrown override.
+Native checks reject active child touch capture and LayoutTransitions without
+changing the remaining array. Window attachment and disappearing-view animations
+remain unsupported; this is the unanimated removal profile.
+
+The pinned, unmodified Notepad Delete replay now passes RecyclerView detached-child
+removal and reaches Snackbar measurement at TextView.getLayout. It still removes
+only the intended SQLite row and preserves the other's original ID/title/body.
+Complete delete/return/restart and native options-menu input remain unverified.
+
+```sh
+cargo test -p droidless-runtime --test menus --locked
+sh tools/ci.sh
+python3 tools/compatibility.py
+```

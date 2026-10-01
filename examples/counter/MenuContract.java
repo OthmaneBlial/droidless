@@ -10,6 +10,7 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.TextView;
 import android.widget.LinearLayout;
 
@@ -40,6 +41,27 @@ public final class MenuContract {
             System.gc(); throw new IllegalStateException("tint failed");
         }
     }
+    static class DetachedGroup extends LinearLayout {
+        int added, removed, finishes;
+        boolean fail;
+        DetachedGroup(Context context) {
+            super(context);
+            setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
+                public void onChildViewAdded(View parent, View child) { System.gc(); added++; }
+                public void onChildViewRemoved(View parent, View child) {
+                    System.gc(); check(parent == DetachedGroup.this && child.getParent() == null, "detached removal callback state"); removed++;
+                }
+            });
+        }
+        void detach(int index) { detachViewFromParent(index); }
+        void attach(View child, int index, ViewGroup.LayoutParams params) { attachViewToParent(child, index, params); }
+        void discard(View child, boolean animate) { removeDetachedView(child, animate); }
+        @Override public void onViewRemoved(View child) {
+            System.gc(); finishes++;
+            if (fail) throw new IllegalStateException("removed callback failed");
+            super.onViewRemoved(child);
+        }
+    }
     static void check(boolean value, String why) {
         if (!value) throw new AssertionError(why);
     }
@@ -54,6 +76,23 @@ public final class MenuContract {
             inflated.setAccessibilityLiveRegion(mode); System.gc();
             check(inflated.getAccessibilityLiveRegion() == (mode & 3), "live region mode bits and GC");
         }
+        DetachedGroup group = new DetachedGroup(activity);
+        View first = new View(activity), second = new View(activity);
+        group.addView(first); group.addView(second);
+        group.detach(0); System.gc();
+        check(group.getChildCount() == 1 && group.getChildAt(0) == second
+                && first.getParent() == null && group.removed == 0, "temporary detach state and callback suppression");
+        ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(7, 8);
+        group.attach(first, 0, params); System.gc();
+        check(group.getChildCount() == 2 && group.getChildAt(0) == first && first.getParent() == group
+                && first.getLayoutParams() == params && group.added == 2, "lightweight reattachment");
+        group.detach(1); group.discard(second, false); System.gc();
+        check(group.removed == 1 && group.finishes == 1 && group.getChildCount() == 1
+                && group.getChildAt(0) == first && second.getParent() == null, "permanent detached removal");
+        group.detach(0); group.fail = true;
+        try { group.discard(first, true); throw new AssertionError("removed callback failure swallowed"); }
+        catch (IllegalStateException expected) { check(expected.getMessage().equals("removed callback failed"), "removed cause"); }
+        check(group.finishes == 2 && group.removed == 1 && group.getChildCount() == 0 && first.getParent() == null, "removed callback fault state");
         check(menu.size() == 0 && !menu.hasVisibleItems(), "empty menu");
         MenuItem late = menu.add(4, 10, 8, "Late");
         MenuItem early = menu.add(4, 11, 2, "Early");
