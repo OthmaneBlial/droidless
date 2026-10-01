@@ -6,10 +6,13 @@ The following are objectives, not completed capability claims.
 1. Continue VM verification: full field/method reference validation and instruction
    boundaries. Gate: compiled conformance/malformed-input regressions.
 2. Improve input/resources: full focus/IME/paste, qualifier/style resolution and
-   weighted measurement remain open. Packaged PNG/JPEG/WebP decoding and native
-   ImageView rendering now pass an authored fixture; vector/animated drawables,
-   pixel operations and Canvas remain open. Gate: independent-app image workflows
-   and comparisons with expected Android behavior.
+   weighted measurement remain open. Packaged PNG/JPEG/WebP decoding, native
+   ImageView rendering and a bounded `Resources.getXml` pull cursor pass authored
+   fixtures. An unmodified image viewer reaches AppCompat's vector resource check,
+   then stops because vector drawable inflation is unsupported. Independent-app
+   image workflows, vector/animated drawables, pixel operations and Canvas remain
+   open. Gate: complete an image workflow in an independent app and compare it
+   with expected Android behavior.
 3. Multi-screen/persistence: explicit Intents/Bundle/back stack are proven in an
    authored native fixture. Isolated SharedPreferences save/restart/clear are also
    proven in an authored native fixture. Basic HashSet/ArrayList/HashMap/LinkedHashMap
@@ -35,7 +38,8 @@ The following are objectives, not completed capability claims.
    independently completed transaction execution remains unproven.
    Gate: a real APK completes its queued transactions and posts UI results.
 5. Isolated file/process APIs, broader lists/SQLite/network and independent image-app workflows: follow first failures in substantial third-party
-   apps, with host capabilities explicit and tested.
+   apps, with host capabilities explicit and tested. Current SwpieView startup
+   reaches vector drawable inflation; no image workflow is yet proven.
 6. Linux native backend: common VM/View model, real Linux builds/render/input.
 7. Kotlin/AndroidX, then fragments/Compose/JNI/foreign libraries: major subsequent
    compatibility projects. No emulator fallback.

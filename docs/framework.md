@@ -132,6 +132,12 @@ text size/color, image `src`/`srcCompat`, gravity, enabled/visibility and XML
 onClick. Recursive include is bounded. px/dp/sp resolve at density 1.
 `--size WIDTHxHEIGHT` selects logical host dimensions (128–4096 per axis; default 420×720).
 
+`Resources.getXml` opens packaged binary XML as an `XmlResourceParser` cursor.
+The current subset covers document/tag/text events, namespaces, depth and line
+numbers, named and indexed attributes, `nextTag`, `nextText`, and `close`.
+An authored APK checks start-tag traversal, depth, attributes and closing. This
+does not inflate vector drawables or implement general Android XML parsing APIs.
+
 Weighted linear children divide remaining primary-axis space. Measurement is
 approximate for explicit weighted base sizes and many Android constraints.
 FrameLayout stacks children. Packaged PNG/JPEG/WebP resources flow through

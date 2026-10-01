@@ -3,11 +3,32 @@ use anyhow::{Result, ensure};
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Value {
     pub kind: u8,
     pub data: u32,
     pub text: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PullAttribute {
+    pub namespace: Option<String>,
+    pub prefix: Option<String>,
+    pub name: String,
+    pub value: Value,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PullEvent {
+    pub kind: u8,
+    pub depth: usize,
+    pub line: i32,
+    pub name: Option<String>,
+    pub namespace: Option<String>,
+    pub prefix: Option<String>,
+    pub text: Option<String>,
+    pub attributes: Vec<PullAttribute>,
+    pub namespaces: Vec<(usize, Option<String>, String)>,
 }
 impl Value {
     pub fn display(&self) -> String {
@@ -38,6 +59,14 @@ impl Element {
 }
 
 pub fn parse(data: &[u8]) -> Result<Element> {
+    parse_document(data).map(|(document, _)| document)
+}
+
+pub fn parse_events(data: &[u8]) -> Result<Vec<PullEvent>> {
+    parse_document(data).map(|(_, events)| events)
+}
+
+fn parse_document(data: &[u8]) -> Result<(Element, Vec<PullEvent>)> {
     let root = Bytes(data).chunk(0)?;
     ensure!(
         root.kind == 3 && root.bytes.0.len() == data.len(),
@@ -46,6 +75,18 @@ pub fn parse(data: &[u8]) -> Result<Element> {
     let mut strings = vec![];
     let mut stack: Vec<Element> = vec![];
     let mut document = None;
+    let mut namespaces: Vec<(usize, Option<String>, String)> = vec![];
+    let mut events = vec![PullEvent {
+        kind: 0,
+        depth: 0,
+        line: -1,
+        name: None,
+        namespace: None,
+        prefix: None,
+        text: None,
+        attributes: vec![],
+        namespaces: vec![],
+    }];
     for chunk in root.children()? {
         let b = chunk.bytes;
         match chunk.kind {
@@ -53,21 +94,67 @@ pub fn parse(data: &[u8]) -> Result<Element> {
                 ensure!(strings.is_empty(), "duplicate XML string pool");
                 strings = string_pool(&chunk)?;
             }
-            0x100 | 0x101 | 0x180 => {}
+            0x100 => {
+                ensure!(namespaces.len() < 64, "XML namespace limit reached (64)");
+                let prefix = b.u32(16)?;
+                let uri = string_at(&strings, b.u32(20)?)?.to_owned();
+                namespaces.push((
+                    stack.len() + 1,
+                    (prefix != u32::MAX)
+                        .then(|| string_at(&strings, prefix).map(str::to_owned))
+                        .transpose()?,
+                    uri,
+                ));
+            }
+            0x101 => {
+                let prefix = b.u32(16)?;
+                let uri = string_at(&strings, b.u32(20)?)?;
+                let expected = (
+                    (prefix != u32::MAX)
+                        .then(|| string_at(&strings, prefix).map(str::to_owned))
+                        .transpose()?,
+                    uri.to_owned(),
+                );
+                let active = namespaces.pop();
+                ensure!(
+                    active
+                        .as_ref()
+                        .is_some_and(|(_, prefix, uri)| (prefix, uri) == (&expected.0, &expected.1)),
+                    "unbalanced XML namespace"
+                );
+            }
+            0x180 => {}
             0x102 => {
                 ensure!(chunk.header == 16, "invalid start element header");
+                ensure!(events.len() < 100_000, "XML event limit reached (100000)");
+                let namespace = b.u32(16)?;
+                let namespace = (namespace != u32::MAX)
+                    .then(|| string_at(&strings, namespace).map(str::to_owned))
+                    .transpose()?;
                 let name = string_at(&strings, b.u32(20)?)?.to_owned();
+                let prefix = namespace.as_ref().and_then(|uri| {
+                    namespaces
+                        .iter()
+                        .rev()
+                        .find(|(_, _, active_uri)| active_uri == uri)
+                        .and_then(|(_, prefix, _)| prefix.clone())
+                });
                 let start = 16 + usize::from(b.u16(24)?);
                 let stride = usize::from(b.u16(26)?);
                 let count = usize::from(b.u16(28)?);
                 ensure!(
-                    start >= 36 && stride >= 20 && stack.len() < 256,
+                    start >= 36 && stride >= 20 && stack.len() < 256 && count <= 1024,
                     "invalid attributes or XML nesting too deep"
                 );
                 b.table(start, count, stride)?;
                 let mut attributes = BTreeMap::new();
+                let mut pull_attributes = Vec::with_capacity(count);
                 for i in 0..count {
                     let at = start + i * stride;
+                    let attribute_namespace = b.u32(at)?;
+                    let attribute_namespace = (attribute_namespace != u32::MAX)
+                        .then(|| string_at(&strings, attribute_namespace).map(str::to_owned))
+                        .transpose()?;
                     let key = string_at(&strings, b.u32(at + 4)?)?.to_owned();
                     let raw = b.u32(at + 8)?;
                     ensure!(b.u16(at + 12)? == 8, "invalid XML typed value");
@@ -80,6 +167,23 @@ pub fn parse(data: &[u8]) -> Result<Element> {
                     } else {
                         None
                     };
+                    let prefix = attribute_namespace.as_ref().and_then(|uri| {
+                        namespaces
+                            .iter()
+                            .rev()
+                            .find(|(_, _, active_uri)| active_uri == uri)
+                            .and_then(|(_, prefix, _)| prefix.clone())
+                    });
+                    pull_attributes.push(PullAttribute {
+                        namespace: attribute_namespace,
+                        prefix,
+                        name: key.clone(),
+                        value: Value {
+                            kind,
+                            data: value,
+                            text: text.clone(),
+                        },
+                    });
                     ensure!(
                         attributes
                             .insert(
@@ -94,6 +198,17 @@ pub fn parse(data: &[u8]) -> Result<Element> {
                         "duplicate XML attribute"
                     );
                 }
+                events.push(PullEvent {
+                    kind: 2,
+                    depth: stack.len() + 1,
+                    line: b.u32(8)? as i32,
+                    name: Some(name.clone()),
+                    namespace,
+                    prefix,
+                    text: None,
+                    attributes: pull_attributes,
+                    namespaces: namespaces.clone(),
+                });
                 stack.push(Element {
                     name,
                     attributes,
@@ -101,6 +216,7 @@ pub fn parse(data: &[u8]) -> Result<Element> {
                 });
             }
             0x103 => {
+                ensure!(events.len() < 100_000, "XML event limit reached (100000)");
                 let element = stack
                     .pop()
                     .ok_or_else(|| anyhow::anyhow!("unbalanced XML end tag"))?;
@@ -108,6 +224,28 @@ pub fn parse(data: &[u8]) -> Result<Element> {
                     string_at(&strings, b.u32(20)?)? == element.name,
                     "mismatched XML end tag"
                 );
+                let namespace = b.u32(16)?;
+                let namespace = (namespace != u32::MAX)
+                    .then(|| string_at(&strings, namespace).map(str::to_owned))
+                    .transpose()?;
+                let prefix = namespace.as_ref().and_then(|uri| {
+                    namespaces
+                        .iter()
+                        .rev()
+                        .find(|(_, _, active_uri)| active_uri == uri)
+                        .and_then(|(_, prefix, _)| prefix.clone())
+                });
+                events.push(PullEvent {
+                    kind: 3,
+                    depth: stack.len() + 1,
+                    line: b.u32(8)? as i32,
+                    name: Some(element.name.clone()),
+                    namespace,
+                    prefix,
+                    text: None,
+                    attributes: vec![],
+                    namespaces: namespaces.clone(),
+                });
                 if let Some(parent) = stack.last_mut() {
                     parent.children.push(element);
                 } else {
@@ -116,13 +254,38 @@ pub fn parse(data: &[u8]) -> Result<Element> {
                 }
             }
             0x104 => {
+                ensure!(events.len() < 100_000, "XML event limit reached (100000)");
                 b.slice(16, 12)?;
+                events.push(PullEvent {
+                    kind: 4,
+                    depth: stack.len(),
+                    line: b.u32(8)? as i32,
+                    name: None,
+                    namespace: None,
+                    prefix: None,
+                    text: Some(string_at(&strings, b.u32(16)?)?.to_owned()),
+                    attributes: vec![],
+                    namespaces: namespaces.clone(),
+                });
             }
             _ => anyhow::bail!("unsupported binary XML chunk 0x{:04x}", chunk.kind),
         }
     }
     ensure!(stack.is_empty(), "unclosed XML tags");
-    document.ok_or_else(|| anyhow::anyhow!("XML has no root"))
+    ensure!(namespaces.is_empty(), "unclosed XML namespace");
+    let document = document.ok_or_else(|| anyhow::anyhow!("XML has no root"))?;
+    events.push(PullEvent {
+        kind: 1,
+        depth: 0,
+        line: -1,
+        name: None,
+        namespace: None,
+        prefix: None,
+        text: None,
+        attributes: vec![],
+        namespaces: vec![],
+    });
+    Ok((document, events))
 }
 
 #[derive(Debug, Serialize)]

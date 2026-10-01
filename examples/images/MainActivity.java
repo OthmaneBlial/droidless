@@ -5,14 +5,41 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.os.Bundle;
+import android.content.res.XmlResourceParser;
 import android.widget.ImageView;
 import android.widget.TextView;
+import org.xmlpull.v1.XmlPullParser;
 import java.io.InputStream;
 
 /** Exercises packaged PNG, JPEG, and WebP decoding and ImageView rendering. */
 public class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        XmlResourceParser parser = getResources().getXml(R.xml.pull_probe);
+        try {
+            if (parser.next() != XmlPullParser.START_TAG || !"probe".equals(parser.getName())
+                    || parser.getDepth() != 1 || parser.getAttributeCount() != 1
+                    || !"parsed".equals(parser.getAttributeValue(0))
+                    || parser.getNamespaceCount(1) != 1
+                    || !"http://schemas.android.com/apk/res/android".equals(parser.getNamespaceUri(0))) {
+                throw new IllegalStateException("XML pull parser root mismatch");
+            }
+            if (parser.nextTag() != XmlPullParser.START_TAG || !"child".equals(parser.getName())
+                    || parser.getDepth() != 2 || !"nested".equals(parser.getAttributeValue(0))
+                    || !"android".equals(parser.getAttributePrefix(0))
+                    || !"payload".equals(parser.nextText())) {
+                throw new IllegalStateException("XML pull parser child mismatch");
+            }
+            if (parser.nextTag() != XmlPullParser.START_TAG || !"empty".equals(parser.getName())
+                    || !parser.isEmptyElementTag()
+                    || parser.nextTag() != XmlPullParser.END_TAG
+                    || parser.nextTag() != XmlPullParser.END_TAG) {
+                throw new IllegalStateException("XML pull parser empty tag mismatch");
+            }
+            parser.close();
+        } catch (Exception error) {
+            throw new IllegalStateException("XML pull parser failed", error);
+        }
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
         BitmapFactory.decodeResource(getResources(), R.drawable.sample, bounds);
@@ -63,6 +90,7 @@ public class MainActivity extends Activity {
             "PNG " + png.getWidth() + "x" + png.getHeight()
                 + " | JPEG " + jpeg.getWidth() + "x" + jpeg.getHeight()
                 + " | WebP " + webp.getWidth() + "x" + webp.getHeight()
+                + " | XML pull OK"
         );
     }
 }

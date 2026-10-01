@@ -22,6 +22,34 @@ fn independently_built_apk() {
 }
 
 #[test]
+fn binary_xml_pull_events_keep_namespaces_and_android_attributes() {
+    let apk = Apk::parse(APK).unwrap();
+    let events = xml::parse_events(&apk.files["AndroidManifest.xml"]).unwrap();
+    assert_eq!(events.first().unwrap().kind, 0);
+    assert_eq!(events.last().unwrap().kind, 1);
+    let action = events
+        .iter()
+        .find(|event| event.kind == 2 && event.name.as_deref() == Some("action"))
+        .unwrap();
+    assert_eq!(action.depth, 5);
+    assert_eq!(action.namespaces.len(), 1);
+    let name = action
+        .attributes
+        .iter()
+        .find(|attribute| attribute.name == "name")
+        .unwrap();
+    assert_eq!(
+        name.namespace.as_deref(),
+        Some("http://schemas.android.com/apk/res/android")
+    );
+    assert_eq!(name.prefix.as_deref(), Some("a"));
+    assert_eq!(
+        name.value.text.as_deref(),
+        Some("android.intent.action.MAIN")
+    );
+}
+
+#[test]
 fn truncations_are_errors() {
     let apk = Apk::parse(APK).unwrap();
     let dex = &apk.files["classes.dex"];

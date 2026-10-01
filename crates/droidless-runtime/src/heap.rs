@@ -135,6 +135,11 @@ pub enum Data {
     Bundle(BTreeMap<String, (String, Vec<Word>)>),
     TypedArray(Vec<Option<droidless_formats::xml::Value>>),
     Attributes(std::collections::BTreeMap<String, droidless_formats::xml::Value>),
+    XmlPull {
+        events: Vec<droidless_formats::xml::PullEvent>,
+        position: usize,
+        closed: bool,
+    },
     ReflectedMethod(droidless_formats::dex::Method),
     Collection {
         values: Vec<Word>,

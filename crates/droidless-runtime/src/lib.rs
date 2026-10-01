@@ -26,4 +26,5 @@ mod time_units;
 pub mod ui;
 mod vm;
 mod workers;
+mod xml_resource;
 pub use vm::{Runtime, Trace};

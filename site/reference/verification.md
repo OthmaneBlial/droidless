@@ -596,6 +596,33 @@ Back and in a fresh process. No GitHub Actions run was used.
 
 ## Current source: packaged raster images
 
+## Current source: packaged binary XML pulls
+
+Verified 2026-10-01 on macOS ARM64. The authored image APK now calls
+`Resources.getXml` on a packaged XML resource and checks document traversal,
+tag names, depth, namespace URI/prefix, indexed attributes, text via `nextText`,
+whitespace skipping via `nextTag`, empty-element detection and parser close.
+The compatibility replay requires its `XML pull OK` result. The formats test also
+parses namespace and Android attributes from the independently built
+`SmallestAPK` manifest.
+
+The unchanged [F-Droid SwpieView 1.3.2 APK](https://f-droid.org/en/packages/org.voidptr.swpieview/)
+(`org.voidptr.swpieview`, SHA-256
+`7c7a17ddf254e6f7adb53786ab3928937a4de499785475278df2fe5a034f50f3`) was
+launched with `--ephemeral`. AppCompat's startup call to `Resources.getXml`,
+`Xml.asAttributeSet` and the pull parser now completes. The app then stops at its
+own vector-drawable configuration check because `Resources.getDrawable` still
+returns the runtime's basic drawable rather than inflating its bundled
+`VectorDrawableCompat`. This is a concrete remaining blocker, not an image-viewer
+workflow or successful launch claim. [APK source](https://github.com/err4nt/SwpieView).
+
+```sh
+target/debug/droidless run --headless --ephemeral --stats fixtures/generated/images.apk
+target/debug/droidless run --headless --ephemeral --size 390x844 --trace-framework artifacts/apks/swpieview-1.3.2.apk
+```
+
+## Current source: packaged raster images
+
 Verified 2026-10-01 on macOS ARM64 with the authored `org.droidless.images`
 fixture. The APK packages 96×64 PNG, JPEG and WebP images as resources and
 assets. Its original DEX exercises `BitmapFactory.decodeResource` with bounds
@@ -618,8 +645,9 @@ python3 tools/compatibility.py
 target/release/droidless run --headless --ephemeral fixtures/generated/images.apk
 ```
 
-Full local CI passes 69 Rust tests, warning-free Clippy, the optimized release
+Full local CI passes 70 Rust tests, warning-free Clippy, the optimized release
 build and 4,096 seeded APK/DEX/XML/resource mutations. The compatibility replay
-also passes all 17 calculator scenarios and the unchanged Notepad list/editor,
-two-row save and fresh-process restart checks. GitHub Actions remain disabled;
-the 50% everyday-app checkpoint remains ahead.
+also checks packaged XML pull traversal and passes all 17 calculator scenarios
+and the unchanged Notepad list/editor, two-row save and fresh-process restart
+checks. GitHub Actions remain disabled; the 50% everyday-app checkpoint remains
+ahead.

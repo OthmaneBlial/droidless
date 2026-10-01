@@ -121,6 +121,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/app/Application;",
             "Landroid/app/Application$ActivityLifecycleCallbacks;",
             "Landroid/content/res/Resources;",
+            "Landroid/content/res/XmlResourceParser;",
             "Landroid/content/res/AssetManager;",
             "Landroid/content/res/Resources$Theme;",
             "Landroid/content/res/Configuration;",
@@ -145,6 +146,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/util/SparseArray;",
             "Landroid/util/SparseIntArray;",
             "Landroid/util/AttributeSet;",
+            "Lorg/xmlpull/v1/XmlPullParser;",
             "Landroid/graphics/Rect;",
             "Landroid/graphics/RectF;",
             "Landroid/graphics/Paint;",
@@ -391,6 +393,9 @@ impl Runtime {
         }
         if self.trace.framework {
             eprintln!("framework: {} {args:?}", method.key());
+        }
+        if let Some(result) = self.xml_resource_native(method, args)? {
+            return Ok(Some(result));
         }
         if let Some(result) = self.text_native(method, args)? {
             return Ok(Some(result));
@@ -2081,10 +2086,19 @@ impl Runtime {
                 result.push(self.heap.string(self.screen(receiver)?.title.clone())?);
             }
             ("Landroid/util/AttributeSet;", "getAttributeCount()I") => {
-                let Data::Attributes(attributes) = &self.heap.get(receiver)?.data else {
-                    bail!("uninitialized AttributeSet");
+                let count = match &self.heap.get(receiver)?.data {
+                    Data::Attributes(attributes) => attributes.len() as i32,
+                    Data::XmlPull { events, position, .. } => {
+                        let event = events.get(*position).context("invalid XML parser position")?;
+                        if event.kind == 2 {
+                            event.attributes.len() as i32
+                        } else {
+                            -1
+                        }
+                    }
+                    _ => bail!("uninitialized AttributeSet"),
                 };
-                result.push(Word::from(attributes.len() as i32));
+                result.push(Word::from(count));
             }
             ("Landroid/util/AttributeSet;", "getAttributeValue(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;") => {
                 let value = self.attribute_set_value(receiver, self.heap.text(arg(2)?)?)?;
@@ -4237,10 +4251,22 @@ impl Runtime {
         Ok(bitmap)
     }
     fn attribute_set_value(&self, attrs: Word, name: &str) -> Result<Option<Value>> {
-        let Data::Attributes(attributes) = &self.heap.get(attrs)?.data else {
-            bail!("uninitialized AttributeSet");
-        };
-        Ok(attributes.get(name).cloned())
+        match &self.heap.get(attrs)?.data {
+            Data::Attributes(attributes) => Ok(attributes.get(name).cloned()),
+            Data::XmlPull {
+                events, position, ..
+            } => {
+                let event = events
+                    .get(*position)
+                    .context("invalid XML parser position")?;
+                Ok(event
+                    .attributes
+                    .iter()
+                    .find(|attribute| attribute.name == name)
+                    .map(|attribute| attribute.value.clone()))
+            }
+            _ => bail!("uninitialized AttributeSet"),
+        }
     }
     fn find_view(&self, word: Word, id: u32, depth: usize) -> Result<Option<Word>> {
         ensure!(depth < 128, "View search nesting limit");

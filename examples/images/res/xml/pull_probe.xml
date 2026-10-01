@@ -1,0 +1,4 @@
+<probe xmlns:android="http://schemas.android.com/apk/res/android" android:label="parsed">
+    <child android:label="nested">payload</child>
+    <empty />
+</probe>

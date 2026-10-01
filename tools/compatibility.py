@@ -78,13 +78,14 @@ image_process = subprocess.run([
 image_tree = json.loads(image_process.stdout)
 image_nodes = list(flatten(image_tree))
 image_labels = [node["view"]["text"] for node in image_nodes]
-if "PNG 96x64 | JPEG 96x64 | WebP 96x64" not in image_labels:
+if "PNG 96x64 | JPEG 96x64 | WebP 96x64 | XML pull OK" not in image_labels:
     raise SystemExit("BitmapFactory did not decode all three fixture image formats")
 if sum(node["view"]["kind"] == "ImageView" for node in image_nodes) != 4:
     raise SystemExit("Image fixture did not produce all four ImageViews")
 (root / "artifacts/images-compatibility.json").write_text(json.dumps({
     "formats": ["PNG", "JPEG", "WebP"],
     "decode_paths": ["resource", "stream", "byte-array"],
+    "xml_resource_parser": "start tags, depth, attributes, and close",
     "image_views": 4,
     "native_visual_check": "artifacts/images-native.png",
 }, indent=2) + "\n")

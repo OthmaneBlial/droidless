@@ -29,8 +29,10 @@ TextView text/append/size/color/gravity; EditText text/null key listener/selecti
 KeyEvent action/keycode. Long.rotateRight(JI)J is implemented for 64-bit values.
 BitmapFactory decodes packaged PNG/JPEG/WebP through resource, stream and byte-array
 paths; Bitmap bounds options, dimensions and ImageView resource/bitmap/drawable
-assignment reach AppKit image views. This is authored-fixture evidence; bitmap
-pixel manipulation and Android Canvas drawing remain unsupported.
+assignment reach AppKit image views. `Resources.getXml` exposes a bounded binary
+XML pull cursor, tested by an authored APK. This is authored-fixture evidence;
+bitmap pixel manipulation, Android Canvas drawing and vector drawable inflation
+remain unsupported.
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does
 not establish general RecyclerView or AndroidX compatibility.
