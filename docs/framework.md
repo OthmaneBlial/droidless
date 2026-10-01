@@ -716,8 +716,9 @@ TextView baseline uses the current approximate ascent. Relative margin getters
 use physical-edge fallback; relative-margin resolution is incomplete. Elevation
 and getZ retain guest state with zero translationZ; native shadow/Z-order rendering
 and custom child drawing-order configuration are unsupported.
-Unfocused groups return null from getFocusedChild. Guest requestFocus is still
-unsupported; native editor focus is not mirrored as Android focus state.
+Unfocused groups return null from getFocusedChild. Explicit guest requestFocus
+and managed focus ownership are supported as described above; automatic native
+editor focus synchronization remains unimplemented.
 
 CheckedTextView retains checked state. Drawable state uses current enabled and
 pressed flags, checked additions, virtual guest callbacks, duplicate-parent
