@@ -135,6 +135,18 @@
       "native_worker_close_exit_zero": true
     },
     {
+      "package": "org.droidless.images",
+      "origin": "droidless-fixture",
+      "status": "native-image-fixture",
+      "native_ui": true,
+      "native_images_verified": true,
+      "png_verified": true,
+      "jpeg_verified": true,
+      "webp_verified": true,
+      "source": "examples/images",
+      "notes": "Authored fixture checks BitmapFactory resource, stream and byte-array paths, bounds metadata, XML src, and four AppKit ImageViews. The captured native screenshot showed all three formats. No independent image-app claim; bitmap pixel operations and Canvas remain unsupported."
+    },
+    {
       "package": "ir.cafebazaar.notepad",
       "version": "1.0",
       "origin": "third-party",

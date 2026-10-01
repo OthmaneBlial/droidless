@@ -69,6 +69,27 @@ for name, app_apk, digest, kind, scenarios, options in apps:
     (root / f"artifacts/{filename}-compatibility.json").write_text(json.dumps(results, indent=2) + "\n")
     print(f"{len(results)} {name} scenarios passed; native window is verified separately.")
 
+images = root / "fixtures/generated/images.apk"
+if not images.exists():
+    raise SystemExit(f"Missing {images}; rebuild with tools/build-fixtures.py")
+image_process = subprocess.run([
+    str(args.binary), "run", "--headless", "--ephemeral", str(images),
+], text=True, capture_output=True, check=True, timeout=120)
+image_tree = json.loads(image_process.stdout)
+image_nodes = list(flatten(image_tree))
+image_labels = [node["view"]["text"] for node in image_nodes]
+if "PNG 96x64 | JPEG 96x64 | WebP 96x64" not in image_labels:
+    raise SystemExit("BitmapFactory did not decode all three fixture image formats")
+if sum(node["view"]["kind"] == "ImageView" for node in image_nodes) != 4:
+    raise SystemExit("Image fixture did not produce all four ImageViews")
+(root / "artifacts/images-compatibility.json").write_text(json.dumps({
+    "formats": ["PNG", "JPEG", "WebP"],
+    "decode_paths": ["resource", "stream", "byte-array"],
+    "image_views": 4,
+    "native_visual_check": "artifacts/images-native.png",
+}, indent=2) + "\n")
+print("PASS Images fixture: PNG/JPEG/WebP bounds and BitmapFactory paths; four ImageViews")
+
 notepad = root / "artifacts/apks/notepad-v1.0.0.apk"
 notepad_digest = "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f"
 if not notepad.exists():

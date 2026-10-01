@@ -24,6 +24,8 @@ pub struct View {
     pub text_color: u32,
     pub background: Option<u32>,
     pub gravity: u32,
+    #[serde(skip)]
+    pub image: Option<Vec<u8>>,
 }
 impl View {
     pub fn for_class(class: &str) -> Option<Self> {
@@ -44,7 +46,8 @@ impl View {
             | "Landroid/widget/ImageButton;" => "Button",
             "Landroid/support/v7/widget/AppCompatTextView;" => "TextView",
             "Landroid/support/v7/widget/AppCompatEditText;" => "EditText",
-            "Landroid/widget/ImageView;" | "Landroid/widget/Space;" => "View",
+            "Landroid/widget/ImageView;" => "ImageView",
+            "Landroid/widget/Space;" => "View",
             "Landroid/support/v7/widget/ViewStubCompat;" => "View",
             _ => class
                 .strip_prefix("Landroid/widget/")
@@ -61,6 +64,7 @@ impl View {
             "View",
             "LinearLayout",
             "FrameLayout",
+            "ImageView",
             "TextView",
             "Button",
             "EditText",
@@ -96,6 +100,7 @@ impl View {
             text_color: 0xff222222,
             background: None,
             gravity: 0,
+            image: None,
         })
     }
 }

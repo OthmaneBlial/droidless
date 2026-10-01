@@ -25,7 +25,10 @@ for app in sorted((root / "examples").iterdir()):
         (build / part).mkdir(parents=True, exist_ok=True)
     output = root / "fixtures" / "generated" / f"{app.name}.apk"
     output.parent.mkdir(exist_ok=True)
-    run(tools / "aapt", "package", "-f", "-M", app / "AndroidManifest.xml", "-S", app / "res", "-I", platform, "-J", build / "gen", "-F", output)
+    package = [tools / "aapt", "package", "-f", "-M", app / "AndroidManifest.xml", "-S", app / "res", "-I", platform, "-J", build / "gen", "-F", output]
+    if (app / "assets").is_dir():
+        package.extend(["-A", app / "assets"])
+    run(*package)
     sources = sorted(app.glob("*.java")) + sorted((build / "gen").rglob("*.java"))
     run("javac", "-source", "8", "-target", "8", "-Xlint:-options", "-classpath", platform, "-d", build / "classes", *sources)
     run(tools / "d8", "--min-api", "21", "--lib", platform, "--output", build / "dex", *sorted((build / "classes").rglob("*.class")))

@@ -20,6 +20,8 @@ struct NativeView {
     height: f32,
     text_size: f32,
     text: *const c_char,
+    image: *const u8,
+    image_len: usize,
 }
 type Callback = extern "C" fn(*mut c_void, u32, usize, *const c_char) -> i32;
 unsafe extern "C" {
@@ -99,12 +101,14 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
     fn node(host: *mut c_void, n: &Node) -> Result<()> {
         let text = CString::new(n.view.text.as_str())
             .context("NUL in UI text is unsupported by AppKit bridge")?;
+        let image = n.view.image.as_deref().unwrap_or_default();
         let view = NativeView {
             handle: n.handle,
             kind: match n.view.kind.as_str() {
                 "Button" => 1,
                 "TextView" => 2,
                 "EditText" => 3,
+                "ImageView" => 4,
                 _ => 0,
             },
             enabled: u32::from(n.view.enabled),
@@ -121,6 +125,8 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
             height: n.rect.height,
             text_size: n.view.text_size,
             text: text.as_ptr(),
+            image: image.as_ptr(),
+            image_len: image.len(),
         };
         // SAFETY: C copies the string and struct fields before returning. Host is retained by dl_open.
         unsafe {

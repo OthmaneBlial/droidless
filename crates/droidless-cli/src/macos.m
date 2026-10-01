@@ -9,6 +9,8 @@ typedef struct {
     uint32_t kind, enabled, editable, visible, foreground, background, has_background, gravity, key_listener;
     float x, y, width, height, text_size;
     const char *text;
+    const uint8_t *image;
+    size_t image_len;
 } NativeView;
 
 @interface FlippedView : NSView
@@ -113,6 +115,10 @@ void dl_view(void *opaque, const NativeView *node) {
             text.bezeled = NO;
             text.drawsBackground = YES;
             view = text;
+        } else if (node->kind == 4) {
+            NSImageView *image = [NSImageView new];
+            image.imageScaling = NSImageScaleProportionallyUpOrDown;
+            view = image;
         } else {view = [FlippedView new];}
         host.views[key] = view;
         [host.window.contentView addSubview:view];
@@ -122,12 +128,16 @@ void dl_view(void *opaque, const NativeView *node) {
     view.wantsLayer = YES;
     if (node->has_background) view.layer.backgroundColor = color(node->background).CGColor;
     NSString *text = [NSString stringWithUTF8String:node->text];
+    NSData *imageData = node->image_len ? [NSData dataWithBytes:node->image length:node->image_len] : nil;
+    NSImage *image = imageData ? [[NSImage alloc] initWithData:imageData] : nil;
     if ([view isKindOfClass:[NSButton class]]) {
         NSButton *button = (NSButton *)view;
         button.tag = (NSInteger)node->handle;
         button.enabled = node->enabled != 0;
         button.font = [NSFont systemFontOfSize:node->text_size];
         button.title = text;
+        button.image = image;
+        button.imagePosition = text.length ? NSImageLeading : NSImageOnly;
         if (node->has_background) {button.bordered = NO;button.layer.cornerRadius = 5;}
         button.attributedTitle = [[NSAttributedString alloc] initWithString:text attributes:@{NSForegroundColorAttributeName:color(node->foreground),NSFontAttributeName:button.font}];
         button.accessibilityLabel = text;
@@ -143,6 +153,8 @@ void dl_view(void *opaque, const NativeView *node) {
         field.alignment = (node->gravity&7)==5 ? NSTextAlignmentRight : ((node->gravity&7)==1 ? NSTextAlignmentCenter : NSTextAlignmentLeft);
         if (![field.stringValue isEqualToString:text]) field.stringValue = text;
         field.accessibilityLabel = text;
+    } else if ([view isKindOfClass:[NSImageView class]]) {
+        ((NSImageView *)view).image = image;
     }
 }
 void dl_end(void *opaque) {

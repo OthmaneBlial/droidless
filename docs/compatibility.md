@@ -27,6 +27,10 @@ uniform padding/click/key listeners, scroll offsets and the default scroll-chang
 callback; ViewGroup add/detach/attach child operations; LinearLayout orientation;
 TextView text/append/size/color/gravity; EditText text/null key listener/selection;
 KeyEvent action/keycode. Long.rotateRight(JI)J is implemented for 64-bit values.
+BitmapFactory decodes packaged PNG/JPEG/WebP through resource, stream and byte-array
+paths; Bitmap bounds options, dimensions and ImageView resource/bitmap/drawable
+assignment reach AppKit image views. This is authored-fixture evidence; bitmap
+pixel manipulation and Android Canvas drawing remain unsupported.
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does
 not establish general RecyclerView or AndroidX compatibility.
@@ -103,7 +107,7 @@ checks. The authored native Start worker action also delivers its main-thread re
 - Other bulk collections, custom Map copies/views, CopyOnWriteArrayList write revalidation,
   ListIterator/subList, custom class loaders, method/field reflection, general file I/O,
   general SQLite APIs beyond the subset documented in [storage](storage.md),
-  images, networking, JNI, JIT,
+  bitmap pixel manipulation/Canvas, networking, JNI, JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.
 

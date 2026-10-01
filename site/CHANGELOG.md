@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Packaged PNG/JPEG/WebP now flow through BitmapFactory resource, stream and
+  byte-array paths into AppKit ImageViews. An authored fixture verifies bounds,
+  sampling, XML src, drawable assignment and four native images. Independent
+  image-app workflows, bitmap pixel operations and Canvas remain open. Local
+  CI passes 69 Rust tests and 4,096 seeded parser mutations; GitHub Actions stay
+  disabled.
 - The unmodified public Notepad APK now saves two titles and renders both in
   Notes after Back and a fresh DROIDLESS process. Native AppKit keyboard entry
   also reaches the APK and persists through its save path. Targeted RecyclerView

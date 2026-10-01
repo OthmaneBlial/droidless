@@ -137,6 +137,10 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/graphics/drawable/LayerDrawable;",
             "Landroid/graphics/drawable/RippleDrawable;",
             "Landroid/graphics/drawable/InsetDrawable;",
+            "Landroid/graphics/drawable/BitmapDrawable;",
+            "Landroid/graphics/Bitmap;",
+            "Landroid/graphics/BitmapFactory;",
+            "Landroid/graphics/BitmapFactory$Options;",
             "Landroid/util/DisplayMetrics;",
             "Landroid/util/SparseArray;",
             "Landroid/util/SparseIntArray;",
@@ -450,6 +454,163 @@ impl Runtime {
             |n| -> Result<Word> { args.get(n).copied().context("framework argument missing") };
         let receiver = args.first().copied().unwrap_or(Word::ZERO);
         let mut result = vec![];
+        if method.class == "Landroid/graphics/BitmapFactory;" {
+            let options = match signature.as_str() {
+                "decodeResource(Landroid/content/res/Resources;I)Landroid/graphics/Bitmap;" => None,
+                "decodeResource(Landroid/content/res/Resources;ILandroid/graphics/BitmapFactory$Options;)Landroid/graphics/Bitmap;" => {
+                    Some(arg(2)?)
+                }
+                "decodeStream(Ljava/io/InputStream;)Landroid/graphics/Bitmap;" => None,
+                "decodeStream(Ljava/io/InputStream;Landroid/graphics/Rect;Landroid/graphics/BitmapFactory$Options;)Landroid/graphics/Bitmap;" => {
+                    Some(arg(2)?)
+                }
+                "decodeByteArray([BII)Landroid/graphics/Bitmap;" => None,
+                "decodeByteArray([BIILandroid/graphics/BitmapFactory$Options;)Landroid/graphics/Bitmap;" => {
+                    Some(arg(3)?)
+                }
+                _ => bail!("unsupported BitmapFactory method {}", method.key()),
+            };
+            let decoded = match signature.as_str() {
+                s if s.starts_with("decodeResource(") => {
+                    let resources = arg(0)?;
+                    ensure!(
+                        resources != Word::ZERO,
+                        fault("Ljava/lang/NullPointerException;", "resources is null")
+                    );
+                    ensure!(
+                        self.is_a(
+                            &self.heap.get(resources)?.class,
+                            "Landroid/content/res/Resources;"
+                        ),
+                        "BitmapFactory requires Resources"
+                    );
+                    self.image_resource(arg(1)?.int()? as u32)?
+                }
+                s if s.starts_with("decodeStream(") => {
+                    let stream = arg(0)?;
+                    ensure!(
+                        stream != Word::ZERO,
+                        fault("Ljava/lang/NullPointerException;", "stream is null")
+                    );
+                    ensure!(
+                        self.is_a(&self.heap.get(stream)?.class, "Ljava/io/InputStream;"),
+                        "BitmapFactory requires an InputStream"
+                    );
+                    let data = &mut self.heap.get_mut(stream)?.data;
+                    let Data::ByteStream {
+                        bytes,
+                        position,
+                        closed,
+                    } = data
+                    else {
+                        bail!("BitmapFactory requires a DROIDLESS input stream");
+                    };
+                    ensure!(!*closed, fault("Ljava/io/IOException;", "Stream closed"));
+                    let remaining = bytes[*position..].to_vec();
+                    *position = bytes.len();
+                    Self::encoded_image(remaining)
+                }
+                _ => {
+                    let array = arg(0)?;
+                    ensure!(
+                        array != Word::ZERO,
+                        fault(
+                            "Ljava/lang/NullPointerException;",
+                            "image byte array is null"
+                        )
+                    );
+                    let offset = arg(1)?.int()?;
+                    let length = arg(2)?.int()?;
+                    ensure!(
+                        offset >= 0 && length >= 0,
+                        fault(
+                            "Ljava/lang/IllegalArgumentException;",
+                            "negative byte array offset or length"
+                        )
+                    );
+                    let (offset, length, values) = match &self.heap.get(array)?.data {
+                        Data::Array { element, values } if element == "B" => {
+                            (offset as usize, length as usize, values.clone())
+                        }
+                        _ => bail!("BitmapFactory requires a byte array"),
+                    };
+                    ensure!(
+                        offset <= values.len() && length <= values.len() - offset,
+                        fault(
+                            "Ljava/lang/IndexOutOfBoundsException;",
+                            "byte array range is out of bounds"
+                        )
+                    );
+                    let bytes = values[offset..offset + length]
+                        .iter()
+                        .map(|value| value[0].int().map(|byte| byte as i8 as u8))
+                        .collect::<Result<Vec<_>>>()?;
+                    Self::encoded_image(bytes)
+                }
+            };
+            if let Some((info, bytes)) = decoded {
+                result.push(self.bitmap(info, bytes, options)?);
+            } else {
+                if let Some(options) = options.filter(|value| *value != Word::ZERO) {
+                    let fields = &mut self.heap.get_mut(options)?.fields;
+                    fields.insert(
+                        "Landroid/graphics/BitmapFactory$Options;->outWidth:I".into(),
+                        vec![Word::from(-1)],
+                    );
+                    fields.insert(
+                        "Landroid/graphics/BitmapFactory$Options;->outHeight:I".into(),
+                        vec![Word::from(-1)],
+                    );
+                    fields.insert(
+                        "Landroid/graphics/BitmapFactory$Options;->outMimeType:Ljava/lang/String;"
+                            .into(),
+                        vec![Word::ZERO],
+                    );
+                }
+                result.push(Word::ZERO);
+            }
+            return Ok(Some(result));
+        }
+        if method.class == "Landroid/graphics/Bitmap;" {
+            match signature.as_str() {
+                "getWidth()I" | "getHeight()I" => {
+                    let Data::Bitmap { width, height, .. } = &self.heap.get(receiver)?.data else {
+                        bail!("uninitialized Bitmap");
+                    };
+                    result.push(Word::from(if method.name == "getWidth" {
+                        *width as i32
+                    } else {
+                        *height as i32
+                    }));
+                }
+                "isRecycled()Z" => {
+                    let Data::Bitmap { recycled, .. } = &self.heap.get(receiver)?.data else {
+                        bail!("uninitialized Bitmap");
+                    };
+                    result.push(Word::from(i32::from(*recycled)));
+                }
+                "recycle()V" => {
+                    let Data::Bitmap {
+                        bytes, recycled, ..
+                    } = &mut self.heap.get_mut(receiver)?.data
+                    else {
+                        bail!("uninitialized Bitmap");
+                    };
+                    bytes.clear();
+                    *recycled = true;
+                }
+                _ => bail!("unsupported Bitmap method {}", method.key()),
+            }
+            return Ok(Some(result));
+        }
+        if method.class == "Landroid/graphics/BitmapFactory$Options;" && signature == "<init>()V" {
+            self.heap.get(receiver)?;
+            self.heap.get_mut(receiver)?.fields.insert(
+                "Landroid/graphics/BitmapFactory$Options;->inSampleSize:I".into(),
+                vec![Word::from(1)],
+            );
+            return Ok(Some(result));
+        }
         if receiver != Word::ZERO
             && matches!(receiver, Word::Ref(_))
             && self.is_a(&self.heap.get(receiver)?.class, "Landroid/view/View;")
@@ -2342,6 +2503,10 @@ impl Runtime {
                 let id = arg(1)?;
                 let drawable = self.heap.instance("Landroid/graphics/drawable/Drawable;")?;
                 self.heap.get_mut(drawable)?.fields.insert("resourceId".into(), vec![id]);
+                if let Some((info, bytes)) = self.image_resource(id.int()? as u32)? {
+                    let bitmap = self.bitmap(info, bytes, None)?;
+                    self.heap.get_mut(drawable)?.fields.insert("droidless:drawable:bitmap".into(), vec![bitmap]);
+                }
                 result.push(drawable);
             }
             ("Landroid/content/res/Resources;", "obtainAttributes(Landroid/util/AttributeSet;[I)Landroid/content/res/TypedArray;")
@@ -2448,6 +2613,12 @@ impl Runtime {
                             let class = if sig.starts_with("getDrawable") { "Landroid/graphics/drawable/Drawable;" } else { "Landroid/content/res/ColorStateList;" };
                             let object = self.heap.instance(class)?;
                             self.heap.get_mut(object)?.fields.insert("resourceId".into(), vec![Word::from(value.data as i32)]);
+                            if class == "Landroid/graphics/drawable/Drawable;"
+                                && let Some((info, bytes)) = self.image_resource(value.data)?
+                            {
+                                let bitmap = self.bitmap(info, bytes, None)?;
+                                self.heap.get_mut(object)?.fields.insert("droidless:drawable:bitmap".into(), vec![bitmap]);
+                            }
                             object
                         } else { Word::ZERO });
                     }
@@ -3183,13 +3354,57 @@ impl Runtime {
                         "ImageView requires a Drawable"
                     );
                 }
+                let image = if drawable == Word::ZERO {
+                    None
+                } else if let Some(bitmap) = self.heap.get(drawable)?.fields
+                    .get("droidless:drawable:bitmap").and_then(|values| values.first()).copied()
+                {
+                    match &self.heap.get(bitmap)?.data {
+                        Data::Bitmap { bytes, recycled: false, .. } => Some(bytes.clone()),
+                        Data::Bitmap { .. } => bail!("cannot display a recycled Bitmap"),
+                        _ => bail!("Drawable image is not initialized"),
+                    }
+                } else {
+                    self.heap.get(drawable)?.fields.get("resourceId")
+                        .and_then(|values| values.first())
+                        .map(|value| value.int().map(|id| id as u32))
+                        .transpose()?
+                        .map(|id| self.image_resource(id))
+                        .transpose()?
+                        .flatten()
+                        .map(|(_, bytes)| bytes)
+                };
                 self.heap
                     .get_mut(receiver)?
                     .fields
                     .insert("droidless:image:drawable".into(), vec![drawable]);
+                self.view_mut(receiver)?.image = image;
+            }
+            ("Landroid/widget/ImageView;", "setImageBitmap(Landroid/graphics/Bitmap;)V") => {
+                let bitmap = arg(1)?;
+                let drawable = if bitmap == Word::ZERO {
+                    Word::ZERO
+                } else {
+                    let Data::Bitmap { bytes, recycled, .. } = &self.heap.get(bitmap)?.data else {
+                        bail!("ImageView requires a Bitmap");
+                    };
+                    ensure!(!recycled, "cannot display a recycled Bitmap");
+                    let image = bytes.clone();
+                    let drawable = self.heap.instance("Landroid/graphics/drawable/BitmapDrawable;")?;
+                    self.heap.get_mut(drawable)?.fields.insert("droidless:drawable:bitmap".into(), vec![bitmap]);
+                    self.view_mut(receiver)?.image = Some(image);
+                    drawable
+                };
+                self.heap.get_mut(receiver)?.fields.insert("droidless:image:drawable".into(), vec![drawable]);
+                if bitmap == Word::ZERO { self.view_mut(receiver)?.image = None; }
             }
             ("Landroid/widget/ImageView;", "setImageResource(I)V") => {
                 let id = arg(1)?.int()?;
+                let image = if id == 0 {
+                    None
+                } else {
+                    self.image_resource(id as u32)?.map(|(_, bytes)| bytes)
+                };
                 let drawable = if id == 0 {
                     Word::ZERO
                 } else {
@@ -3204,6 +3419,21 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .insert("droidless:image:drawable".into(), vec![drawable]);
+                self.view_mut(receiver)?.image = image;
+            }
+            ("Landroid/graphics/drawable/BitmapDrawable;", "<init>(Landroid/content/res/Resources;Landroid/graphics/Bitmap;)V") => {
+                let bitmap = arg(2)?;
+                self.heap.get(arg(1)?)?;
+                ensure!(matches!(&self.heap.get(bitmap)?.data, Data::Bitmap { recycled: false, .. }), "BitmapDrawable requires a live Bitmap");
+                self.heap.get_mut(receiver)?.fields.insert("droidless:drawable:bitmap".into(), vec![bitmap]);
+            }
+            ("Landroid/graphics/drawable/BitmapDrawable;", "<init>(Landroid/graphics/Bitmap;)V") => {
+                let bitmap = arg(1)?;
+                ensure!(matches!(&self.heap.get(bitmap)?.data, Data::Bitmap { recycled: false, .. }), "BitmapDrawable requires a live Bitmap");
+                self.heap.get_mut(receiver)?.fields.insert("droidless:drawable:bitmap".into(), vec![bitmap]);
+            }
+            ("Landroid/graphics/drawable/BitmapDrawable;", "<init>()V") => {
+                self.heap.get(receiver)?;
             }
             ("Landroid/widget/TextView;", "setTextSize(F)V") => {
                 let size = f32::from_bits(arg(1)?.int()? as u32);
@@ -3923,6 +4153,89 @@ impl Runtime {
             _ => self.apk.resources.text(id),
         }
     }
+    fn encoded_image(bytes: Vec<u8>) -> Option<(crate::graphics::ImageInfo, Vec<u8>)> {
+        crate::graphics::inspect(&bytes)
+            .ok()
+            .flatten()
+            .map(|info| (info, bytes))
+    }
+    fn image_resource(&self, id: u32) -> Result<Option<(crate::graphics::ImageInfo, Vec<u8>)>> {
+        let value = match self.apk.resources.resolve(id) {
+            Ok(value) => value,
+            Err(_) if id >> 24 == 1 => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        if value.kind != 3 {
+            return Ok(None);
+        }
+        let name = value.display();
+        let bytes = self
+            .apk
+            .files
+            .get(&name)
+            .with_context(|| format!("image resource {name} missing"))?;
+        Ok(Self::encoded_image(bytes.clone()))
+    }
+    fn bitmap(
+        &mut self,
+        info: crate::graphics::ImageInfo,
+        bytes: Vec<u8>,
+        options: Option<Word>,
+    ) -> Result<Word> {
+        let mut sample = 1;
+        if let Some(options) = options.filter(|value| *value != Word::ZERO) {
+            ensure!(
+                self.is_a(
+                    &self.heap.get(options)?.class,
+                    "Landroid/graphics/BitmapFactory$Options;"
+                ),
+                "BitmapFactory options type mismatch"
+            );
+            let key = "Landroid/graphics/BitmapFactory$Options;->inJustDecodeBounds:Z";
+            let just_bounds = self
+                .heap
+                .get(options)?
+                .fields
+                .get(key)
+                .and_then(|values| values.first())
+                .is_some_and(|value| value.truth());
+            let sample_key = "Landroid/graphics/BitmapFactory$Options;->inSampleSize:I";
+            sample = self
+                .heap
+                .get(options)?
+                .fields
+                .get(sample_key)
+                .and_then(|values| values.first())
+                .map_or(1, |value| value.int().unwrap_or(1))
+                .max(1) as u32;
+            let mime = self.heap.string(info.mime.into())?;
+            let fields = &mut self.heap.get_mut(options)?.fields;
+            fields.insert(
+                "Landroid/graphics/BitmapFactory$Options;->outWidth:I".into(),
+                vec![Word::from(info.width as i32)],
+            );
+            fields.insert(
+                "Landroid/graphics/BitmapFactory$Options;->outHeight:I".into(),
+                vec![Word::from(info.height as i32)],
+            );
+            fields.insert(
+                "Landroid/graphics/BitmapFactory$Options;->outMimeType:Ljava/lang/String;".into(),
+                vec![mime],
+            );
+            if just_bounds {
+                return Ok(Word::ZERO);
+            }
+        }
+        let bitmap = self.heap.instance("Landroid/graphics/Bitmap;")?;
+        self.heap.get_mut(bitmap)?.data = Data::Bitmap {
+            bytes,
+            width: (info.width / sample).max(1),
+            height: (info.height / sample).max(1),
+            mime: info.mime,
+            recycled: false,
+        };
+        Ok(bitmap)
+    }
     fn attribute_set_value(&self, attrs: Word, name: &str) -> Result<Option<Value>> {
         let Data::Attributes(attributes) = &self.heap.get(attrs)?.data else {
             bail!("uninitialized AttributeSet");
@@ -4116,6 +4429,27 @@ impl Runtime {
                     } else {
                         bail!("unsupported text color state list");
                     }
+                }
+                "src" | "srcCompat" if raw.kind == 1 => {
+                    let id = raw.data;
+                    let image = self.image_resource(id)?;
+                    let drawable = self.heap.instance("Landroid/graphics/drawable/Drawable;")?;
+                    self.heap
+                        .get_mut(drawable)?
+                        .fields
+                        .insert("resourceId".into(), vec![Word::from(id as i32)]);
+                    if let Some((info, bytes)) = image {
+                        let bitmap = self.bitmap(info, bytes.clone(), None)?;
+                        self.heap
+                            .get_mut(drawable)?
+                            .fields
+                            .insert("droidless:drawable:bitmap".into(), vec![bitmap]);
+                        view.image = Some(bytes);
+                    }
+                    self.heap
+                        .get_mut(word)?
+                        .fields
+                        .insert("droidless:image:drawable".into(), vec![drawable]);
                 }
                 "background" => view.background = self.drawable_color(raw, 0)?,
                 "padding" => view.padding = dimension(&self.attribute(raw)?)?,

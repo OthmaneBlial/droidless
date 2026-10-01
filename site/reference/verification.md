@@ -593,3 +593,33 @@ optimized release build and 4,096 seeded parser mutations. `python3 tools/compat
 passes 17 calculator scenarios plus the Notepad Notes list/editor and two-note
 SQLite save/restart probes. Both rows are retained and both titles render after
 Back and in a fresh process. No GitHub Actions run was used.
+
+## Current source: packaged raster images
+
+Verified 2026-10-01 on macOS ARM64 with the authored `org.droidless.images`
+fixture. The APK packages 96×64 PNG, JPEG and WebP images as resources and
+assets. Its original DEX exercises `BitmapFactory.decodeResource` with bounds
+and sample-size options, `decodeStream`, `decodeByteArray`, XML `src`,
+`ImageView.setImageResource`, `setImageBitmap`, `setImageDrawable`, and
+`BitmapDrawable`; all reported dimensions match. `python3 tools/compatibility.py`
+checks the decoded format/dimensions and four ImageView nodes.
+
+The actual native AppKit window displays the PNG resource source, the resource
+Bitmap, JPEG stream Bitmap and WebP byte-array Bitmap. The captured window is
+`artifacts/images-native.png`. This proves the authored raster path on this Mac,
+not an independent image-heavy app. Android Bitmap pixel access/transforms,
+Canvas, and vector/animated image drawables remain unsupported. Encoded image
+headers are bounded to 32 million pixels.
+
+```sh
+python3 tools/build-fixtures.py --sdk "$ANDROID_SDK_ROOT"
+sh tools/ci.sh
+python3 tools/compatibility.py
+target/release/droidless run --headless --ephemeral fixtures/generated/images.apk
+```
+
+Full local CI passes 69 Rust tests, warning-free Clippy, the optimized release
+build and 4,096 seeded APK/DEX/XML/resource mutations. The compatibility replay
+also passes all 17 calculator scenarios and the unchanged Notepad list/editor,
+two-row save and fresh-process restart checks. GitHub Actions remain disabled;
+the 50% everyday-app checkpoint remains ahead.

@@ -8,6 +8,7 @@ mod components;
 mod enums;
 mod file_io;
 mod framework;
+mod graphics;
 pub mod heap;
 mod interpreter;
 mod preferences;

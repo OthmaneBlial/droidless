@@ -5,9 +5,11 @@ The following are objectives, not completed capability claims.
 
 1. Continue VM verification: full field/method reference validation and instruction
    boundaries. Gate: compiled conformance/malformed-input regressions.
-2. Improve input/resources: full focus/IME/paste, qualifier/
-   style resolution, images/drawables and weighted measurement. Gate: native
-   interaction and comparisons with expected Android behavior.
+2. Improve input/resources: full focus/IME/paste, qualifier/style resolution and
+   weighted measurement remain open. Packaged PNG/JPEG/WebP decoding and native
+   ImageView rendering now pass an authored fixture; vector/animated drawables,
+   pixel operations and Canvas remain open. Gate: independent-app image workflows
+   and comparisons with expected Android behavior.
 3. Multi-screen/persistence: explicit Intents/Bundle/back stack are proven in an
    authored native fixture. Isolated SharedPreferences save/restart/clear are also
    proven in an authored native fixture. Basic HashSet/ArrayList/HashMap/LinkedHashMap
@@ -32,7 +34,7 @@ The following are objectives, not completed capability claims.
    priorities and join/sleep remain ahead. Notepad passes deferred Thread.start;
    independently completed transaction execution remains unproven.
    Gate: a real APK completes its queued transactions and posts UI results.
-5. Isolated file/process APIs, lists/images/SQLite/network: follow first failures in substantial third-party
+5. Isolated file/process APIs, broader lists/SQLite/network and independent image-app workflows: follow first failures in substantial third-party
    apps, with host capabilities explicit and tested.
 6. Linux native backend: common VM/View model, real Linux builds/render/input.
 7. Kotlin/AndroidX, then fragments/Compose/JNI/foreign libraries: major subsequent

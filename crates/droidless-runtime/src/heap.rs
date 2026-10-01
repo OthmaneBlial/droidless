@@ -151,6 +151,13 @@ pub enum Data {
         position: usize,
         closed: bool,
     },
+    Bitmap {
+        bytes: Vec<u8>,
+        width: u32,
+        height: u32,
+        mime: &'static str,
+        recycled: bool,
+    },
     AtomicInteger(std::sync::Arc<std::sync::atomic::AtomicI32>),
     AtomicLong(std::sync::Arc<std::sync::atomic::AtomicI64>),
     AtomicBoolean(std::sync::Arc<std::sync::atomic::AtomicBool>),

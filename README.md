@@ -142,6 +142,7 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | ⚡ Own register interpreter | Arithmetic, wide values, branches, arrays, fields, dispatch, managed call continuations and Java throw/catch |
 | 🧹 Managed objects | Inheritance, strings, sticky class initialization and handle-based mark/sweep GC |
 | 🪟 Native widgets | TextView, Button, EditText, LinearLayout and FrameLayout; a targeted support-RecyclerView two-note path; approximate layout/style |
+| 🖼️ Raster images | Packaged PNG/JPEG/WebP through BitmapFactory and ImageView; four native image views confirmed in an authored fixture |
 | 📝 Rich text/XML | Android spannable text and a bounded SAX parser subset exercised by an unmodified APK |
 | 🖱️ Input | Native calculator clicks, Counter text/key callbacks, and real keyboard text in the public Notepad APK |
 | 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish and native Application lifecycle observers — current source |
@@ -151,7 +152,7 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🌍 API profile | Fixed read-only Build.VERSION.SDK_INT = 21 for app version checks; partial framework support — current source |
 | ⏱️ Scheduled callbacks | Main Handler/Looper/Message queue, delayed APK callbacks, cancellation and GC retention; native authored timer verified — current source |
 | 🧵 Guest workers | Deferred DEX execution on a serial shared-heap host executor; queue/monitor waits/interrupt pass headless checks; main Handler results also verified natively — current source |
-| 🛠️ Next up | Verify native-window Notepad interaction, then follow the next real app failure |
+| 🛠️ Next up | Prove image/list workflows in another unmodified app; current image proof is an authored fixture |
 
 The published **v0.1.0 archive predates navigation, persistence, collections, scheduling and the new calculator demo**. Current source capability
 is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
@@ -170,6 +171,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, snapshot iteration across mutation/GC/worker writes, guest equality, read-only views and limits; same normal list, snapshot, map-copy and immediate queue contracts pass on desktop Java |
 | Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, primitive TYPE identities, guest faults and inherited fields; pure Java contracts pass on desktop Java. SDK profile field checks are compiled DEX evidence |
 | Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native delayed timer/cancellation/finish and worker-to-main results; headless ordering, Message overrides, worker waits/interrupt, GC, errors and limits. [Exact scheduling scope](docs/threading.md) |
+| Images | [Authored Java/XML fixture](examples/images/MainActivity.java) | Packaged PNG/JPEG/WebP via resource, stream and byte-array decoding; image bounds and four native AppKit ImageViews verified. No independent image-app claim |
 | Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Notes screen/editor, typed title save, SQLite retention and title rendering after a fresh process verified; native-window interaction unverified |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
@@ -184,7 +186,7 @@ sh tools/fetch-notepad.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 66 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 69 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

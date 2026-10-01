@@ -128,14 +128,21 @@ installation. String/color/dimension/layout resolution belongs to DROIDLESS.
 Binary layouts create TextView, Button, EditText, LinearLayout and FrameLayout.
 TableLayout/TableRow use the basic linear model. Attributes include IDs, text,
 resource references, width/height, weight, orientation, uniform padding, margins,
-text size/color, gravity, enabled/visibility and XML onClick. Recursive include
-is bounded. px/dp/sp resolve at density 1. `--size WIDTHxHEIGHT` selects logical host dimensions (128–4096 per axis; default 420×720).
+text size/color, image `src`/`srcCompat`, gravity, enabled/visibility and XML
+onClick. Recursive include is bounded. px/dp/sp resolve at density 1.
+`--size WIDTHxHEIGHT` selects logical host dimensions (128–4096 per axis; default 420×720).
 
 Weighted linear children divide remaining primary-axis space. Measurement is
 approximate for explicit weighted base sizes and many Android constraints.
-FrameLayout stacks children. Styling is partial; some drawable XML supplies a
-flat color, while gradients, ripple/masks, vector/image drawables and unrecognized
-styling attributes are omitted. The real screenshot visibly reflects this subset.
+FrameLayout stacks children. Packaged PNG/JPEG/WebP resources flow through
+`BitmapFactory.decodeResource`, `decodeStream` and `decodeByteArray`; the supported
+`Options` subset is bounds metadata and `inSampleSize`. `Bitmap.getWidth`/
+`getHeight` and `ImageView.setImageBitmap`, `setImageResource` and
+`setImageDrawable` feed AppKit `NSImageView` rendering. Each encoded image is
+bounded to 32 million pixels. The native image fixture verifies all three formats.
+Bitmap pixel operations, `Canvas`, animated/vector drawables, gradients,
+ripple/masks and many Android layout/style constraints remain unsupported.
+The real screenshot visibly reflects this subset.
 
 ## Input/native boundary
 

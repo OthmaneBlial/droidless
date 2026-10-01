@@ -636,6 +636,19 @@ impl Runtime {
             }
             return Ok(field.clone());
         }
+        if !static_field
+            && field.class == "Landroid/graphics/BitmapFactory$Options;"
+            && [
+                ("inJustDecodeBounds", "Z"),
+                ("inSampleSize", "I"),
+                ("outWidth", "I"),
+                ("outHeight", "I"),
+                ("outMimeType", "Ljava/lang/String;"),
+            ]
+            .contains(&(field.name.as_str(), field.ty.as_str()))
+        {
+            return Ok(field.clone());
+        }
         ensure!(
             self.class_location(&field.class).is_some()
                 || (!static_field
@@ -839,6 +852,7 @@ impl Runtime {
             "Ljava/lang/Double;" => "Ljava/lang/Number;",
             "Ljava/lang/Integer;" | "Ljava/lang/Long;" => "Ljava/lang/Number;",
             "Landroid/graphics/drawable/ColorDrawable;" => "Landroid/graphics/drawable/Drawable;",
+            "Landroid/graphics/drawable/BitmapDrawable;" => "Landroid/graphics/drawable/Drawable;",
             "Landroid/graphics/drawable/GradientDrawable;" => {
                 "Landroid/graphics/drawable/Drawable;"
             }
