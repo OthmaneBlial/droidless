@@ -6,6 +6,7 @@ mod native;
 
 enum Action {
     Click(String),
+    Menu(String),
     Tap(f32, f32),
     Key(String),
     Input(usize, String),
@@ -23,7 +24,7 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
         println!(
-            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --tap X Y --key CHAR --input TEXT --back --stats\n             --advance-ms MILLISECONDS (deterministic timer replay)\n             --data-dir APPS_ROOT | --ephemeral\n             --size WIDTHxHEIGHT (128..4096; default 420x720)\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText.\n--input-at INDEX TEXT selects another editable field (zero-based). Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
+            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --menu-item TEXT --tap X Y --key CHAR --input TEXT --back --stats\n             --advance-ms MILLISECONDS (deterministic timer replay)\n             --data-dir APPS_ROOT | --ephemeral\n             --size WIDTHxHEIGHT (128..4096; default 420x720)\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText.\n--input-at INDEX TEXT selects another editable field (zero-based). Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
         );
         return Ok(());
     }
@@ -59,6 +60,14 @@ fn run() -> Result<()> {
                     actions.push(Action::Click(
                         args.get(i)
                             .ok_or_else(|| anyhow::anyhow!("--click requires text"))?
+                            .clone(),
+                    ));
+                }
+                "--menu-item" => {
+                    i += 1;
+                    actions.push(Action::Menu(
+                        args.get(i)
+                            .ok_or_else(|| anyhow::anyhow!("--menu-item requires text"))?
                             .clone(),
                     ));
                 }
@@ -181,6 +190,16 @@ fn run() -> Result<()> {
                 }
                 Action::Click(text) => {
                     runtime.click_text(&text)?;
+                }
+                Action::Menu(text) => {
+                    let items = runtime.options_menu()?;
+                    let item = items
+                        .iter()
+                        .find(|item| item.title == text)
+                        .ok_or_else(|| anyhow::anyhow!("no visible menu item {text:?}"))?;
+                    anyhow::ensure!(item.enabled, "menu item {text:?} is disabled");
+                    // A handler can act and still return false (the public Notepad does).
+                    runtime.select_menu_item(item.handle)?;
                 }
                 Action::Back => runtime.back()?,
                 Action::Tap(x, y) => {

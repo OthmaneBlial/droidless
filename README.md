@@ -119,6 +119,9 @@ Use `--trace-bytecode`, `--trace-methods`, `--trace-framework` or
 `--trace-lifecycle` to follow execution. `--stats` / `--heap-stats` report real
 counters and timings. `--click`, `--key`, `--back`, `--headless` and `inspect-ui`
 support repeatable experiments. `--size WIDTHxHEIGHT` selects a 128–4096 logical viewport on each axis (default 420×720). **Escape delivers Back** in the native window.
+`--menu-item TEXT` prepares the current Activity's options and invokes its own
+enabled menu callback. Native menu input remains ahead; Notepad's delete feedback
+still hits an unsupported Snackbar API. [Menu scope](docs/compatibility.md).
 Current source adds `--input TEXT` for the first visible EditText, per-package
 preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only runs.
 `--advance-ms MILLISECONDS` advances the deterministic clock for queued APK callbacks.
@@ -199,7 +202,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 98 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 100 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

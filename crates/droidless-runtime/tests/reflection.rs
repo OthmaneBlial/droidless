@@ -126,9 +126,10 @@ fn apk_class_lookup_construction_initialization_and_inherited_fields() {
         parameters: vec![],
         returns: "Ljava/lang/String;".into(),
     };
-    assert!(
-        format!("{:#}", vm.invoke(text, vec![first], true).unwrap_err())
-            .contains("unsupported Class method")
+    let description = vm.invoke(text, vec![first], true).unwrap()[0];
+    assert_eq!(
+        vm.heap.text(description).unwrap(),
+        "class org.droidless.reflection.ReflectionContract$Thing"
     );
 }
 

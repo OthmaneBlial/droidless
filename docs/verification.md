@@ -1209,3 +1209,43 @@ and 4,096 seeded parser mutations. GitHub Actions remain disabled.
 cargo test -p droidless-runtime --test menus --locked
 sh tools/ci.sh
 ```
+
+## Current-source foreground options and guest delete callback
+
+The compiled MenuActivity contract verifies one creation per cached menu,
+preparation on each opening, visible/disabled/checked snapshots, listener-first
+selection and Activity fallback. A callback may act and return false. Invalidation
+inside a listener preserves that callback's fallback, then releases the old menu.
+Rejected preparation blocks stale host input while retaining the cache. Create
+rejection/invalidation/failure and preparation failure recover without retaining
+menu roots. Navigation/finish during callbacks is drained before exposing options;
+background/destroyed Activity handles cannot select another screen's menu.
+
+The headless driver exposes these callbacks through `--menu-item TEXT`. Native
+menu presentation/input remain ahead. Class.toString now prints class/interface
+names, primitive/void names and array descriptors. The compiled PrimitiveContract
+and its independent desktop Java run check these forms; unknown native metadata
+remains unsupported. Packaged `<view class="...">` also invokes the actual named
+DEX constructor, retains objects across its GC and applies its XML attributes.
+
+A separate pinned, unmodified Notepad probe saves two notes with distinct bodies,
+opens one and selects its original Delete item. The actual callback executes
+SQLite DELETE; the resulting table contains only the other note with its original
+ID, title and body. EventBus description/posting and generic Snackbar-layout
+construction now execute. Returning to Notes then fails at the original
+SnackbarLayout's View.setAccessibilityLiveRegion call. This is partial deletion
+evidence, not a passing delete/return/restart workflow or native menu interaction.
+The regression catalog keeps the complete deletion capability false.
+
+Full local CI passes 100 Rust tests, warning-free Clippy, optimized CLI/replay
+builds and 4,096 parser mutations. The public regression replay also passes the
+existing calculator, image and Notepad create/edit/restart/error-recovery cases.
+The separate desktop Java class-description driver passes on Java 17.0.19.
+GitHub Actions remain disabled; the 50% checkpoint remains ahead.
+
+```sh
+cargo test -p droidless-runtime --test menus --test reflection --locked
+java -cp examples/reflection/build/classes org.droidless.reflection.PrimitiveContract
+sh tools/ci.sh
+python3 tools/compatibility.py
+```

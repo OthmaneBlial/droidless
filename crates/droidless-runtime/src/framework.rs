@@ -5549,12 +5549,20 @@ impl Runtime {
                 None,
             );
         }
-        let class = if element.name.contains('.') {
-            crate::vm::descriptor(&element.name)
-        } else if ["View", "ViewGroup", "ViewStub"].contains(&element.name.as_str()) {
-            format!("Landroid/view/{};", element.name)
+        let name = if element.name == "view" {
+            element
+                .text("class")
+                .filter(|name| !name.is_empty())
+                .context("view tag missing class")?
         } else {
-            format!("Landroid/widget/{};", element.name)
+            element.name.clone()
+        };
+        let class = if name.contains('.') {
+            crate::vm::descriptor(&name)
+        } else if ["View", "ViewGroup", "ViewStub"].contains(&name.as_str()) {
+            format!("Landroid/view/{name};")
+        } else {
+            format!("Landroid/widget/{name};")
         };
         let word = self.new_instance(&class)?;
         self.native_roots.push(word);

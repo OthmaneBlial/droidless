@@ -788,9 +788,89 @@ impl Runtime {
                     .unwrap_or(Word::ZERO);
                 result.push(annotation);
             }
-            // Class overrides Object.toString; falling through would expose a wrong handle string.
             ("Ljava/lang/Class;", "toString()Ljava/lang/String;") => {
-                bail!("unsupported Class method {}", method.key());
+                let class = self.reflected_class(arg(0)?)?;
+                let prefix = if class.len() == 1 && "VZBCSIJFD".contains(class.as_str()) {
+                    ""
+                } else if class.starts_with('[') {
+                    "class "
+                } else if let Some((dex, index)) = self.class_location(&class) {
+                    if self.apk.dex[dex].classes[index].access & 0x200 != 0 {
+                        "interface "
+                    } else {
+                        "class "
+                    }
+                } else if matches!(
+                    class.as_str(),
+                    "Ljava/lang/Runnable;"
+                        | "Ljava/lang/CharSequence;"
+                        | "Ljava/lang/Comparable;"
+                        | "Ljava/lang/Cloneable;"
+                        | "Ljava/io/Serializable;"
+                        | "Ljava/lang/Iterable;"
+                        | "Ljava/lang/annotation/Annotation;"
+                        | "Ljava/util/Collection;"
+                        | "Ljava/util/List;"
+                        | "Ljava/util/Set;"
+                        | "Ljava/util/Map;"
+                        | "Ljava/util/Map$Entry;"
+                        | "Ljava/util/Iterator;"
+                        | "Ljava/util/ListIterator;"
+                        | "Ljava/util/Queue;"
+                        | "Ljava/util/concurrent/BlockingQueue;"
+                        | "Ljava/util/concurrent/Executor;"
+                        | "Ljava/util/concurrent/ExecutorService;"
+                        | "Ljava/util/concurrent/Callable;"
+                        | "Ljava/util/concurrent/Future;"
+                        | "Ljava/util/concurrent/RunnableFuture;"
+                        | "Landroid/animation/Animator$AnimatorListener;"
+                        | "Landroid/animation/Animator$AnimatorPauseListener;"
+                        | "Landroid/animation/TimeInterpolator;"
+                        | "Landroid/view/animation/Interpolator;"
+                        | "Lorg/xml/sax/Attributes;"
+                        | "Lorg/xmlpull/v1/XmlPullParser;"
+                        | "Landroid/util/AttributeSet;"
+                        | "Landroid/database/Cursor;"
+                        | "Landroid/widget/Adapter;"
+                        | "Landroid/widget/ListAdapter;"
+                        | "Landroid/widget/SpinnerAdapter;"
+                        | "Landroid/widget/AdapterView$OnItemClickListener;"
+                        | "Landroid/view/Menu;"
+                        | "Landroid/view/MenuItem;"
+                        | "Landroid/view/MenuItem$OnMenuItemClickListener;"
+                        | "Landroid/app/Application$ActivityLifecycleCallbacks;"
+                        | "Landroid/content/res/XmlResourceParser;"
+                        | "Landroid/graphics/drawable/Drawable$Callback;"
+                        | "Landroid/text/Spanned;"
+                        | "Landroid/text/Spannable;"
+                        | "Landroid/text/Editable;"
+                        | "Landroid/view/WindowManager;"
+                        | "Landroid/view/LayoutInflater$Factory;"
+                        | "Landroid/view/LayoutInflater$Factory2;"
+                        | "Landroid/os/Parcelable;"
+                        | "Landroid/os/Parcelable$Creator;"
+                        | "Landroid/os/Parcelable$ClassLoaderCreator;"
+                        | "Landroid/view/GestureDetector$OnGestureListener;"
+                        | "Landroid/view/GestureDetector$OnDoubleTapListener;"
+                        | "Landroid/view/ViewParent;"
+                        | "Landroid/os/IBinder;"
+                        | "Landroid/view/View$OnClickListener;"
+                        | "Landroid/view/View$OnKeyListener;"
+                        | "Landroid/view/View$OnTouchListener;"
+                ) {
+                    "interface "
+                } else {
+                    ensure!(
+                        crate::framework::known_class(&class)
+                            || primitive_wrapper(&class).is_some(),
+                        "unsupported Class metadata for {class}"
+                    );
+                    "class "
+                };
+                result.push(
+                    self.heap
+                        .string(format!("{prefix}{}", class_name(&class)))?,
+                );
             }
             ("Ljava/lang/Class;", "newInstance()Ljava/lang/Object;") => {
                 let class = self.reflected_class(arg(0)?)?;

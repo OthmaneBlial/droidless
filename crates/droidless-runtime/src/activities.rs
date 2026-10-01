@@ -23,6 +23,9 @@ pub(crate) struct Screen {
     pub result_data: Word,
     pub results: VecDeque<ActivityResult>,
     pub window_token: Word,
+    pub menu: Option<Word>,
+    pub menu_preparing: bool,
+    pub menu_ready: bool,
 }
 pub(crate) enum Navigation {
     Start {
@@ -44,6 +47,7 @@ impl Screen {
         [self.intent, self.result_data, self.window_token]
             .into_iter()
             .chain(self.root)
+            .chain(self.menu)
             .chain(self.caller.map(|(caller, _)| caller))
             .chain(self.results.iter().map(|result| result.data))
     }
@@ -254,6 +258,9 @@ impl Runtime {
                 result_data: Word::ZERO,
                 results: VecDeque::new(),
                 window_token: Word::ZERO,
+                menu: None,
+                menu_preparing: false,
+                menu_ready: false,
             },
         );
         self.back_stack.push(activity);

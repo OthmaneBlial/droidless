@@ -1,15 +1,23 @@
 package org.droidless.counter;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.ColorDrawable;
+import android.util.AttributeSet;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.TextView;
 
 /** Authored API checks compiled by javac and D8, not public APK evidence. */
 public final class MenuContract {
     static Menu saved;
+    public static class Label extends TextView {
+        public Label(Context context, AttributeSet attrs) { super(context, attrs); System.gc(); setText("Constructed"); }
+    }
     static class Tint extends ColorDrawable {
         ColorStateList colors;
         @Override public void setTintList(ColorStateList value) {
@@ -26,6 +34,9 @@ public final class MenuContract {
     }
     public static int verify(Menu menu, Activity activity) {
         saved = menu;
+        View inflated = LayoutInflater.from(activity).inflate(R.layout.view_tag, null);
+        check(inflated instanceof Label && ((TextView) inflated).getText().toString().equals("From class tag")
+                && inflated.getContext() == activity, "generic view class tag constructor and attributes");
         check(menu.size() == 0 && !menu.hasVisibleItems(), "empty menu");
         MenuItem late = menu.add(4, 10, 8, "Late");
         MenuItem early = menu.add(4, 11, 2, "Early");

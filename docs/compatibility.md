@@ -32,7 +32,19 @@ category ordering, resource titles/icons, group flags, exclusive checks and GC
 ownership verified by an authored compiled contract. Drawable.setTint delegates
 to virtual setTintList and retains tint metadata; it does not paint tinted icons.
 The unmodified Notepad constructs its delete menu through its own AppCompat code.
-Host menu presentation/selection and actual note deletion are not yet verified.
+Headless `--menu-item TEXT` now prepares the foreground Activity's options and
+dispatches visible/enabled items to guest listeners, then onOptionsItemSelected.
+Compiled checks cover cache/invalidation, rejection, navigation, errors and stale
+input. Selection never toggles a checked item automatically and a false callback
+return does not undo guest effects. Native menu presentation/input remain open.
+The public Notepad's Delete callback removes the intended SQLite row and preserves
+the other row, then reaches its original Snackbar feedback. That path currently
+fails at View.setAccessibilityLiveRegion; a complete delete/return/restart workflow
+is not yet verified. Generic `<view class="…">` layout inflation now invokes the
+named APK View constructor and applies its XML attributes. Class.toString formats
+APK/native-profile classes, interfaces, primitives and arrays; unknown native
+metadata remains explicitly unsupported. The primitive/class-description contract
+also passes on desktop Java 17.
 Submenus, shortcuts, XML onClick/action Views/providers and theme references remain
 unsupported; each menu is bounded to 1,024 items. The ordering and XML defaults
 follow the [API-21 MenuInflater reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/MenuInflater.java).

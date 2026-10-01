@@ -1,7 +1,7 @@
 # APK-local class lookup and construction
 
 Current source implements both `Class.forName` overloads, `Object.getClass`,
-`Class.getName`, `Class.getPackage`, `Package.getName` and a subset of
+`Class.getName`, `Class.toString`, `Class.getPackage`, `Package.getName` and a subset of
 `Class.newInstance`. Class objects have canonical, GC-rooted identity. Lookup
 searches the APK's parsed DEX modules and the runtime's known framework subset;
 it never loads host Java classes or executes a host JVM as an APK fallback.
@@ -46,7 +46,10 @@ contracts. [Virtual API profile](framework.md#virtual-api-profile).
 
 This is a narrow API subset, not complete reflection or a full Java verifier.
 Custom class loaders, external DEX loading, reflective method/field invocation,
-full annotation/nest access rules and Class.toString remain unsupported. Framework construction still requires an implemented constructor.
+full annotation/nest access rules remain unsupported. Framework construction still requires an implemented constructor.
+Class.toString formats APK-defined classes/interfaces using their DEX flags,
+listed native types, primitive/void names and array binary descriptors. It does
+not initialize the described class. Unknown native metadata fails explicitly.
 
 ```sh
 cargo test -p droidless-runtime --test reflection --locked
@@ -59,7 +62,8 @@ The same pure-Java contract passes on desktop Java 17 after compiling for Java 8
 It covers lookup, initialization/access faults, unwrapped constructor failures,
 arrays, inherited object/int/wide/static fields and shadowing. Rust tests add GC
 identity, malformed-name bounds, missing/wrong-kind field regressions and rejected
-TYPE writes. PrimitiveContract checks all nine TYPE identities, wrapper lookup,
+TYPE writes. PrimitiveContract checks all nine TYPE identities, class/interface/
+primitive/array descriptions, wrapper lookup,
 constructor faults, Class-key maps, primitive arrays and GC; it also passes on
 desktop Java 17 with Java 8 source/target.
 This is desktop Java differential evidence; no Android reference run is claimed.
@@ -68,7 +72,8 @@ Reference contract: [Java 8 Class API](https://docs.oracle.com/javase/8/docs/api
 
 ```sh
 mkdir -p artifacts/primitive-java-contract
-javac -source 8 -target 8 -Xlint:-options -d artifacts/primitive-java-contract examples/reflection/PrimitiveContract.java
+javac -source 8 -target 8 -Xlint:-options -d artifacts/primitive-java-contract \
+  examples/reflection/PrimitiveContract.java examples/reflection/ReflectionContract.java
 java -cp artifacts/primitive-java-contract org.droidless.reflection.PrimitiveContract
 ```
 

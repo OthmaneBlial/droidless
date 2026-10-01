@@ -16,6 +16,16 @@ const CONTEXT: &str = "droidless:menu:context";
 const OWNER: &str = "droidless:menu:owner";
 const MAX_ITEMS: usize = 1024;
 
+/// Visible options for the current Activity; handles are checked again at selection.
+#[derive(Debug)]
+pub struct MenuEntry {
+    pub handle: usize,
+    pub item_id: i32,
+    pub title: String,
+    pub enabled: bool,
+    pub checked: bool,
+}
+
 #[derive(Clone, Copy)]
 struct Group {
     id: i32,
@@ -66,6 +76,180 @@ fn ordering(order: i32) -> Result<u32> {
 }
 
 impl Runtime {
+    fn menu_is_current(&self, activity: Word, menu: Word) -> bool {
+        self.activity == Some(activity)
+            && self
+                .screens
+                .get(&activity.reference().unwrap_or(0))
+                .is_some_and(|screen| {
+                    screen.menu == Some(menu) && screen.resumed && !screen.finishing
+                })
+    }
+    fn menu_activity_callback(
+        &mut self,
+        activity: Word,
+        name: &str,
+        parameter: Word,
+    ) -> Result<bool> {
+        let ty = if name == "onOptionsItemSelected" {
+            ITEM
+        } else {
+            MENU
+        };
+        let result = self.invoke(
+            Method {
+                class: "Landroid/app/Activity;".into(),
+                name: name.into(),
+                parameters: vec![ty.into()],
+                returns: "Z".into(),
+            },
+            vec![activity, parameter],
+            true,
+        )?;
+        Ok(result
+            .first()
+            .copied()
+            .context("missing menu callback return")?
+            .int()?
+            != 0)
+    }
+    pub fn options_menu(&mut self) -> Result<Vec<MenuEntry>> {
+        self.require_main_thread()?;
+        self.reset_budget();
+        let Some(activity) = self.activity else {
+            return Ok(vec![]);
+        };
+        let screen = self.screen(activity)?;
+        if !screen.resumed || screen.finishing {
+            return Ok(vec![]);
+        }
+        ensure!(!screen.menu_preparing, "recursive options menu preparation");
+        let creating = screen.menu.is_none();
+        let menu = if let Some(menu) = screen.menu {
+            menu
+        } else {
+            self.create_menu(activity)?
+        };
+        let screen = self
+            .screens
+            .get_mut(&activity.reference()?)
+            .context("Activity missing")?;
+        screen.menu = Some(menu);
+        screen.menu_preparing = true;
+        screen.menu_ready = false;
+        let roots = self.native_roots.len();
+        self.native_roots.extend([activity, menu]);
+        let result = (|| -> Result<Vec<MenuEntry>> {
+            if creating && !self.menu_activity_callback(activity, "onCreateOptionsMenu", menu)? {
+                let screen = self
+                    .screens
+                    .get_mut(&activity.reference()?)
+                    .context("Activity missing")?;
+                if screen.menu == Some(menu) {
+                    screen.menu = None;
+                }
+                return Ok(vec![]);
+            }
+            if !self.menu_is_current(activity, menu)
+                || !self.menu_activity_callback(activity, "onPrepareOptionsMenu", menu)?
+                || !self.menu_is_current(activity, menu)
+            {
+                return Ok(vec![]);
+            }
+            let mut entries = vec![];
+            for item in self.menu_items(menu)? {
+                if !self.menu_field(*item, "visible")?.truth() {
+                    continue;
+                }
+                let title = self.menu_field(*item, "title")?;
+                entries.push(MenuEntry {
+                    handle: item.reference()?,
+                    item_id: self.menu_field(*item, "id")?.int()?,
+                    title: if title == Word::ZERO {
+                        String::new()
+                    } else {
+                        self.heap.text(title)?.to_owned()
+                    },
+                    enabled: self.menu_field(*item, "enabled")?.truth(),
+                    checked: self.menu_field(*item, "checkable")?.truth()
+                        && self.menu_field(*item, "checked")?.truth(),
+                });
+            }
+            self.screens
+                .get_mut(&activity.reference()?)
+                .context("Activity missing")?
+                .menu_ready = true;
+            Ok(entries)
+        })();
+        if let Some(screen) = self.screens.get_mut(&activity.reference()?) {
+            screen.menu_preparing = false;
+            if result.is_err() && screen.menu == Some(menu) {
+                screen.menu = None;
+            }
+        }
+        self.native_roots.truncate(roots);
+        let entries = result?;
+        self.drain_navigation()?;
+        self.collect();
+        Ok(if self.menu_is_current(activity, menu) {
+            entries
+        } else {
+            vec![]
+        })
+    }
+    pub fn select_menu_item(&mut self, handle: usize) -> Result<bool> {
+        self.require_main_thread()?;
+        self.reset_budget();
+        let Some(activity) = self.activity else {
+            return Ok(false);
+        };
+        let Some(menu) = self.screen(activity)?.menu else {
+            return Ok(false);
+        };
+        if !self.screen(activity)?.menu_ready {
+            return Ok(false);
+        }
+        let item = Word::Ref(handle);
+        if !self.menu_is_current(activity, menu)
+            || !self.menu_items(menu)?.contains(&item)
+            || !self.menu_field(item, "visible")?.truth()
+            || !self.menu_field(item, "enabled")?.truth()
+        {
+            return Ok(false);
+        }
+        let listener = self.menu_field(item, "listener")?;
+        let roots = self.native_roots.len();
+        self.native_roots.extend([activity, menu, item, listener]);
+        let result = (|| -> Result<bool> {
+            if listener != Word::ZERO {
+                let result = self.invoke(
+                    Method {
+                        class: "Landroid/view/MenuItem$OnMenuItemClickListener;".into(),
+                        name: "onMenuItemClick".into(),
+                        parameters: vec![ITEM.into()],
+                        returns: "Z".into(),
+                    },
+                    vec![listener, item],
+                    true,
+                )?;
+                if result
+                    .first()
+                    .copied()
+                    .context("missing menu listener return")?
+                    .int()?
+                    != 0
+                {
+                    return Ok(true);
+                }
+            }
+            self.menu_activity_callback(activity, "onOptionsItemSelected", item)
+        })();
+        self.native_roots.truncate(roots);
+        let handled = result?;
+        self.drain_navigation()?;
+        self.collect();
+        Ok(handled)
+    }
     pub fn create_menu(&mut self, context: Word) -> Result<Word> {
         self.require_main_thread()?;
         ensure!(
@@ -399,6 +583,13 @@ impl Runtime {
             ) => vec![Word::from(1)],
             ("Landroid/app/Activity;", "onOptionsItemSelected(Landroid/view/MenuItem;)Z") => {
                 vec![Word::ZERO]
+            }
+            ("Landroid/app/Activity;", "invalidateOptionsMenu()V") => {
+                self.screens
+                    .get_mut(&receiver.reference()?)
+                    .context("unregistered Activity")?
+                    .menu = None;
+                vec![]
             }
             (
                 MENU,

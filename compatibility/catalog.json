@@ -52,11 +52,14 @@
       "native_keyboard_verified": true,
       "native_close_exit_zero": true,
       "source": "examples/counter",
-      "notes": "Earlier native text-copy/key listener and clean close; current headless VM conformance adds FrameContract and instruction-slice/GC checks. The normal FrameContract passes on desktop Java 17. No worker or independent APK compatibility claim. Retained DEX Throwable traces, explicit/implicit faults, GC, localized descriptions, refreshed traces, cause cycles and callback fault cleanup pass compiled checks. The portable ThrowableContract passes on desktop Java; source lines, StackTraceElement arrays, stream/writer overloads and suppression remain unsupported.",
+      "notes": "Earlier native text-copy/key listener and clean close; current headless VM conformance adds FrameContract and instruction-slice/GC checks. The normal FrameContract passes on desktop Java 17. No worker or independent APK compatibility claim. Retained DEX Throwable traces, explicit/implicit faults, GC, localized descriptions, refreshed traces, cause cycles and callback fault cleanup pass compiled checks. The portable ThrowableContract passes on desktop Java; source lines, StackTraceElement arrays, stream/writer overloads and suppression remain unsupported. Compiled MenuContract and MenuActivity verify flat XML, item/group state, ordering, GC, virtual tint callbacks, create/prepare caching and rejection, invalidation, listener fallback, stale input, navigation and fault cleanup. The generic view/class layout tag invokes the named guest constructor; tint metadata is retained, not painted. Native options-menu input is not yet implemented.",
       "desktop_java_frame_differential_verified": true,
       "managed_frame_continuations_verified": true,
       "headless_throwable_diagnostics_verified": true,
-      "desktop_java_throwable_contract_verified": true
+      "desktop_java_throwable_contract_verified": true,
+      "headless_menu_xml_and_state_verified": true,
+      "headless_options_menu_callbacks_verified": true,
+      "native_options_menu_input_verified": false
     },
     {
       "package": "org.droidless.intents",
@@ -114,9 +117,11 @@
       "desktop_java_differential_verified": true,
       "android_reference_verified": false,
       "source": "examples/reflection",
-      "notes": "Authored compiled APK: class lookup/construction, initialization/access faults, arrays, inherited field aliases and all nine native wrapper TYPE identities; GC, wrong-kind/type and rejected final-write regressions. Same ReflectionContract and PrimitiveContract pass on Java 17 with Java 8 source/target. Primitive metadata does not imply general boxing support. Framework-specific compiled checks add fixed SDK_INT=21, repeated reads, declaring-owner aliases without subclass initialization, and rejected final writes/wrong-kind/type access. SDK checks are separate from desktop Java differential evidence.",
+      "notes": "Authored compiled APK: class lookup/construction, initialization/access faults, arrays, inherited field aliases and all nine native wrapper TYPE identities; GC, wrong-kind/type and rejected final-write regressions. Same ReflectionContract and PrimitiveContract pass on Java 17 with Java 8 source/target. Primitive metadata does not imply general boxing support. Framework-specific compiled checks add fixed SDK_INT=21, repeated reads, declaring-owner aliases without subclass initialization, and rejected final writes/wrong-kind/type access. SDK checks are separate from desktop Java differential evidence. Class.toString now formats APK/native-profile classes and interfaces, primitive/void identities and array descriptors; these descriptions pass the compiled and portable PrimitiveContract. Unknown native metadata remains explicitly unsupported.",
       "desktop_java_primitive_differential_verified": true,
-      "headless_sdk_profile_verified": true
+      "headless_sdk_profile_verified": true,
+      "headless_class_descriptions_verified": true,
+      "desktop_java_class_descriptions_verified": true
     },
     {
       "package": "org.droidless.scheduling",
@@ -175,7 +180,7 @@
       "native_keyboard_verified": true,
       "native_save_verified": true,
       "multi_note_restart_verified": true,
-      "notes": "Original release APK unmodified. Headless replay saves two notes, reopens one through its row listener, edits title and multiline body, refreshes the list and restores both fields after restart with the original row ID. Native AppKit checks select an existing row with the mouse, edit its title/body with keyboard input, save through Back and reopen both exact fields in a fresh process. Both native processes close with exit status zero. Headless malformed-body replay logs the real SAX fault with its retained DEX PC, displays the APK's own !ERROR! marker and leaves the stored row unchanged when opened. XML metacharacters still do not round-trip through the original serializer; rich formatting, drawing, worker flow and visual fidelity remain unverified. Not redistributed.",
+      "notes": "Original release APK unmodified. Headless replay saves two notes, reopens one through its row listener, edits title and multiline body, refreshes the list and restores both fields after restart with the original row ID. Native AppKit checks select an existing row with the mouse, edit its title/body with keyboard input, save through Back and reopen both exact fields in a fresh process. Both native processes close with exit status zero. Headless malformed-body replay logs the real SAX fault with its retained DEX PC, displays the APK's own !ERROR! marker and leaves the stored row unchanged when opened. XML metacharacters still do not round-trip through the original serializer; rich formatting, drawing, worker flow and visual fidelity remain unverified. Not redistributed. The original AppCompat menu construction and Delete selection now execute. The intended SQLite row is removed while the other is preserved, but returning to Notes reaches the original Snackbar and fails at View.setAccessibilityLiveRegion. Complete delete/return/restart and native menu input are not yet verified.",
       "release_tag": "v1.0.0",
       "headless_viewport": [
         390,
@@ -195,7 +200,10 @@
       "native_close_exit_zero": true,
       "headless_malformed_body_error_fallback_verified": true,
       "headless_malformed_body_open_preserves_row_verified": true,
-      "native_malformed_body_error_fallback_verified": false
+      "native_malformed_body_error_fallback_verified": false,
+      "headless_options_menu_construction_verified": true,
+      "headless_note_delete_workflow_verified": false,
+      "native_options_menu_input_verified": false
     },
     {
       "package": "org.droidless.grids",

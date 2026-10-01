@@ -38,4 +38,5 @@ pub mod ui;
 mod vm;
 mod workers;
 mod xml_resource;
+pub use menus::MenuEntry;
 pub use vm::{Runtime, Trace};
