@@ -1611,6 +1611,9 @@ remains active.
 
 ## Current-source focus and original Notepad drawer navigation
 
+The [resource lookup checkpoint](#current-source-resource-entry-names-and-folder-diagnostic)
+below supersedes this checkpoint's folder diagnostic.
+
 Date: 2026-10-01. Explicit guest View focus ownership now completes the unchanged
 Notepad v1.0.0 drawer's original settlement callback. The APK still has SHA-256
 `2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
@@ -1662,3 +1665,34 @@ bundle was rebuilt and matches the optimized CLI byte-for-byte (SHA-256
 `6192e2a37c19765a6e0332f067efd40a92be866852c55e3383331420e40d0030`).
 This is build evidence; no fresh physical drawer input or normal native close is
 claimed. GitHub Actions remain disabled and the 50% checkpoint remains active.
+
+## Current-source resource entry names and folder diagnostic
+
+Date: 2026-10-01. Resources.getResourceEntryName now reads the name of the
+requested compiled entry. It does not resolve aliases to their target's name or
+require a scalar value for an ID entry or style bag. The authored Images contract
+checks layout, ID, style and drawable-alias names across guest GC. Invalid IDs,
+including a missing framework entry, raise a guest Resources.NotFoundException
+with a message and the correct RuntimeException parent. The existing widget
+regression failed at the unsupported lookup before the change and now passes.
+The full framework resource-name table remains unsupported.
+
+A fresh optimized replay of the unchanged pinned Notepad APK opens and settles
+the drawer, then selects Create or edit folders. The entry-name lookup now
+returns to the original ButterKnife binding code. That code next stops while
+constructing its diagnostic at unsupported
+`Ljava/lang/IllegalStateException;-><init>(Ljava/lang/String;Ljava/lang/Throwable;)V`.
+The retained call chain includes NewFolderViewHolder and ButterKnife's
+`Lbutterknife/a/c;->a(Landroid/view/View;ILjava/lang/String;Ljava/lang/Class;)Ljava/lang/Object;`
+at classes.dex PC 0x0035. This is the next missing diagnostic operation, not proof
+that folder binding or editing works. Both exact source and copied SQLite note
+rows remain unchanged. The underlying binding cause remains to be exposed.
+
+The full local gate again passes 106 Rust tests, Clippy, optimized CLI/document
+replay builds and 4,096 seeded parser mutations. The public replay retains its
+calculator, image/grid, Activity-result, document/SwpieView and Notepad
+save/edit/Delete/Undo/drawer/Back/restart/malformed-body checks. The rebuilt
+unsigned development bundle and optimized CLI have matching SHA-256
+`2d301be9e7825fcd63017f0356d02c1dd32a38a1e40346a53af81d1eccdfe4b8`.
+No fresh physical drawer or folder input is claimed. GitHub Actions remain
+disabled; the 50% checkpoint is still active.
