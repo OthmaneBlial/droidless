@@ -1100,4 +1100,3 @@ target/release/droidless run --headless --ephemeral fixtures/generated/schedulin
 target/release/droidless run --ephemeral fixtures/generated/scheduling.apk \
   --click "Start Looper worker" --click "Finish later" --trace-lifecycle
 ```
-
