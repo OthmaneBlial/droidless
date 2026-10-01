@@ -2,6 +2,94 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_descendant_coordinates_scroll_overflow_faults_and_hierarchy_bound() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    assert_eq!(
+        vm.invoke(
+            Method {
+                class: "Lorg/droidless/images/CoordinateContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "I".into(),
+            },
+            vec![activity],
+            false
+        )
+        .unwrap(),
+        [Word::from(1)]
+    );
+    let root = vm.heap.instance("Landroid/widget/FrameLayout;").unwrap();
+    let child = vm.heap.instance("Landroid/widget/FrameLayout;").unwrap();
+    let rect = vm.heap.instance("Landroid/graphics/Rect;").unwrap();
+    for (key, value) in [("left", -3), ("top", 7), ("scroll-x", -5), ("scroll-y", 9)] {
+        vm.heap
+            .get_mut(child)
+            .unwrap()
+            .fields
+            .insert(format!("droidless:view:{key}"), vec![Word::from(value)]);
+    }
+    vm.heap
+        .get_mut(root)
+        .unwrap()
+        .fields
+        .insert("droidless:view:scroll-x".into(), vec![Word::from(1000)]);
+    let method = Method {
+        class: "Landroid/view/ViewGroup;".into(),
+        name: "offsetDescendantRectToMyCoords".into(),
+        parameters: vec![
+            "Landroid/view/View;".into(),
+            "Landroid/graphics/Rect;".into(),
+        ],
+        returns: "V".into(),
+    };
+    vm.heap
+        .get_mut(child)
+        .unwrap()
+        .fields
+        .insert("droidless:view:parent".into(), vec![root]);
+    vm.invoke(method.clone(), vec![root, child, rect], true)
+        .unwrap();
+    assert_eq!(
+        vm.heap.get(rect).unwrap().fields["Landroid/graphics/Rect;->left:I"],
+        [Word::from(2)]
+    );
+    assert_eq!(
+        vm.heap.get(rect).unwrap().fields["Landroid/graphics/Rect;->top:I"],
+        [Word::from(-2)]
+    );
+    vm.heap
+        .get_mut(child)
+        .unwrap()
+        .fields
+        .insert("droidless:view:parent".into(), vec![child]);
+    let error = vm
+        .invoke(method.clone(), vec![root, child, rect], true)
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("cyclic or too deep View coordinate hierarchy"));
+    assert_eq!(vm.stack_depth(), 0);
+    vm.heap
+        .get_mut(child)
+        .unwrap()
+        .fields
+        .insert("droidless:view:parent".into(), vec![root]);
+    vm.invoke(method.clone(), vec![root, child, rect], true)
+        .unwrap();
+    let error = vm.invoke(method, vec![root, child], true).unwrap_err();
+    assert!(format!("{error:#}").contains("argument"));
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    for object in [activity, root, child, rect] {
+        assert!(
+            vm.heap.get(object).is_err(),
+            "coordinate conversion leaked roots"
+        );
+    }
+}
+
+#[test]
 fn view_click_listener_query_gc_and_explicit_xml_listener_removal() {
     let call = |vm: &mut Runtime, name: &str, parameters: &[&str], returns: &str, args| {
         vm.invoke(

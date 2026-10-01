@@ -4266,6 +4266,10 @@ impl Runtime {
                 self.heap.get_mut(matrix)?.data = Data::Matrix([1.,0.,x,0.,1.,y,0.,0.,1.]);
                 result.push(matrix);
             }
+            ("Landroid/view/ViewGroup;", "offsetDescendantRectToMyCoords(Landroid/view/View;Landroid/graphics/Rect;)V"
+                | "offsetRectIntoDescendantCoords(Landroid/view/View;Landroid/graphics/Rect;)V") => {
+                self.offset_descendant_rect(receiver, arg(1)?, arg(2)?, method.name == "offsetRectIntoDescendantCoords")?;
+            }
             ("Landroid/view/View;", "getScrollX()I")
             | ("Landroid/view/View;", "getScrollY()I") => {
                 self.view_mut(receiver)?;
@@ -5055,6 +5059,63 @@ impl Runtime {
             _ => return Ok(None),
         }
         Ok(Some(result))
+    }
+    fn offset_descendant_rect(
+        &mut self,
+        parent: Word,
+        mut child: Word,
+        rect: Word,
+        into_child: bool,
+    ) -> Result<()> {
+        self.require_main_thread()?;
+        ensure!(
+            self.is_a(&self.heap.get(parent)?.class, "Landroid/view/ViewGroup;"),
+            "coordinate conversion requires ViewGroup"
+        );
+        if parent == child {
+            return Ok(());
+        }
+        // ponytail: 128 parent steps; reject cycles/deeper hierarchies instead of looping on hostile guest state.
+        for _ in 0..128 {
+            let ancestor = self.focus_field(child, "droidless:view:parent")?;
+            if ancestor == Word::ZERO || self.heap.get(ancestor)?.view.is_none() {
+                return Err(fault(
+                    "Ljava/lang/IllegalArgumentException;",
+                    "parameter must be a descendant of this view",
+                ));
+            }
+            let delta = |edge, axis| -> Result<i32> {
+                let position = self.focus_field(child, edge)?.int()?;
+                let scroll = self.focus_field(child, axis)?.int()?;
+                Ok(if into_child {
+                    scroll.wrapping_sub(position)
+                } else {
+                    position.wrapping_sub(scroll)
+                })
+            };
+            let x = delta("droidless:view:left", "droidless:view:scroll-x")?;
+            let y = delta("droidless:view:top", "droidless:view:scroll-y")?;
+            ensure!(
+                self.is_a(&self.heap.get(rect)?.class, "Landroid/graphics/Rect;"),
+                "coordinate conversion requires Rect"
+            );
+            let fields = &mut self.heap.get_mut(rect)?.fields;
+            for (edge, offset) in [("left", x), ("top", y), ("right", x), ("bottom", y)] {
+                let key = format!("Landroid/graphics/Rect;->{edge}:I");
+                let value = fields
+                    .get(&key)
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO)
+                    .int()?;
+                fields.insert(key, vec![Word::from(value.wrapping_add(offset))]);
+            }
+            if ancestor == parent {
+                return Ok(());
+            }
+            child = ancestor;
+        }
+        bail!("cyclic or too deep View coordinate hierarchy")
     }
     fn view_mut(&mut self, word: Word) -> Result<&mut crate::ui::View> {
         self.heap
