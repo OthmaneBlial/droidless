@@ -3611,7 +3611,11 @@ impl Runtime {
                     .insert("droidless:view:context".into(), vec![arg(1)?]);
             }
             ("Landroid/widget/LinearLayout;", "setOrientation(I)V") => {
-                self.view_mut(receiver)?.orientation = arg(1)?.int()?
+                self.view_mut(receiver)?.orientation = arg(1)?.int()?;
+                self.request_view_layout(receiver)?;
+            }
+            ("Landroid/widget/LinearLayout;", "getOrientation()I") => {
+                result.push(Word::from(self.view_mut(receiver)?.orientation));
             }
             ("Landroid/widget/LinearLayout;", "setGravity(I)V")
             | ("Landroid/widget/TextView;", "setGravity(I)V") => {
@@ -3674,37 +3678,7 @@ impl Runtime {
                 let params = self.heap.get(child)?.fields.get("droidless:view:layout-params")
                     .and_then(|values| values.first()).copied().context("child has no layout parameters")?;
                 ensure!(self.is_a(&self.heap.get(params)?.class, "Landroid/view/ViewGroup$MarginLayoutParams;"), "child requires margin layout parameters");
-                let padding = self.view_mut(receiver)?.padding;
-                let field = |name: &str, owner: &str| -> Result<i32> {
-                    self.heap.get(params)?.fields.get(&format!("{owner}->{name}:I"))
-                        .and_then(|values| values.first()).copied().unwrap_or(Word::ZERO).int()
-                };
-                let mut specs = vec![];
-                for (axis, start, end, parent, used) in [
-                    ("width", "leftMargin", "rightMargin", arg(2)?, arg(3)?),
-                    ("height", "topMargin", "bottomMargin", arg(4)?, arg(5)?),
-                ] {
-                    let axis_padding = if axis == "width" {padding[0]+padding[2]} else {padding[1]+padding[3]} as i32;
-                    let used = axis_padding.wrapping_add(field(start, "Landroid/view/ViewGroup$MarginLayoutParams;")?)
-                        .wrapping_add(field(end, "Landroid/view/ViewGroup$MarginLayoutParams;")?).wrapping_add(used.int()?);
-                    specs.push((parent, Word::from(used), Word::from(field(axis, "Landroid/view/ViewGroup$LayoutParams;")?)));
-                }
-                let roots = self.native_roots.len();
-                self.native_roots.extend([receiver, child, params]);
-                let measured = (|| -> Result<()> {
-                    let mut arguments = vec![child];
-                    for (parent, used, dimension) in specs {
-                        arguments.push(*self.invoke(Method {
-                            class: "Landroid/view/ViewGroup;".into(), name: "getChildMeasureSpec".into(),
-                            parameters: vec!["I".into(); 3], returns: "I".into(),
-                        }, vec![parent, used, dimension], false)?.first().context("child measure spec missing")?);
-                    }
-                    self.invoke(Method { class: "Landroid/view/View;".into(), name: "measure".into(),
-                        parameters: vec!["I".into(); 2], returns: "V".into(), }, arguments, true)?;
-                    Ok(())
-                })();
-                self.native_roots.truncate(roots);
-                measured?;
+                self.measure_child(receiver, child, [arg(2)?, arg(4)?], [arg(3)?.int()?, arg(5)?.int()?], [None; 2])?;
             }
             ("Landroid/view/ViewGroup;", "checkLayoutParams(Landroid/view/ViewGroup$LayoutParams;)Z") => {
                 let params = arg(1)?;
@@ -4388,6 +4362,21 @@ impl Runtime {
             }
             ("Landroid/view/View;", "measure(II)V") => {
                 let specs = [arg(1)?, arg(2)?];
+                let recycler = "Landroid/support/v7/widget/RecyclerView;";
+                if self.is_a(&self.heap.get(receiver)?.class, recycler)
+                    && let Some((dex, class)) = self.class_location(recycler) {
+                    // ponytail: this profile has no item-animation clock. Apply the existing
+                    // unanimated policy before ancestor callbacks can lay out the list.
+                    let mut setters = self.apk.dex[dex].classes[class].methods.iter()
+                        .filter(|encoded| encoded.access & 8 == 0)
+                        .map(|encoded| &self.apk.dex[dex].methods[encoded.index])
+                        .filter(|method| method.name == "setItemAnimator" && method.returns == "V"
+                            && method.parameters.len() == 1 && method.parameters[0].starts_with('L'));
+                    let setter = setters.next().cloned().context("RecyclerView item animator setter missing")?;
+                    ensure!(setters.next().is_none(), "ambiguous RecyclerView item animator setter");
+                    self.invoke(setter, vec![receiver, Word::ZERO], true)?;
+                }
+
                 self.invoke(
                     Method {
                         class: "Landroid/view/View;".into(),
@@ -4402,6 +4391,7 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .insert("droidless:view:layout-requested".into(), vec![Word::ZERO]);
+                self.heap.get_mut(receiver)?.fields.insert("droidless:view:layout-required".into(), vec![Word::from(1)]);
             }
             ("Landroid/view/View;", "onMeasure(II)V") => {
                 self.measure_view(receiver, [arg(1)?, arg(2)?], false)?;
@@ -4440,6 +4430,7 @@ impl Runtime {
                     .chain([Word::from(i32::from(changed))])
                     .chain(bounds)
                     .collect(), true)?;
+                self.heap.get_mut(receiver)?.fields.insert("droidless:view:layout-required".into(), vec![Word::ZERO]);
             }
             ("Landroid/view/View;", "offsetLeftAndRight(I)V")
             | ("Landroid/view/View;", "offsetTopAndBottom(I)V") => {
@@ -4553,10 +4544,7 @@ impl Runtime {
                 self.view_mut(receiver)?;
                 // ponytail: redraw the full snapshot rather than tracking dirty rectangles.
                 if args.len() == 2 { self.heap.get(arg(1)?)?; }
-                self.heap.get_mut(receiver)?.fields.insert(
-                    "droidless:view:layout-requested".into(),
-                    vec![Word::from(1)],
-                );
+                self.request_view_layout(receiver)?;
             }
             ("Landroid/view/View;", "getPaddingLeft()I")
             | ("Landroid/view/View;", "getPaddingTop()I")
@@ -4874,6 +4862,7 @@ impl Runtime {
                 let params = arg(1)?;
                 if params != Word::ZERO { self.heap.get(params)?; }
                 self.heap.get_mut(receiver)?.fields.insert("droidless:view:layout-params".into(), vec![params]);
+                self.request_view_layout(receiver)?;
             }
             ("Landroid/view/View;", "getLayoutParams()Landroid/view/ViewGroup$LayoutParams;") => {
                 let params = self.heap.get(receiver)?.fields.get("droidless:view:layout-params").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO);

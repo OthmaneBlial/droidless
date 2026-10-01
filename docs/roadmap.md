@@ -46,9 +46,9 @@ The following are objectives, not completed capability claims.
    through headless menu replay, with invalidation, stale input and GC checks.
    Notepad's original Delete removes the intended row. Its Snackbar now completes
    child binding through onFinishInflate and delivers its queued confirmation
-   callback and completes detached-child removal. Measured text Layout now passes
-   compiled checks; Snackbar still needs container child measurement before its
-   getLayout/getLineCount query; complete delete/restart and
+   callback and completes detached-child removal. Snackbar child measurement now
+   creates its actual text Layout and reads its line count. Relative-padding state
+   is the next measurement blocker; complete delete/restart and
    native menu input remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.

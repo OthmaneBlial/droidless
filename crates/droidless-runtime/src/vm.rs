@@ -392,6 +392,10 @@ impl Runtime {
                     .get("droidless:view:laid-out")
                     .and_then(|values| values.first())
                     .is_some_and(|word| word.truth());
+                let layout_required = fields
+                    .get("droidless:view:layout-required")
+                    .and_then(|values| values.first())
+                    .is_some_and(|word| word.truth());
                 let changed = ["left", "top", "right", "bottom"]
                     .into_iter()
                     .zip(bounds)
@@ -402,30 +406,13 @@ impl Runtime {
                             .copied()
                             != Some(Word::from(value))
                     });
-                if laid_out && !requested && !changed {
+                if laid_out && !requested && !layout_required && !changed {
                     continue;
                 }
                 let width = right.saturating_sub(left).max(0);
                 let height = bottom.saturating_sub(top).max(0);
                 let width_spec = Word::from((0x4000_0000u32 | width as u32) as i32);
                 let height_spec = Word::from((0x4000_0000u32 | height as u32) as i32);
-                if self.is_a(
-                    &self.heap.get(view)?.class,
-                    "Landroid/support/v7/widget/RecyclerView;",
-                ) {
-                    // ponytail: snapshots have no animation clock; disable this support library's
-                    // visual-only item animator until ValueAnimator frames are implemented.
-                    self.invoke(
-                        Method {
-                            class: "Landroid/support/v7/widget/RecyclerView;".into(),
-                            name: "setItemAnimator".into(),
-                            parameters: vec!["Landroid/support/v7/widget/eh;".into()],
-                            returns: "V".into(),
-                        },
-                        vec![view, Word::ZERO],
-                        true,
-                    )?;
-                }
                 self.invoke(
                     Method {
                         class: "Landroid/view/View;".into(),

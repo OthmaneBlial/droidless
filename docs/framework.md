@@ -495,6 +495,25 @@ old text snapshots. This is an approximate plain-text profile, not Android font
 shaping, bidi, styled metrics, ellipsizing or native multiline painting parity.
 The null-before-measurement behavior follows the [TextView contract](https://developer.android.com/reference/android/widget/TextView#getLayout()).
 
+LinearLayout and FrameLayout now measure their children through virtual guest
+measure callbacks. The bounded pass handles padding, margins, GONE children,
+weighted size distribution under EXACTLY/AT_MOST/UNSPECIFIED constraints and matching
+the final cross-axis size. Rendering
+uses the measured dimensions, and layout requests propagate to ancestors.
+Temporary roots survive child callbacks and are released on success/failure;
+structural hierarchy changes during this pass are explicitly rejected. The
+compiled contract checks a weighted nested row, its message Layout, a hidden
+throwing child, exact rendered bounds, ancestor invalidation and failure recovery.
+This remains the basic container profile; baseline alignment, largest-child
+measurement, full Android ViewRoot behavior and font/pixel parity are unproven.
+Successful measurement retains a pending layout pass even when bounds are
+unchanged; a thrown onLayout leaves that pass pending for a retry. This follows
+the separate layout-required state in the [API-21 View](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/View.java).
+The existing unanimated support-RecyclerView profile is applied at the shared
+measure entry point, before ancestor callbacks can lay out the list. Its setter
+uses the bundled DEX method signature, including renamed animator classes; this
+does not implement ValueAnimator or general RecyclerView compatibility.
+
 Inflation retains XML AttributeSet and Context, calls the actual parent's
 virtual generateLayoutParams, and attaches children incrementally. Native base,
 margin, frame, linear and table parameters retain sizes, margins, gravity and

@@ -22,6 +22,67 @@ fn compiled_text_layout_measurement_invalidation_and_callback_gc() {
         .unwrap();
     assert_eq!(result, [Word::from(1)]);
     assert_eq!(vm.stack_depth(), 0);
+    let call = |vm: &mut Runtime, name: &str, returns: &str| {
+        vm.invoke(
+            Method {
+                class: "Lorg/droidless/counter/TextLayoutContract;".into(),
+                name: name.into(),
+                parameters: vec![],
+                returns: returns.into(),
+            },
+            vec![],
+            false,
+        )
+        .unwrap()
+    };
+    let root = call(&mut vm, "root", "Landroid/view/View;")[0];
+    let tree = droidless_runtime::ui::layout(&vm.heap, root, 162.0, 1000.0).unwrap();
+    let row = &tree.children[0];
+    assert_eq!(
+        (row.rect.x, row.rect.y, row.rect.width, row.rect.height),
+        (6.0, 3.0, 150.0, 48.0)
+    );
+    assert_eq!(row.children.len(), 2);
+    assert_eq!(
+        (row.children[0].rect.x, row.children[0].rect.width),
+        (14.0, 90.0)
+    );
+    assert_eq!(
+        (row.children[1].rect.x, row.children[1].rect.width),
+        (108.0, 42.0)
+    );
+    vm.root = Some(root);
+    vm.width = 162.0;
+    vm.height = 1000.0;
+    vm.layout_snapshot().unwrap();
+    assert_eq!(call(&mut vm, "layoutCount", "I"), [Word::from(1)]);
+    call(&mut vm, "remeasure", "V");
+    vm.layout_snapshot().unwrap();
+    assert_eq!(call(&mut vm, "layoutCount", "I"), [Word::from(2)]);
+    vm.layout_snapshot().unwrap();
+    assert_eq!(call(&mut vm, "layoutCount", "I"), [Word::from(2)]);
+    call(&mut vm, "failLayout", "V");
+    assert!(format!("{:#}", vm.layout_snapshot().unwrap_err()).contains("layout failure"));
+    assert_eq!(vm.stack_depth(), 0);
+    call(&mut vm, "recoverLayout", "V");
+    vm.layout_snapshot().unwrap();
+    assert_eq!(call(&mut vm, "layoutCount", "I"), [Word::from(4)]);
+    vm.root = None;
+    call(&mut vm, "release", "V");
+    let failure = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/counter/TextLayoutContract;".into(),
+                name: "mutate".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "V".into(),
+            },
+            vec![activity],
+            false,
+        )
+        .unwrap_err();
+    assert!(format!("{failure:#}").contains("hierarchy mutation during container measurement"));
+    assert_eq!(vm.stack_depth(), 0);
     vm.collect();
     assert!(
         vm.heap.get(activity).is_err(),

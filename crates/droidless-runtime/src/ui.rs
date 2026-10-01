@@ -199,7 +199,7 @@ pub struct Node {
     pub children: Vec<Node>,
 }
 
-fn params_field(heap: &Heap, word: Word, field: &str) -> Result<Option<Word>> {
+pub(crate) fn params_field(heap: &Heap, word: Word, field: &str) -> Result<Option<Word>> {
     let params = heap
         .get(word)?
         .fields
@@ -220,7 +220,7 @@ fn params_field(heap: &Heap, word: Word, field: &str) -> Result<Option<Word>> {
     ))
 }
 
-fn weight(heap: &Heap, word: Word) -> Result<f32> {
+pub(crate) fn weight(heap: &Heap, word: Word) -> Result<f32> {
     let value = if let Some(value) = params_field(
         heap,
         word,
@@ -236,6 +236,33 @@ fn weight(heap: &Heap, word: Word) -> Result<f32> {
     };
     ensure!(value.is_finite() && value >= 0.0, "invalid layout weight");
     Ok(value)
+}
+
+pub(crate) fn margins(heap: &Heap, word: Word) -> Result<[f32; 4]> {
+    let object = heap.get(word)?;
+    let mut margins = object.view.as_ref().context("expected View")?.margins;
+    if let Some(params) = object
+        .fields
+        .get("droidless:view:layout-params")
+        .and_then(|v| v.first())
+        .filter(|v| **v != Word::ZERO)
+    {
+        let fields = &heap.get(*params)?.fields;
+        for (edge, name) in ["leftMargin", "topMargin", "rightMargin", "bottomMargin"]
+            .into_iter()
+            .enumerate()
+        {
+            if let Some(value) = fields
+                .get(&format!(
+                    "Landroid/view/ViewGroup$MarginLayoutParams;->{name}:I"
+                ))
+                .and_then(|v| v.first())
+            {
+                margins[edge] = value.int()? as f32;
+            }
+        }
+    }
+    Ok(margins)
 }
 
 pub fn layout(heap: &Heap, root: Word, width: f32, height: f32) -> Result<Node> {
@@ -312,6 +339,7 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
         }
     }
     view.weight = weight(heap, word)?;
+    view.margins = margins(heap, word)?;
     let mut children = vec![];
     let available = Rect {
         x: rect.x + view.padding[0],
@@ -354,6 +382,7 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
         for child in &view.children {
             let object = heap.get(*child)?;
             let c = object.view.as_ref().context("non-View child")?;
+            let margins = margins(heap, *child)?;
             if c.visible == 8 {
                 continue;
             }
@@ -376,16 +405,14 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
             let height = dimension(heap, *child, false, available.height)?;
             // Relative START/END follow this profile's default left-to-right direction.
             let x = match gravity & 7 {
-                1 => available.x + (available.width - width) / 2.0 + c.margins[0] - c.margins[2],
-                5 => available.x + available.width - width - c.margins[2],
-                _ => available.x + c.margins[0],
+                1 => available.x + (available.width - width) / 2.0 + margins[0] - margins[2],
+                5 => available.x + available.width - width - margins[2],
+                _ => available.x + margins[0],
             };
             let y = match gravity & 0x70 {
-                0x10 => {
-                    available.y + (available.height - height) / 2.0 + c.margins[1] - c.margins[3]
-                }
-                0x50 => available.y + available.height - height - c.margins[3],
-                _ => available.y + c.margins[1],
+                0x10 => available.y + (available.height - height) / 2.0 + margins[1] - margins[3],
+                0x50 => available.y + available.height - height - margins[3],
+                _ => available.y + margins[1],
             };
             let child_rect = laid_out_rect(heap, *child, rect)?.unwrap_or(Rect {
                 x,
@@ -406,53 +433,57 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
         let mut fixed = 0.0;
         for child in &view.children {
             let c = heap.get(*child)?.view.as_ref().context("non-View child")?;
+            let margins = margins(heap, *child)?;
             if c.visible == 8 {
                 continue;
             }
             let child_weight = weight(heap, *child)?;
-            weights += child_weight;
-            fixed += if child_weight > 0.0 {
+            let measured = measured_dimension(heap, *child, !vertical)?.is_some();
+            weights += if measured { 0.0 } else { child_weight };
+            fixed += if child_weight > 0.0 && !measured {
                 0.0
             } else {
                 dimension(heap, *child, !vertical, size)?
             };
             fixed += if vertical {
-                c.margins[1] + c.margins[3]
+                margins[1] + margins[3]
             } else {
-                c.margins[0] + c.margins[2]
+                margins[0] + margins[2]
             };
         }
         let mut cursor = if vertical { available.y } else { available.x };
         for child in &view.children {
             let c = heap.get(*child)?.view.as_ref().context("non-View child")?;
+            let margins = margins(heap, *child)?;
             if c.visible == 8 {
                 continue;
             }
             let child_weight = weight(heap, *child)?;
-            let length = if child_weight > 0.0 {
-                (size - fixed).max(0.0) * child_weight / weights
-            } else {
-                dimension(heap, *child, !vertical, size)?
-            };
+            let length =
+                if child_weight > 0.0 && measured_dimension(heap, *child, !vertical)?.is_none() {
+                    (size - fixed).max(0.0) * child_weight / weights
+                } else {
+                    dimension(heap, *child, !vertical, size)?
+                };
             let (x, y, w, h) = if vertical {
-                cursor += c.margins[1];
+                cursor += margins[1];
                 let r = (
-                    available.x + c.margins[0],
+                    available.x + margins[0],
                     cursor,
                     dimension(heap, *child, true, available.width)?,
                     length,
                 );
-                cursor += length + c.margins[3];
+                cursor += length + margins[3];
                 r
             } else {
-                cursor += c.margins[0];
+                cursor += margins[0];
                 let r = (
                     cursor,
-                    available.y + c.margins[1],
+                    available.y + margins[1],
                     length,
                     dimension(heap, *child, false, available.height)?,
                 );
-                cursor += length + c.margins[2];
+                cursor += length + margins[2];
                 r
             };
             let child_rect = laid_out_rect(heap, *child, rect)?.unwrap_or(Rect {
@@ -509,16 +540,57 @@ pub(crate) fn text_line_count(text: &str, size: f32, width: f32, single: bool) -
 }
 
 pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Result<f32> {
+    dimension_inner(heap, word, horizontal, parent, true)
+}
+fn measured_dimension(heap: &Heap, word: Word, horizontal: bool) -> Result<Option<f32>> {
+    let fields = &heap.get(word)?.fields;
+    if fields
+        .get("droidless:view:layout-requested")
+        .and_then(|v| v.first())
+        .is_some_and(|v| v.truth())
+    {
+        return Ok(None);
+    }
+    fields
+        .get(if horizontal {
+            "droidless:view:measured-width"
+        } else {
+            "droidless:view:measured-height"
+        })
+        .and_then(|v| v.first())
+        .map(|value| value.int().map(|value| value.max(0) as f32))
+        .transpose()
+}
+pub(crate) fn intrinsic_dimension(
+    heap: &Heap,
+    word: Word,
+    horizontal: bool,
+    parent: f32,
+) -> Result<f32> {
+    dimension_inner(heap, word, horizontal, parent, false)
+}
+fn dimension_inner(
+    heap: &Heap,
+    word: Word,
+    horizontal: bool,
+    parent: f32,
+    measured: bool,
+) -> Result<f32> {
     fn measure(
         heap: &Heap,
         word: Word,
         horizontal: bool,
         parent: f32,
         depth: usize,
+        measured: bool,
     ) -> Result<f32> {
         ensure!(depth < 128, "View measurement nesting limit");
-        let v = heap.get(word)?.view.as_ref().context("expected View")?;
+        let object = heap.get(word)?;
+        let v = object.view.as_ref().context("expected View")?;
         let field = if horizontal { "width" } else { "height" };
+        if measured && let Some(value) = measured_dimension(heap, word, horizontal)? {
+            return Ok(value.min(parent));
+        }
         let value = if let Some(value) = params_field(
             heap,
             word,
@@ -531,10 +603,10 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
             v.height
         };
         // UNSPECIFIED measurement has no parent limit; match-parent contributes intrinsic size.
-        if value == -1.0 && parent.is_finite() {
+        if (measured || depth > 0) && value == -1.0 && parent.is_finite() {
             return Ok(parent);
         }
-        if value >= 0.0 {
+        if (measured || depth > 0) && value >= 0.0 {
             return Ok(value.min(parent));
         }
         if let Some(grid) = &v.grid {
@@ -558,7 +630,8 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
                 }
                 let mut row_height: f32 = 0.0;
                 for child in row {
-                    row_height = row_height.max(measure(heap, *child, false, parent, depth + 1)?);
+                    row_height =
+                        row_height.max(measure(heap, *child, false, parent, depth + 1, true)?);
                 }
                 height += row_height;
             }
@@ -626,7 +699,25 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
         let sizes = v
             .children
             .iter()
-            .map(|c| measure(heap, *c, horizontal, parent, depth + 1))
+            .map(|c| {
+                if heap
+                    .get(*c)?
+                    .view
+                    .as_ref()
+                    .context("expected View child")?
+                    .visible
+                    == 8
+                {
+                    return Ok(0.0);
+                }
+                let margins = margins(heap, *c)?;
+                Ok(measure(heap, *c, horizontal, parent, depth + 1, true)?
+                    + if horizontal {
+                        margins[0] + margins[2]
+                    } else {
+                        margins[1] + margins[3]
+                    })
+            })
             .collect::<Result<Vec<_>>>()?;
         let total = if !matches!(v.kind.as_str(), "FrameLayout" | "View")
             && horizontal == (v.orientation == 0)
@@ -643,7 +734,7 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
             })
         .min(parent))
     }
-    measure(heap, word, horizontal, parent, 0)
+    measure(heap, word, horizontal, parent, 0, measured)
 }
 
 #[cfg(test)]

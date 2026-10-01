@@ -1361,3 +1361,26 @@ remain open; no successful public Delete or new native result is claimed.
 Full local CI passes 102 Rust tests, warning-free Clippy, optimized CLI/replay
 builds and 4,096 seeded parser mutations. All existing public APK compatibility
 replays pass. GitHub Actions remain disabled.
+
+## Current-source container child measurement
+
+The compiled text contract additionally nests an APK LinearLayout subclass in a
+FrameLayout. Its callback reads the real measured child Layout after super; the
+children collect during measurement. It checks weighted width distribution,
+explicit layout-parameter margins, frame padding, final MATCH_PARENT width,
+measured height, GONE suppression and ancestor layout requests after text changes.
+A throwing child leaves the frame dirty and a retry succeeds. The Rust check
+verifies exact rendered bounds and rejection of hierarchy mutation during a child
+callback, clean frames and released temporary roots. EXACTLY, AT_MOST and
+UNSPECIFIED weighted measurement pass. Remeasurement at unchanged bounds still
+runs onLayout, an unchanged snapshot skips duplicate layout, and a thrown layout
+callback can be retried without another request. An authored support-class probe
+uses a differently named animator type and collects in its setter, proving the
+unanimated profile is applied before onMeasure through DEX signature lookup. This is engine behavior
+evidence; Android baseline/font/pixel parity is not claimed.
+
+The pinned original Notepad Delete replay now completes Snackbar text measurement
+and reads Layout.getLineCount from its actual measured TextView. It reaches the
+original LinearLayout.getOrientation call and next stops at View.isPaddingRelative
+through SnackbarLayout.a(III)Z at PC 0x001e. The intended SQLite row is removed and the survivor retains its original
+ID/title/body. Complete delete/return/restart and native menu input remain open.
