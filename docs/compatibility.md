@@ -38,8 +38,12 @@ guest sort and image-stream decode, displaying three thumbnails in AppKit and
 closing cleanly. Selecting a thumbnail now executes Parcelable write/CREATOR
 callbacks, opens its full-screen Activity and decodes the selected image through
 ImageView.setImageURI. Native JPEG/PNG/WebP viewing and Escape back to thumbnails
-are verified. Gesture navigation, GIF animation, slideshow and auto-hide remain
-unproven. Bitmap pixel manipulation and Android Canvas/vector drawing remain open.
+are verified. Single-pointer host replay also runs the APK's own swipe navigation
+and confirmed tap hide/show callbacks. GIF animation, slideshow and lifecycle
+auto-hide remain unproven. MotionEvent/View/Activity dispatch and timed gesture
+callbacks pass compiled guest checks; multi-touch, intercept behavior and Android
+VelocityTracker parity remain unsupported. Bitmap pixel manipulation and Android
+Canvas/vector drawing remain open.
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does
 not establish general RecyclerView or AndroidX compatibility.

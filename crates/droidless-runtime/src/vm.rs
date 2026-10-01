@@ -83,6 +83,8 @@ pub struct Runtime {
     pub(crate) workers: crate::workers::Workers,
     pub(crate) sync_depth: usize,
     pub(crate) native_roots: Vec<Word>,
+    pub(crate) touch: Option<crate::touch::TouchStream>,
+    pub(crate) touch_depth: usize,
     pub(crate) started: std::time::Instant,
 }
 impl Runtime {
@@ -161,6 +163,8 @@ impl Runtime {
             workers: crate::workers::Workers::default(),
             sync_depth: 0,
             native_roots: vec![],
+            touch: None,
+            touch_depth: 0,
             started: std::time::Instant::now(),
         })
     }
@@ -261,6 +265,7 @@ impl Runtime {
     }
     pub fn close(&mut self) -> Result<()> {
         self.budget = 0;
+        self.touch = None;
         self.stop_messages()?;
         for screen in self.screens.values_mut() {
             screen.finishing = true;
@@ -394,40 +399,21 @@ impl Runtime {
         if !view.enabled || view.visible != 0 {
             return Ok(false);
         }
-        if let Some(listener) = view.listener {
-            let class = self.heap.get(listener)?.class.clone();
-            self.invoke(
-                Method {
-                    class,
-                    name: "onClick".into(),
-                    parameters: vec!["Landroid/view/View;".into()],
-                    returns: "V".into(),
-                },
-                vec![listener, word],
-                true,
-            )?;
-            self.drain_navigation()?;
-            self.collect();
-            return Ok(true);
-        }
-        if let Some(name) = view.xml_click {
-            let activity = self.activity.context("no Activity for XML click")?;
-            let class = self.heap.get(activity)?.class.clone();
-            self.invoke(
-                Method {
-                    class,
-                    name,
-                    parameters: vec!["Landroid/view/View;".into()],
-                    returns: "V".into(),
-                },
-                vec![activity, word],
-                true,
-            )?;
-            self.drain_navigation()?;
-            self.collect();
-            return Ok(true);
-        }
-        Ok(false)
+        let result = self.invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: "performClick".into(),
+                parameters: vec![],
+                returns: "Z".into(),
+            },
+            vec![word],
+            true,
+        )?[0]
+            .int()?
+            != 0;
+        self.drain_navigation()?;
+        self.collect();
+        Ok(result)
     }
     pub fn click_text(&mut self, text: &str) -> Result<bool> {
         fn find(node: &Node, text: &str) -> Option<usize> {
@@ -557,6 +543,11 @@ impl Runtime {
             .chain(self.interned.values().copied())
             .chain(self.failed_classes.values().flatten().copied())
             .chain(self.native_roots.iter().copied())
+            .chain(
+                self.touch
+                    .iter()
+                    .flat_map(|stream| [stream.owner, stream.root]),
+            )
             .chain(self.frames.iter().flat_map(Frame::roots))
             .chain(self.workers.roots());
         self.heap.collect(roots)
@@ -868,6 +859,7 @@ impl Runtime {
             return Some(parent.into());
         }
         let parent = match class {
+            "Landroid/view/MotionEvent;" => "Landroid/view/InputEvent;",
             "Landroid/text/SpannableStringBuilder;" => "Landroid/text/Editable;",
             "Landroid/text/Editable;" => "Landroid/text/Spannable;",
             "Landroid/text/SpannableString;" => "Landroid/text/Spannable;",
@@ -1034,6 +1026,18 @@ impl Runtime {
             }
             if current == "Ldroidless/runtime/GridClick;" {
                 work.push("Landroid/view/View$OnClickListener;".into());
+            }
+            if current == "Ldroidless/runtime/GestureTimer;" {
+                work.push("Ljava/lang/Runnable;".into());
+            }
+            if current == "Landroid/view/GestureDetector$SimpleOnGestureListener;" {
+                work.extend(
+                    [
+                        "Landroid/view/GestureDetector$OnGestureListener;",
+                        "Landroid/view/GestureDetector$OnDoubleTapListener;",
+                    ]
+                    .map(String::from),
+                );
             }
             if current == "Landroid/os/Binder;" {
                 work.push("Landroid/os/IBinder;".into());

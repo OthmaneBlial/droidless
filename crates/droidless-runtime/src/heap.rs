@@ -133,6 +133,8 @@ pub enum Data {
         values: Vec<Vec<Word>>,
     },
     Bundle(BTreeMap<String, (String, Vec<Word>)>),
+    Motion(crate::touch::Motion),
+    Gesture(crate::touch::Gesture),
     Parcel {
         bytes: Vec<u8>,
         position: usize,
@@ -365,6 +367,9 @@ impl Heap {
             }
             if let Data::Bundle(values) = &object.data {
                 work.extend(values.values().flat_map(|(_, words)| words).copied());
+            }
+            if let Data::Gesture(gesture) = &object.data {
+                work.extend(gesture.roots());
             }
             if let Data::Spanned { spans, .. } = &object.data {
                 work.extend(spans.iter().map(|span| span.object));

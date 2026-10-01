@@ -160,6 +160,13 @@ for back in [False, True]:
     if not back and (images[0]["rect"]["width"] < 400 or images[0]["rect"]["height"] < 600):
         raise SystemExit("SwpieView image did not fill its viewer")
 print("PASS Public SwpieView: Parcelable image stack → full-screen decoded image → Back to thumbnails")
+process = subprocess.run([
+    str(document_replay), str(swpie), str(root / "examples/images/assets"),
+    "--click-first-image", "--gestures",
+], text=True, capture_output=True, check=True, timeout=120)
+assert "confirmed taps hide and restore controls" in process.stderr
+assert "Decoded image views: 1" in process.stderr
+print("PASS Public SwpieView: bounded next/previous swipes and confirmed taps hide/restore controls")
 
 notepad = root / "artifacts/apks/notepad-v1.0.0.apk"
 notepad_digest = "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f"

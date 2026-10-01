@@ -148,10 +148,46 @@ the selected image. Native Escape returns to all three thumbnails. ImageView's
 setImageURI decodes granted document streams and closes them even on decode failure;
 null clears the displayed bitmap. Other URI providers remain unsupported.
 
-GestureDetector construction retains its gesture and double-tap listeners with
-type checks and GC reachability; event recognition/delivery remains unsupported.
-SwpieView's static-image viewing and Back flow are verified; gesture navigation,
-GIF animation, slideshow, auto-hide and full Android styling remain unproven.
+SwpieView's static-image viewing and Back flow are verified. A host replay now
+delivers actual touch events to its GestureDetector: horizontal swipes run the
+APK's onFling callback, select next/previous images and respect both boundaries.
+Confirmed taps run its hide/show callbacks and restore the original controls,
+also verified with actual mouse taps in the optimized native window. Native drag
+verification remains pending because the UI automation tool could not locate the
+window for its coordinate drag; swipe evidence is host replay only.
+GIF animation, slideshow, lifecycle auto-hide and full Android styling remain open.
+
+## Single-pointer touch and gestures
+
+MotionEvent supports DOWN/UP/MOVE/CANCEL, copies, recycling, local/raw coordinates,
+offset/setLocation, action/pointer metadata and monotonic down/event times. Pointer
+ID/index 0 is the supported profile; multi-pointer actions, invalid coordinates,
+recycled events and invalid/out-of-order streams fail explicitly.
+
+Activity and View dispatch call actual guest overrides and OnTouchListeners.
+ViewGroups hit-test children in reverse order, translate child coordinates and
+retain the DOWN target through release or cancellation. Unconsumed clickable
+Views share performClick with the existing host click path. Disabled controls
+suppress listeners; dragging outside cancels the default click. Native mouse
+down/drag/up enter this path when the app registers touch behavior, and losing
+window focus sends CANCEL. Editable AppKit controls retain their native focus and
+selection path; full Android text touch/focus and ViewGroup interception are not
+implemented.
+
+GestureDetector owns event snapshots and listener references through collection.
+Show press (100 ms), long press (600 ms after DOWN), confirmed single tap (300 ms)
+and double tap use the existing Handler queue. Movement beyond 8 logical pixels
+produces scroll callbacks and cancels tap/press timers. Fling uses a bounded
+20-sample, 100-ms linear velocity estimate, clamped to 8,000 pixels/second with a
+50-pixel/second threshold; it does not claim Android VelocityTracker parity.
+SimpleOnGestureListener provides Android's default callback bodies. Failed
+callbacks cancel pending gesture timers and release temporary roots.
+
+View translation and alpha reach native geometry/opacity. System UI flags are
+retained as app state; the desktop content profile has zero Android system-bar
+insets. requestApplyInsets requests layout, without full WindowInsets dispatch.
+No Android system bars, timed property animation, touch history or multi-touch
+are claimed. [API-21 GestureDetector reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/GestureDetector.java).
 
 References: [API-21 DocumentsContract](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/provider/DocumentsContract.java),
 [DocumentsProvider](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/provider/DocumentsProvider.java),
@@ -193,7 +229,7 @@ animation event delivery. OverScroller's timed-scroll mode uses the shared
 monotonic runtime clock, Android's default viscous curve or a guest Interpolator,
 Java float rounding, final positions, forceFinished and abortAnimation. Guest
 interpolator failures propagate and temporary roots are released. Fling/springback
-physics and gesture delivery remain unsupported.
+physics remain unsupported; single-pointer gesture delivery is described above.
 
 View.setBackground invokes virtual setBackgroundDrawable, preserving APK
 overrides and retained Drawable identity, including null clearing. Rendering is
@@ -232,7 +268,7 @@ Limits: 1,024 materialized cells, 256 view types and 32 nested binding passes.
 getView receives null convertView; viewport recycling, selection, touch scrolling,
 complete Android measurement and advanced LayoutParams remain unsupported.
 Adapter changes during binding are explicitly rejected. These are authored
-headless/native contracts; SwpieView now also completes folder selection, static-image viewing and Back. Gestures and slideshow remain open.
+headless/native contracts; SwpieView now also completes folder selection, static-image viewing and Back. Its host gesture replay verifies swipes and confirmed taps; slideshow remains open.
 
 References: [API-21 GridView](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/GridView.java),
 [BaseAdapter](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/BaseAdapter.java),

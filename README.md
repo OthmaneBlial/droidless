@@ -152,7 +152,7 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🌍 API profile | Fixed read-only Build.VERSION.SDK_INT = 21 for app version checks; partial framework support — current source |
 | ⏱️ Scheduled callbacks | Main Handler/Looper/Message queue, delayed APK callbacks, cancellation and GC retention; native authored timer verified — current source |
 | 🧵 Guest workers | Deferred DEX execution on a serial shared-heap host executor; queue/monitor waits/interrupt pass headless checks; main Handler results also verified natively — current source |
-| 🛠️ Next up | Extend the public image viewer beyond static images and Back; gestures and slideshow remain ahead |
+| 🛠️ Next up | Extend the public image viewer beyond static-image swipes and taps; GIF animation and slideshow remain ahead |
 
 The published **v0.1.0 archive predates navigation, persistence, collections, scheduling and the new calculator demo**. Current source capability
 is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
@@ -175,6 +175,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Activity results and folders | [Authored Java fixture](examples/results/MainActivity.java) | Actual request codes, copied return data, Back cancellation and native folder selection; stopped callers, GC and failure cleanup pass compiled checks. Bounded read-only document queries and streams are supported; writes and persistent grants remain open |
 | Document images | [Authored Java fixture](examples/documents/MainActivity.java) and [SwpieView 1.3.2](https://f-droid.org/en/packages/org.voidptr.swpieview/) | Folder chooser → three thumbnails → JPEG/PNG/WebP full-screen viewer → Back, verified in native AppKit with the unmodified public APK. URI confinement, GC, links, oversized files and sort contracts pass compiled checks |
 | Parcelable state | [Authored Java fixture](examples/parcels/MainActivity.java) | Actual guest writers/CREATORs, nested Bundles/lists/nulls, Unicode/wide values, isolated activity/result payloads, GC during source mutation and malformed-data/error cleanup |
+| Touch and gestures | [Authored Java fixture](examples/touch/MainActivity.java) | Single-pointer dispatch, child coordinates/capture, click fallback, timed taps/double taps/presses, scroll/fling, cancellation and callback GC/error cleanup. SwpieView replay verifies actual next/previous images; native taps hide/show controls. Native drag verification remains pending |
 | Photo grid | [Authored Java/XML fixture](examples/grids/MainActivity.java) | Guest BaseAdapter cells, auto-fit and four stretch modes, observer updates and native photo clicks with 64-bit IDs; disabled items ignore clicks and Refresh replaces seven photos with four |
 | Widgets | [Authored Java contracts](examples/images/WidgetProbe.java) | Timed scrolling, manifest application metadata, listener overrides, virtual background dispatch and content-description retention; image accessibility labels verified in native AppKit |
 | Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Headless Notes list/editor, two-row SQLite save and fresh-process title retention; native AppKit typing and saving also verified |
@@ -192,7 +193,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 83 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 84 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

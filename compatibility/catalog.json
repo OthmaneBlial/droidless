@@ -214,7 +214,7 @@
       "sha256": "7c7a17ddf254e6f7adb53786ab3928937a4de499785475278df2fe5a034f50f3",
       "status": "static-image-viewer-subset",
       "native_ui": true,
-      "notes": "Original F-Droid APK unmodified and not redistributed. Native macOS folder selection runs guest directory queries, Comparable sorting and stream decoding, displaying three CENTER_CROP thumbnails. Native clicks open JPEG, PNG and WebP images in the APK full-screen Activity; Escape returns to the grid after each visit, and normal close exits 0. Real ImageContainer Parcelable writers/CREATORs transfer the image stack; setImageURI decodes a granted stream and closes it. Optimized host replay checks one viewer image and Back to three thumbnails with GC and clean close. Gesture recognition, GIF animation, slideshow, auto-hide and full styling remain unproven.",
+      "notes": "Original F-Droid APK unmodified and not redistributed. Native macOS folder selection runs guest directory queries, Comparable sorting and stream decoding, displaying three CENTER_CROP thumbnails. Native clicks open JPEG, PNG and WebP images in the APK full-screen Activity; Escape returns to the grid after each visit, and normal close exits 0. Real ImageContainer Parcelable writers/CREATORs transfer the image stack; setImageURI decodes a granted stream and closes it. Optimized host replay checks one viewer image and Back to three thumbnails with GC and clean close. Host touch replay runs the APK gesture callbacks, checks exact JPEG/PNG/WebP next/previous image bytes, first/last bounds and confirmed tap control hide/show. GIF animation, slideshow, lifecycle auto-hide and full styling remain unproven; velocity estimation is a bounded single-pointer profile. Optimized native mouse taps hide/restore the controls; Escape restores three thumbnails and normal close exits 0. Native mouse-drag verification is pending: the UI automation tool could not locate the window at its drag coordinate, so swipe evidence is host replay only.",
       "native_folder_picker_verified": true,
       "native_picker_cancel_exit_zero": true,
       "host_selection_callback_verified": true,
@@ -230,7 +230,11 @@
         "PNG",
         "WebP"
       ],
-      "host_viewer_back_verified": true
+      "host_viewer_back_verified": true,
+      "host_swipe_navigation_verified": true,
+      "host_confirmed_tap_controls_verified": true,
+      "native_confirmed_tap_controls_verified": true,
+      "native_swipe_navigation_verified": false
     },
     {
       "package": "org.droidless.parcels",
@@ -241,6 +245,16 @@
       "native_ui": false,
       "android_reference_verified": false,
       "notes": "Compiled DEX verifies real Parcelable writers/CREATORs, Unicode/wide values, byte positions, nested Bundles/lists/nulls, shallow copies versus transported activity/result state, mutation/GC and throwing callbacks. Host checks cover malformed/truncated data, 4 MiB buffers, 32-level nesting, cycles, recycled use and root cleanup. No Binder, file descriptors, binary marshalling APIs, Java serialization or general Android Parcelable coverage."
+    },
+    {
+      "package": "org.droidless.touch",
+      "origin": "droidless-fixture",
+      "status": "headless-conformance-fixture",
+      "source": "examples/touch",
+      "headless_conformance_verified": true,
+      "native_ui": false,
+      "android_reference_verified": false,
+      "notes": "Compiled guest callbacks verify MotionEvent copy/local/raw/time/pointer semantics, child translation/capture, OnTouch before default click, disabled and outside-drag behavior, view translation/alpha, timed show/long press, confirmed/double taps, scroll/fling, paused-drag suppression, CANCEL, callback GC/failure cleanup and invalid host events. Single pointer only; no multi-touch, interception, native text-touch parity or Android VelocityTracker differential evidence."
     }
   ]
 }

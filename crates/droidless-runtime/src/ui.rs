@@ -22,6 +22,7 @@ pub struct View {
     pub enabled: bool,
     pub editable: bool,
     pub text_size: f32,
+    pub alpha: f32,
     pub text_color: u32,
     pub background: Option<u32>,
     pub gravity: u32,
@@ -102,6 +103,7 @@ impl View {
             enabled: true,
             editable: name == "EditText",
             text_size: 18.0,
+            alpha: 1.0,
             text_color: 0xff222222,
             background: None,
             gravity: 0,
@@ -272,13 +274,26 @@ fn laid_out_rect(heap: &Heap, word: Word, parent: Rect) -> Result<Option<Rect>> 
         height: (bottom - top).max(0.0),
     }))
 }
-fn build(heap: &Heap, word: Word, rect: Rect, path: &mut Vec<usize>) -> Result<Node> {
+fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Result<Node> {
     let handle = word.reference()?;
     ensure!(
         path.len() < 128 && !path.contains(&handle),
         "cyclic or too deep View hierarchy"
     );
     path.push(handle);
+    for (key, coordinate) in [
+        ("droidless:view:translation-x", &mut rect.x),
+        ("droidless:view:translation-y", &mut rect.y),
+    ] {
+        if let Some(value) = heap.get(word)?.fields.get(key).and_then(|v| v.first()) {
+            let offset = f32::from_bits(value.int()? as u32);
+            ensure!(
+                offset.is_finite() && offset.abs() <= 1_000_000.0,
+                "invalid View translation"
+            );
+            *coordinate += offset;
+        }
+    }
     let mut view = heap
         .get(word)?
         .view

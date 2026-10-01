@@ -225,6 +225,10 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/view/GestureDetector;",
             "Landroid/view/GestureDetector$OnGestureListener;",
             "Landroid/view/GestureDetector$OnDoubleTapListener;",
+            "Landroid/view/GestureDetector$SimpleOnGestureListener;",
+            "Landroid/view/MotionEvent;",
+            "Landroid/view/InputEvent;",
+            "Ldroidless/runtime/GestureTimer;",
             "Landroid/content/Intent;",
             "Landroid/net/Uri;",
             "Landroid/content/ContentResolver;",
@@ -506,6 +510,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.parcel_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.touch_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.animation_native(method, args)? {
@@ -2142,6 +2149,9 @@ impl Runtime {
             ("Ljava/lang/Math;", "abs(I)I") => {
                 result.push(Word::from(arg(0)?.int()?.wrapping_abs()));
             }
+            ("Ljava/lang/Math;", "abs(F)F") => {
+                result.push(Word::Bits(f32::from_bits(arg(0)?.int()? as u32).abs().to_bits()));
+            }
             ("Ljava/lang/Math;", "max(II)I") => {
                 result.push(Word::from(arg(0)?.int()?.max(arg(1)?.int()?)));
             }
@@ -3589,21 +3599,6 @@ impl Runtime {
                     .insert("droidless:image:drawable".into(), vec![drawable]);
                 self.view_mut(receiver)?.image = image;
             }
-            ("Landroid/view/GestureDetector;", "<init>(Landroid/content/Context;Landroid/view/GestureDetector$OnGestureListener;)V") => {
-                ensure!(arg(2)? != Word::ZERO, fault("Ljava/lang/NullPointerException;", "GestureDetector listener is null"));
-                ensure!(self.is_a(&self.heap.get(arg(1)?)?.class, "Landroid/content/Context;"), "GestureDetector requires Context");
-                ensure!(self.is_a(&self.heap.get(arg(2)?)?.class, "Landroid/view/GestureDetector$OnGestureListener;"), "invalid gesture listener");
-                self.heap.get_mut(receiver)?.fields.insert("droidless:gesture:listener".into(), vec![arg(2)?]);
-                if self.is_a(&self.heap.get(arg(2)?)?.class, "Landroid/view/GestureDetector$OnDoubleTapListener;") {
-                    self.heap.get_mut(receiver)?.fields.insert("droidless:gesture:double-tap-listener".into(), vec![arg(2)?]);
-                }
-                // ponytail: retain registration; recognize events when native touch input is implemented.
-            }
-            ("Landroid/view/GestureDetector;", "setOnDoubleTapListener(Landroid/view/GestureDetector$OnDoubleTapListener;)V") => {
-                self.heap.get(receiver)?.fields.get("droidless:gesture:listener").context("uninitialized GestureDetector")?;
-                ensure!(arg(1)? == Word::ZERO || self.is_a(&self.heap.get(arg(1)?)?.class, "Landroid/view/GestureDetector$OnDoubleTapListener;"), "invalid double-tap listener");
-                self.heap.get_mut(receiver)?.fields.insert("droidless:gesture:double-tap-listener".into(), vec![arg(1)?]);
-            }
             ("Landroid/widget/ImageView;", "setImageURI(Landroid/net/Uri;)V") => {
                 self.view_mut(receiver)?;
                 let context = *self.heap.get(receiver)?.fields.get("droidless:view:context")
@@ -3722,6 +3717,9 @@ impl Runtime {
                     self.heap.get(listener)?;
                     Some(listener)
                 };
+                if listener != Word::ZERO {
+                    self.heap.get_mut(receiver)?.fields.insert("droidless:touch:clickable".into(),vec![Word::from(1)]);
+                }
             }
             ("Landroid/view/View;", "setOnFocusChangeListener(Landroid/view/View$OnFocusChangeListener;)V") => {
                 let listener = arg(1)?;
@@ -4128,8 +4126,10 @@ impl Runtime {
                     .fields
                     .insert("droidless:view:over-scroll-mode".into(), vec![arg(1)?]);
             }
-            ("Landroid/view/View;", "requestLayout()V")
+            ("Landroid/view/View;", "requestLayout()V" | "requestApplyInsets()V")
             | ("Landroid/support/v7/widget/ContentFrameLayout;", "requestLayout()V") => {
+                // ponytail: desktop content has zero Android system-bar insets; request a layout
+                // pass. Full WindowInsets/listener dispatch belongs with system-bar emulation.
                 self.view_mut(receiver)?;
                 self.heap.get_mut(receiver)?.fields.insert(
                     "droidless:view:layout-requested".into(),
@@ -4365,6 +4365,24 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .insert("droidless:view:scroll-container".into(), vec![arg(1)?]);
+            }
+            ("Landroid/view/View;", "setAlpha(F)V" | "getAlpha()F") => {
+                if method.name == "setAlpha" {
+                    let value = f32::from_bits(arg(1)?.int()? as u32);
+                    ensure!(value.is_finite(), "invalid View alpha");
+                    self.view_mut(receiver)?.alpha = value;
+                } else {result.push(Word::Bits(self.view_mut(receiver)?.alpha.to_bits()));}
+            }
+            ("Landroid/view/View;", "setTranslationX(F)V" | "setTranslationY(F)V" | "getTranslationX()F" | "getTranslationY()F") => {
+                let key = if method.name.ends_with('X') { "droidless:view:translation-x" } else { "droidless:view:translation-y" };
+                if method.name.starts_with("set") {
+                    let value = f32::from_bits(arg(1)?.int()? as u32);
+                    ensure!(value.is_finite() && value.abs() <= 1_000_000.0, "invalid View translation");
+                    self.view_mut(receiver)?;
+                    self.heap.get_mut(receiver)?.fields.insert(key.into(),vec![arg(1)?]);
+                } else {
+                    result.push(self.heap.get(receiver)?.fields.get(key).and_then(|v|v.first()).copied().unwrap_or(Word::ZERO));
+                }
             }
             ("Landroid/view/View;", "setPadding(IIII)V") => {
                 let values = args[1..]

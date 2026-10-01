@@ -21,6 +21,7 @@ struct NativeView {
     width: f32,
     height: f32,
     text_size: f32,
+    alpha: f32,
     padding: f32,
     text: *const c_char,
     description: *const c_char,
@@ -28,7 +29,14 @@ struct NativeView {
     image: *const u8,
     image_len: usize,
 }
-type Callback = extern "C" fn(*mut c_void, u32, usize, *const c_char) -> i32;
+#[repr(C)]
+struct NativeMotion {
+    time: u64,
+    action: i32,
+    x: f32,
+    y: f32,
+}
+type Callback = extern "C" fn(*mut c_void, u32, usize, *const c_char, *const NativeMotion) -> i32;
 unsafe extern "C" {
     fn dl_open(
         title: *const c_char,
@@ -36,8 +44,9 @@ unsafe extern "C" {
         height: f32,
         context: *mut c_void,
         callback: Callback,
+        uptime: u64,
     ) -> *mut c_void;
-    fn dl_begin(host: *mut c_void, title: *const c_char);
+    fn dl_begin(host: *mut c_void, title: *const c_char, touch_enabled: u32, touch_active: u32);
     fn dl_view(host: *mut c_void, node: *const NativeView);
     fn dl_end(host: *mut c_void);
     fn dl_run(host: *mut c_void);
@@ -50,7 +59,13 @@ struct ContextData<'a> {
     host: *mut c_void,
     error: Option<anyhow::Error>,
 }
-extern "C" fn event(context: *mut c_void, kind: u32, handle: usize, text: *const c_char) -> i32 {
+extern "C" fn event(
+    context: *mut c_void,
+    kind: u32,
+    handle: usize,
+    text: *const c_char,
+    motion: *const NativeMotion,
+) -> i32 {
     // SAFETY: dl_run calls synchronously on the main thread while ContextData is alive.
     let context = unsafe { &mut *context.cast::<ContextData<'_>>() };
     let mut consumed = false;
@@ -86,6 +101,15 @@ extern "C" fn event(context: *mut c_void, kind: u32, handle: usize, text: *const
                 consumed = true;
             }
             6 => {}
+            7 => {
+                anyhow::ensure!(!motion.is_null(), "native touch event missing data");
+                // SAFETY: AppKit keeps this fixed-size event alive throughout the synchronous call.
+                let motion = unsafe { &*motion };
+                context
+                    .runtime
+                    .touch_at(motion.action, motion.x, motion.y, motion.time)?;
+                consumed = true;
+            }
             _ => anyhow::bail!("unknown native event {kind}"),
         }
         if context.runtime.activity.is_some() && (kind != 6 || dispatched > 0) {
@@ -129,7 +153,8 @@ extern "C" fn event(context: *mut c_void, kind: u32, handle: usize, text: *const
     if consumed { 2 } else { 1 }
 }
 fn draw(context: &mut ContextData<'_>) -> Result<()> {
-    fn node(host: *mut c_void, n: &Node, ancestor_click: usize) -> Result<()> {
+    fn node(host: *mut c_void, n: &Node, ancestor_click: usize, ancestor_alpha: f32) -> Result<()> {
+        let alpha = ancestor_alpha * n.view.alpha.clamp(0.0, 1.0);
         let click_target = if n.view.listener.is_some() || n.view.xml_click.is_some() {
             n.handle
         } else {
@@ -168,6 +193,7 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
             width: n.rect.width,
             height: n.rect.height,
             text_size: n.view.text_size,
+            alpha,
             padding: n.view.padding,
             text: text.as_ptr(),
             description: description
@@ -182,7 +208,7 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
             dl_view(host, &view);
         }
         for child in &n.children {
-            node(host, child, click_target)?;
+            node(host, child, click_target, alpha)?;
         }
         Ok(())
     }
@@ -190,9 +216,14 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
     let title = CString::new(format!("{} — DROIDLESS", context.runtime.title.trim()))?;
     // SAFETY: the live host pointer comes only from dl_open and is used on the same thread.
     unsafe {
-        dl_begin(context.host, title.as_ptr());
+        dl_begin(
+            context.host,
+            title.as_ptr(),
+            u32::from(context.runtime.touch_input_enabled()),
+            u32::from(context.runtime.touch_active()),
+        );
     }
-    node(context.host, &tree, 0)?;
+    node(context.host, &tree, 0, 1.0)?;
     // SAFETY: same live host as above.
     unsafe {
         dl_end(context.host);
@@ -218,6 +249,7 @@ pub fn run(runtime: &mut Runtime) -> Result<()> {
             context.runtime.height,
             (&mut context as *mut ContextData<'_>).cast(),
             event,
+            context.runtime.uptime_ms(),
         )
     };
     anyhow::ensure!(!context.host.is_null(), "native window creation failed");

@@ -5,12 +5,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef int (*Callback)(void *, uint32_t, size_t, const char *);
+typedef struct { uint64_t time; int32_t action; float x, y; } NativeMotion;
+typedef int (*Callback)(void *, uint32_t, size_t, const char *, const NativeMotion *);
 typedef struct {
     size_t handle;
     uint32_t kind, enabled, editable, visible, foreground, background, has_background, gravity, key_listener;
     int32_t image_scale;
-    float x, y, width, height, text_size, padding;
+    float x, y, width, height, text_size, alpha, padding;
     const char *text;
     const char *description;
     size_t click_target;
@@ -65,6 +66,10 @@ typedef struct {
 @property Callback callback;
 @property BOOL running;
 @property size_t keyTarget;
+@property BOOL touchEnabled;
+@property BOOL touchTracking;
+@property double clockOffset;
+@property NativeMotion lastMotion;
 - (void)clicked:(NSControl *)sender;
 - (void)cellClicked:(DroidlessClick *)sender;
 - (void)quit:(id)sender;
@@ -73,19 +78,29 @@ typedef struct {
 @implementation DroidlessHost
 - (void)quit:(id)sender { (void)sender; self.running = NO; }
 - (void)clicked:(NSControl *)sender {
-    if (!self.callback(self.context, 1, (size_t)sender.tag, NULL)) self.running = NO;
+    if (!self.callback(self.context, 1, (size_t)sender.tag, NULL, NULL)) self.running = NO;
 }
 - (void)cellClicked:(DroidlessClick *)sender {
-    if (!self.callback(self.context, 1, sender.handle, NULL)) self.running = NO;
+    if (!self.callback(self.context, 1, sender.handle, NULL, NULL)) self.running = NO;
 }
 - (void)controlTextDidChange:(NSNotification *)notification {
     NSTextField *field = notification.object;
-    if (!self.callback(self.context, 2, (size_t)field.tag, field.stringValue.UTF8String)) self.running = NO;
+    if (!self.callback(self.context, 2, (size_t)field.tag, field.stringValue.UTF8String, NULL)) self.running = NO;
 }
 - (BOOL)windowShouldClose:(NSWindow *)sender {
     (void)sender;
     self.running = NO;
     return YES;
+}
+- (void)windowDidResignKey:(NSNotification *)notification {
+    (void)notification;
+    if (self.touchTracking && self.running) {
+        self.touchTracking = NO;
+        NativeMotion motion = self.lastMotion;
+        motion.action = 3;
+        motion.time = (uint64_t)(MAX(0.0, NSProcessInfo.processInfo.systemUptime + self.clockOffset) * 1000.0);
+        if (!self.callback(self.context, 7, 0, NULL, &motion)) self.running = NO;
+    }
 }
 @end
 
@@ -93,7 +108,7 @@ static NSColor *color(uint32_t argb) {
     return [NSColor colorWithSRGBRed:((argb>>16)&255)/255.0 green:((argb>>8)&255)/255.0 blue:(argb&255)/255.0 alpha:((argb>>24)&255)/255.0];
 }
 
-void *dl_open(const char *title, float width, float height, void *context, Callback callback) {
+void *dl_open(const char *title, float width, float height, void *context, Callback callback, uint64_t uptime) {
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     NSMenu *menu = [NSMenu new];
@@ -115,6 +130,7 @@ void *dl_open(const char *title, float width, float height, void *context, Callb
     quit.target = host;
     host.context = context;
     host.callback = callback;
+    host.clockOffset = uptime / 1000.0 - NSProcessInfo.processInfo.systemUptime;
     host.running = YES;
     host.views = [NSMutableDictionary new];
     host.touched = [NSMutableSet new];
@@ -133,9 +149,11 @@ void *dl_open(const char *title, float width, float height, void *context, Callb
     return (__bridge_retained void *)host;
 }
 
-void dl_begin(void *opaque, const char *title) {
+void dl_begin(void *opaque, const char *title, uint32_t touchEnabled, uint32_t touchActive) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;
     host.window.title = [NSString stringWithUTF8String:title];
+    host.touchEnabled = touchEnabled != 0;
+    if (!host.touchEnabled || !touchActive) host.touchTracking = NO;
     [host.touched removeAllObjects];
     host.keyTarget = 0;
 }
@@ -167,12 +185,14 @@ void dl_view(void *opaque, const NativeView *node) {
     }
     view.frame = NSMakeRect(node->x,node->y,node->width,node->height);
     view.hidden = node->visible != 0;
+    view.alphaValue = node->alpha;
     view.wantsLayer = YES;
     view.layer.backgroundColor = node->has_background ? color(node->background).CGColor : NULL;
     NSString *text = [NSString stringWithUTF8String:node->text];
     NSString *description = node->description ? [NSString stringWithUTF8String:node->description] : nil;
     view.accessibilityLabel = description;
     NSData *imageData = node->image_len ? [NSData dataWithBytes:node->image length:node->image_len] : nil;
+    if (node->image_len && getenv("DROIDLESS_NATIVE_TRACE")) fprintf(stderr, "native image handle=%zu bytes=%zu\n", node->handle, node->image_len);
     NSImage *image = imageData ? [[NSImage alloc] initWithData:imageData] : nil;
     if ([view isKindOfClass:[NSButton class]]) {
         NSButton *button = (NSButton *)view;
@@ -252,17 +272,35 @@ void dl_run(void *opaque) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;
     while (host.running && host.window.visible) {
         @autoreleasepool {
-            if (!host.callback(host.context, 6, 0, NULL)) { host.running = NO; break; }
+            if (!host.callback(host.context, 6, 0, NULL, NULL)) { host.running = NO; break; }
             NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:0.05] inMode:NSDefaultRunLoopMode dequeue:YES];
             if (event) {
                 int consumed = 0;
                 if ((event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp) && event.keyCode == 53 && !(event.modifierFlags&NSEventModifierFlagCommand)) {
-                    if (event.type == NSEventTypeKeyDown && !host.callback(host.context, 5, 0, NULL)) host.running = NO;
+                    if (event.type == NSEventTypeKeyDown && !host.callback(host.context, 5, 0, NULL, NULL)) host.running = NO;
                     consumed = 1;
                 } else if (host.keyTarget && (event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp) && !(event.modifierFlags&NSEventModifierFlagCommand)) {
-                    int result = host.callback(host.context, event.type == NSEventTypeKeyDown ? 3 : 4, host.keyTarget, event.charactersIgnoringModifiers.UTF8String);
+                    int result = host.callback(host.context, event.type == NSEventTypeKeyDown ? 3 : 4, host.keyTarget, event.charactersIgnoringModifiers.UTF8String, NULL);
                     if (!result) host.running = NO;
                     consumed = result == 2;
+                }
+                if (event.window == host.window && (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeLeftMouseDragged || event.type == NSEventTypeLeftMouseUp)) {
+                    NSPoint point = [host.window.contentView convertPoint:event.locationInWindow fromView:nil];
+                    if (event.type == NSEventTypeLeftMouseDown && host.touchEnabled && NSPointInRect(point, host.window.contentView.bounds)) {
+                        NSView *hit = [host.window.contentView hitTest:point];
+                        // Keep AppKit's focus and text-selection behavior for editable controls.
+                        if (![hit isKindOfClass:[NSTextField class]] || !((NSTextField *)hit).editable) host.touchTracking = YES;
+                    }
+                    if (host.touchTracking) {
+                        NativeMotion motion = {(uint64_t)(MAX(0.0, event.timestamp + host.clockOffset) * 1000.0),
+                            event.type == NSEventTypeLeftMouseDown ? 0 : event.type == NSEventTypeLeftMouseUp ? 1 : 2,
+                            (float)point.x, (float)point.y};
+                        host.lastMotion = motion;
+                        if (getenv("DROIDLESS_NATIVE_TRACE")) fprintf(stderr, "native touch action=%d x=%.1f y=%.1f time=%llu\n", motion.action, motion.x, motion.y, (unsigned long long)motion.time);
+                        if (event.type == NSEventTypeLeftMouseUp) host.touchTracking = NO;
+                        if (!host.callback(host.context, 7, 0, NULL, &motion)) host.running = NO;
+                        consumed = 1;
+                    }
                 }
                 if (!consumed) [NSApp sendEvent:event];
             }

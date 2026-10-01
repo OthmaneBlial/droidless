@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Single-pointer MotionEvent dispatch now reaches actual APK touch callbacks.
+  The unmodified SwpieView APK changes JPEG/PNG/WebP images through its onFling
+  handler in host replay, with first/last bounds checked. Confirmed mouse taps
+  hide and restore controls in the optimized native window; Escape returns to
+  thumbnails and close exits 0. Native drag verification is pending because the
+  UI tool could not target the window. Compiled gesture/timer/GC/error checks
+  pass; local CI passes 84 tests and 4,096 mutations. Multi-touch, full input
+  parity, GIF animation and slideshow remain open.
+
 - SwpieView thumbnails now open the APK's full-screen static-image Activity;
   native JPEG/PNG/WebP display and Escape back to the grid are verified. Actual
   guest Parcelable writers/CREATORs transfer bounded Bundle/list state and isolate

@@ -842,3 +842,48 @@ target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examp
 target/release/droidless run --ephemeral artifacts/apks/swpieview-1.3.2.apk
 # Native: choose examples/images/assets, click an image, press Escape.
 ```
+
+
+## Single-pointer gestures and native tap controls
+
+Verified 2026-10-01 with the same unmodified, checksum-pinned SwpieView 1.3.2 APK.
+The optimized document replay sends real runtime DOWN/MOVE/UP events to the
+Activity and its GestureDetector. The APK's onFling selects JPEG → PNG → WebP
+and previous images; comparisons check exact encoded image bytes after every
+transition, first/last bounds and collection. Confirmed taps execute the APK's
+hide/show callbacks and restore its original controls without changing the image.
+
+The optimized native AppKit run selects the owned assets folder, opens the first
+JPEG, hides controls with an actual mouse tap, then restores them with another.
+The delayed show completes with Start and Start Slideshow visible again. Escape
+returns to three thumbnails; normal window close exits 0. Screenshots and native
+input traces confirm the tap flow; no screenshot artifact is bundled. Native
+mouse-drag verification remains pending: the UI automation tool repeatedly
+returned windowNotFoundAtPosition before sending a drag. This is a tool limitation,
+not native swipe evidence; only host replay proves image navigation here.
+
+The authored Touch APK exercises local/raw coordinates, MotionEvent copies and
+recycling, pointer metadata, time validation, child target capture and translation,
+OnTouch precedence, default clicks, disabled/outside-drag behavior, view translation
+and opacity, show/long press, confirmed/double taps, scroll/fling, paused-drag
+suppression, cancellation, System.gc in callbacks and throwing callback cleanup.
+Invalid host events fail, pending timers are canceled after failure and the next
+stream works. The same compiled contract is rechecked after the final root-lifetime
+review. No Android-device differential result is claimed.
+
+Local CI passes 84 Rust tests, warning-free Clippy, optimized builds and 4,096
+seeded parser mutations. Compatibility replay passes both public calculators,
+images/XML, grids, activity results, folder streams, SwpieView viewer/Back/swipes/
+taps and two-note Notepad save/restart. GitHub Actions remain disabled. The input
+profile is single pointer with a bounded linear velocity estimate; multi-touch,
+full interception, Android VelocityTracker parity, GIF animation, slideshow,
+lifecycle auto-hide and full styling remain open.
+
+```sh
+cargo test -p droidless-runtime --test touch
+sh tools/ci.sh
+python3 tools/compatibility.py
+target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets --click-first-image --gestures
+target/release/droidless run --ephemeral artifacts/apks/swpieview-1.3.2.apk
+# Native: select examples/images/assets, open a thumbnail, tap twice, Escape, close.
+```

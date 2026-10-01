@@ -18,9 +18,10 @@ The following are objectives, not completed capability claims.
    JPEG/PNG/WebP viewer visits and Escape back to the grid are verified.
    Authored grids now verify native image clicks, disabled items, observer updates
    and auto-fit/stretch geometry; viewport recycling and scrolling remain open. Independent-app
-   gesture navigation, vector/animated drawables, pixel operations and Canvas remain
-   open. The independent folder → thumbnails → static viewer → Back workflow is
-   proven; compare it with expected Android behavior and add genuine input events.
+   vector/animated drawables, pixel operations and Canvas remain open. Genuine
+   single-pointer input now runs SwpieView's own swipe and confirmed tap callbacks
+   in host replay, with first/last bounds and hide/show checks. Android differential
+   input validation, multi-touch and full interception remain open.
 3. Multi-screen/persistence: explicit Intents/Bundle/back stack are proven in an
    authored native fixture. Activity result snapshots, request codes, cancellation
    and deferred caller delivery now pass compiled checks; native folder selection
@@ -50,7 +51,8 @@ The following are objectives, not completed capability claims.
 5. Isolated file/process APIs, broader lists/SQLite/network and independent image-app workflows: follow first failures in substantial third-party
    apps, with host capabilities explicit and tested. Current SwpieView startup
    loads a selected folder into a native thumbnail grid, opens static images and
-   returns through Back; gestures, slideshow and broader provider access remain open.
+   returns through Back; host replay also verifies static-image swipes and taps.
+   GIF animation, slideshow and broader provider access remain open.
 6. Linux native backend: common VM/View model, real Linux builds/render/input.
 7. Kotlin/AndroidX, then fragment Views/Compose/JNI/foreign libraries: major subsequent
    compatibility projects. No emulator fallback.
