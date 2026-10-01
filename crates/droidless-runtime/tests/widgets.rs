@@ -2,6 +2,70 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_typed_colors_theme_dispatch_snapshot_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let method = |name: &str, returns: &str| Method {
+        class: "Lorg/droidless/images/StyleColorContract;".into(),
+        name: name.into(),
+        parameters: vec![],
+        returns: returns.into(),
+    };
+    assert_eq!(
+        vm.invoke(method("run", "I"), vec![], false).unwrap(),
+        [Word::from(1)]
+    );
+    let cycle = vm
+        .invoke(
+            method("cycle", "Landroid/content/res/TypedArray;"),
+            vec![],
+            false,
+        )
+        .unwrap()[0];
+    for index in [-1, 1, i32::MAX] {
+        let error = vm
+            .invoke(
+                Method {
+                    class: "Landroid/content/res/TypedArray;".into(),
+                    name: "getColorStateList".into(),
+                    parameters: vec!["I".into()],
+                    returns: "Landroid/content/res/ColorStateList;".into(),
+                },
+                vec![cycle, Word::from(index)],
+                true,
+            )
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("ArrayIndexOutOfBoundsException"),
+            "{error:#}"
+        );
+    }
+    let error = vm
+        .invoke(
+            Method {
+                class: "Landroid/content/res/TypedArray;".into(),
+                name: "getColorStateList".into(),
+                parameters: vec!["I".into()],
+                returns: "Landroid/content/res/ColorStateList;".into(),
+            },
+            vec![cycle, Word::ZERO],
+            true,
+        )
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("theme attribute reference cycle"),
+        "{error:#}"
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(cycle).is_err(),
+        "typed color faults leaked temporary roots"
+    );
+}
+
+#[test]
 fn compiled_child_drawable_states_capacity_callbacks_gc_faults_and_cycle_bound() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
