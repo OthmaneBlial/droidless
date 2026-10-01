@@ -60,8 +60,9 @@ typedef struct {
 @implementation DroidlessClick
 @end
 
-@interface DroidlessHost : NSObject <NSWindowDelegate, NSTextFieldDelegate>
+@interface DroidlessHost : NSObject <NSWindowDelegate, NSTextFieldDelegate, NSMenuDelegate>
 @property NSWindow *window;
+@property NSMenu *options;
 @property NSMutableDictionary<NSNumber *,NSView *> *views;
 @property NSMutableSet<NSNumber *> *touched;
 @property void *context;
@@ -84,6 +85,16 @@ typedef struct {
 }
 - (void)cellClicked:(DroidlessClick *)sender {
     if (!self.callback(self.context, 1, sender.handle, NULL, NULL)) self.running = NO;
+}
+- (void)menuNeedsUpdate:(NSMenu *)menu {
+    if (menu != self.options || !self.running) return;
+    if (!self.callback(self.context, 8, 0, NULL, NULL)) {
+        self.running = NO;
+        [menu cancelTracking];
+    }
+}
+- (void)optionSelected:(NSMenuItem *)sender {
+    if (self.running && !self.callback(self.context, 9, (size_t)sender.tag, NULL, NULL)) self.running = NO;
 }
 - (void)controlTextDidChange:(NSNotification *)notification {
     NSTextField *field = notification.object;
@@ -134,6 +145,12 @@ void *dl_open(const char *title, float width, float height, void *context, Callb
     host.callback = callback;
     host.clockOffset = uptime / 1000.0 - NSProcessInfo.processInfo.systemUptime;
     host.running = YES;
+    NSMenuItem *optionsItem = [[NSMenuItem alloc] initWithTitle:@"Options" action:NULL keyEquivalent:@""];
+    host.options = [[NSMenu alloc] initWithTitle:@"Options"];
+    host.options.autoenablesItems = NO;
+    [host.options addItemWithTitle:@"No options" action:NULL keyEquivalent:@""].enabled = NO;
+    optionsItem.submenu = host.options;
+    [menu addItem:optionsItem];
     host.views = [NSMutableDictionary new];
     host.touched = [NSMutableSet new];
     host.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,width,height)
@@ -252,6 +269,21 @@ void dl_end(void *opaque) {
     for (NSNumber *key in [host.views.allKeys copy]) {
         if (![host.touched containsObject:key]) {[host.views[key] removeFromSuperview];[host.views removeObjectForKey:key];}
     }
+    // Initial drawing happens after Rust has installed the returned host pointer.
+    host.options.delegate = host;
+}
+void dl_menu_clear(void *opaque) {
+    DroidlessHost *host = (__bridge DroidlessHost *)opaque;
+    [host.options removeAllItems];
+}
+void dl_menu_item(void *opaque, size_t handle, const char *title, uint32_t enabled, uint32_t checked) {
+    DroidlessHost *host = (__bridge DroidlessHost *)opaque;
+    NSMenuItem *item = [host.options addItemWithTitle:[NSString stringWithUTF8String:title]
+        action:@selector(optionSelected:) keyEquivalent:@""];
+    item.target = host;
+    item.tag = (NSInteger)handle;
+    item.enabled = enabled != 0;
+    item.state = checked ? NSControlStateValueOn : NSControlStateValueOff;
 }
 int dl_choose_directory(void *opaque, char **path) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;
@@ -317,5 +349,7 @@ void dl_run(void *opaque) {
 void dl_destroy(void *opaque) {
     DroidlessHost *host = (__bridge_transfer DroidlessHost *)opaque;
     if (getenv("DROIDLESS_NATIVE_TRACE")) fprintf(stderr, "native exit running=%d visible=%d\n", host.running, host.window.visible);
+    host.options.delegate = nil;
+    NSApp.mainMenu = [NSMenu new];
     [host.window close];
 }

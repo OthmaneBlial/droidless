@@ -49,6 +49,14 @@ unsafe extern "C" {
     fn dl_begin(host: *mut c_void, title: *const c_char, touch_enabled: u32, touch_active: u32);
     fn dl_view(host: *mut c_void, node: *const NativeView);
     fn dl_end(host: *mut c_void);
+    fn dl_menu_clear(host: *mut c_void);
+    fn dl_menu_item(
+        host: *mut c_void,
+        handle: usize,
+        title: *const c_char,
+        enabled: u32,
+        checked: u32,
+    );
     fn dl_run(host: *mut c_void);
     fn dl_destroy(host: *mut c_void);
     fn dl_choose_directory(host: *mut c_void, path: *mut *mut c_char) -> i32;
@@ -109,6 +117,34 @@ extern "C" fn event(
                     .runtime
                     .touch_at(motion.action, motion.x, motion.y, motion.time)?;
                 consumed = true;
+            }
+            8 => {
+                let entries = context.runtime.options_menu()?;
+                let titles = entries
+                    .iter()
+                    .map(|entry| CString::new(entry.title.as_str()))
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .context("NUL in menu title is unsupported by AppKit bridge")?;
+                // SAFETY: the live main-thread host copies each title before this call returns.
+                unsafe {
+                    dl_menu_clear(context.host);
+                    for (entry, title) in entries.iter().zip(&titles) {
+                        dl_menu_item(
+                            context.host,
+                            entry.handle,
+                            title.as_ptr(),
+                            u32::from(entry.enabled),
+                            u32::from(entry.checked),
+                        );
+                    }
+                    if entries.is_empty() {
+                        dl_menu_item(context.host, 0, c"No options".as_ptr(), 0, 0);
+                    }
+                }
+            }
+            9 => {
+                // Revalidate the guest handle against the foreground Activity's prepared menu.
+                context.runtime.select_menu_item(handle)?;
             }
             _ => anyhow::bail!("unknown native event {kind}"),
         }
