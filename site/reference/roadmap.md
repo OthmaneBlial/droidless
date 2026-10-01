@@ -63,9 +63,9 @@ The following are objectives, not completed capability claims.
    Headless navigation taps now reveal the APK's drawer animation frame at 100 ms,
    retaining both exact note rows. Shared rendering runs guest
    computeScroll callbacks and attached animation redraw requests reach host
-   polling. The 1000 ms settlement callback stops at unsupported View.requestFocus;
-   full settlement, Back closure and native drawer input remain ahead. Create or
-   edit folders selected from the partial frame reaches its Activity, then stops
+   polling. Generic focus ownership and callbacks now complete the 1000 ms drawer
+   settlement callback. Back closes it while retaining Notes and both exact rows.
+   Native drawer input remains ahead. Create or edit folders reaches its Activity, then stops
    in NewFolderViewHolder binding at unsupported Resources.getResourceEntryName;
    folder editing remains ahead.
    The neutral public calculator continues to prove boxed Double execution

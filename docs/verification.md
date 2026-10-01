@@ -1556,7 +1556,9 @@ GitHub Actions remain disabled and the 50% checkpoint remains active.
 
 ## Current-source original Notepad drawer frames
 
-Date: 2026-10-01. Shared headless/AppKit rendering now invokes virtual
+Earlier checkpoint: 2026-10-01. The focus blocker recorded below was resolved by
+the [next checkpoint](#current-source-focus-and-original-notepad-drawer-navigation).
+Shared headless/AppKit rendering invokes virtual
 View.computeScroll after layout. The Android base callback is empty; APK
 overrides execute in DEX. The traversal skips hidden subtrees, follows children
 after parent callbacks, skips children removed during callbacks and retains
@@ -1587,13 +1589,13 @@ animation frame, not verified full drawer settlement. The permanent public repla
 checks visibility, viewport intersection and preservation of both exact SQLite
 ID/title/body rows against a disposable copy of its saved notes.
 
-Advancing to 1000 ms reaches the original drawer settlement Runnable, then stops
+At this checkpoint, advancing to 1000 ms reached the original drawer settlement Runnable, then stopped
 at unsupported `Landroid/view/View;->requestFocus()Z`. The diagnostic retains
 `Landroid/support/v4/widget/x;->a(I)V [classes.dex, PC 0x00c5]` and the upstream
 queued callback locations. The copied and source note rows remain unchanged.
-Full settlement, Back closure and physical native drawer input remain unverified.
-Selecting Create or edit folders from the 100 ms frame reaches its Activity, then
-stops during NewFolderViewHolder binding at unsupported
+Full settlement and Back closure were unverified; physical native drawer input
+remains unverified. Selecting Create or edit folders from the 100 ms frame reached
+its Activity, then stopped during NewFolderViewHolder binding at unsupported
 `Resources.getResourceEntryName(I)`. Folder creation/editing remains unverified;
 this diagnostic alone does not establish the underlying binding cause.
 
@@ -1606,3 +1608,57 @@ The unsigned development bundle was rebuilt; its executable matches the optimize
 byte-for-byte. This is build evidence; no fresh physical drawer input or normal
 native close is claimed. GitHub Actions remain disabled and the 50% checkpoint
 remains active.
+
+## Current-source focus and original Notepad drawer navigation
+
+Date: 2026-10-01. Explicit guest View focus ownership now completes the unchanged
+Notepad v1.0.0 drawer's original settlement callback. The APK still has SHA-256
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+At 390×844, navigation tap (24,22) followed by 1000 ms makes its original
+Create or edit folders entry visible at x=-2, y=191, width=236, height=60,
+with visible ancestors and alpha=1. Back followed by another 1000 ms removes the
+drawer entry and retains the Notes screen. Both exact SQLite ID/title/body rows
+remain unchanged in the disposable replay copies and the source seed.
+
+The permanent public replay checks the 100 ms frame, 1000 ms settlement and Back
+closure separately against two notes saved and edited through the original APK.
+It rejects an accidentally finished Activity, verifies both titles after closure
+and checks both full database rows after every step. No APK code or resource is
+rewritten to perform this navigation.
+
+The compiled FocusContract previously stopped at unsupported ViewGroup.hasFocus.
+It now checks actual ownership, parent notifications, virtual focus callbacks,
+listener order, rectangle identity, focusable widget defaults, literal XML flags,
+before/after/block descendant policies, focused drawable state and pressed-state
+clearing. It covers twelve nested groups, removal, callback GC, faults/recovery,
+cycle diagnostics, missing arguments and rejected worker UI calls. Recursive
+focus dispatch runs outside the large framework fallback frame; these checks
+pass with the normal Rust test stack, without a larger-stack environment override.
+
+The adapter regression separately reproduced a stale focused cell after refresh.
+The shared replacement paths now notify focus loss before clearing its parent,
+clear the old ownership and retain removed cells through callback GC. Compiled
+checks cover both refresh and adapter removal, exact gain/loss counts, the parent
+seen during loss, and collection after releasing the fixture's final reference.
+This is explicit focus in the desktop non-touch profile. Automatic keyboard
+traversal, touch-mode transitions, global focus observers, IME and AppKit
+first-responder synchronization remain unimplemented. Physical native drawer
+input remains unverified.
+
+A fresh folder-navigation probe from the settled drawer reaches EditFoldersActivity
+and stops during NewFolderViewHolder binding at unsupported
+`Landroid/content/res/Resources;->getResourceEntryName(I)Ljava/lang/String;`.
+The diagnostic retains the original ButterKnife and RecyclerView DEX call chain;
+both copied and source note rows remain exact. Folder creation/editing remains
+unverified, and this missing diagnostic method alone does not establish the
+underlying binding cause.
+
+The final local gate passes 106 Rust tests, warning-free Clippy, optimized
+CLI/document replay builds and 4,096 seeded parser mutations. The optimized
+public replay passes the new drawer settlement/Back checks alongside calculators,
+images, grids, Activity results, documents, SwpieView, and Notepad
+save/edit/Delete/Undo/restart/malformed-body checks. The unsigned development
+bundle was rebuilt and matches the optimized CLI byte-for-byte (SHA-256
+`6192e2a37c19765a6e0332f067efd40a92be866852c55e3383331420e40d0030`).
+This is build evidence; no fresh physical drawer input or normal native close is
+claimed. GitHub Actions remain disabled and the 50% checkpoint remains active.

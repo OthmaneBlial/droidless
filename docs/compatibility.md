@@ -56,10 +56,10 @@ Delete/Undo input and native timed feedback/dismissal remain unverified.
 Headless navigation taps reveal the original drawer's menu entry partly on screen
 at 100 ms, retaining both exact ID/title/body rows. Rendering invokes guest
 computeScroll; attached postInvalidateOnAnimation requests drive host redraw
-polling. Advancing to 1000 ms stops in the drawer's settlement callback at
-unsupported View.requestFocus. Full settlement, Back closure and native drawer
-input remain unverified. Selecting Create or edit folders from the 100 ms frame
-reaches its own Activity and then fails during NewFolderViewHolder binding at
+polling. Advancing to 1000 ms now completes the original settlement callback and
+its View.requestFocus call. Back closes the drawer while retaining Notes and both
+exact rows. Native drawer input remains unverified. Selecting Create or edit
+folders reaches its own Activity and then fails during NewFolderViewHolder binding at
 unsupported Resources.getResourceEntryName; folder creation/editing remains
 unverified.
 Generic `<view class="…">` layout inflation invokes the

@@ -294,15 +294,45 @@ Canvas/onDraw rendering remain outside this profile. The compiled scroll-frame
 probe checks midpoint/final geometry, hidden and detached children, callback GC,
 fault propagation and recovery. The original Notepad drawer now reveals an
 on-screen animation frame at 100 ms through its own callbacks. Its 1000 ms
-settlement callback stops at unsupported View.requestFocus; full settlement,
-Back closure and native drawer input remain unverified.
+settlement callback and focus request complete, and Back closes the drawer while
+retaining Notes. Native drawer input remains unverified.
 
 View.hasWindowFocus reads the embedding host's focus flag for Views attached to
 the foreground Activity's window token. AppKit samples its actual key-window
 state before drawing and dispatch; headless starts false. Compiled contracts
 check host-state changes, detached Views and child Activity transitions. This
-getter does not implement guest focus ownership, onWindowFocusChanged delivery
-or native editor focus synchronization.
+getter is separate from the explicit View focus requests below.
+onWindowFocusChanged delivery and native editor focus synchronization remain
+unimplemented.
+
+View.requestFocus overloads now support explicit focus in the desktop non-touch
+profile. A View retains its focus flag; a ViewGroup retains its managed focused
+child. isFocused, hasFocus, findFocus, getFocusedChild and getRootView read that
+ownership. Plain Views start non-focusable; Button, ImageButton and EditText have
+the profile's focusable defaults, with EditText also focusable in touch mode.
+Explicit setters override these defaults. Literal XML focusability and
+before/after/block descendant policies are applied; XML policy values 0/1/2 map
+to the public constants rather than being stored as those constants directly.
+
+Group requests dispatch virtual onRequestFocusInDescendants and child requests
+in direction-dependent order. Transfers dispatch guest parent notifications,
+virtual onFocusChanged and the retained OnFocusChangeListener. Focus loss clears
+pressed state; focused state appears in drawable-state arrays. Visibility and
+focusability changes clear focus and let the root request a new owner. Removal
+delivers focus loss before clearing the parent; adapter replacement and refresh
+also clear old ownership. Callback GC retains all affected Views, including
+removed adapter cells; callback faults release temporary roots and propagate.
+Parent/focus-child chains reject cycles or depth beyond 128. Worker focus calls
+retain the existing UI-thread restriction.
+
+Compiled contracts cover transfer/order, rectangle identity, descendant policies,
+literal XML flags, twelve nested groups, callbacks with GC, removals, adapter
+replacement, faults, recovery, cycles, missing arguments and rejected worker UI
+access. Automatic keyboard focus traversal, touch-mode transitions, global focus
+observer notifications, IME and AppKit first-responder synchronization remain
+ahead. This is explicit guest focus ownership rather than full input parity.
+[API-21 View](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/View.java),
+[ViewGroup](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
 
 View.setBackground invokes virtual setBackgroundDrawable, preserving APK
 overrides and retained Drawable identity, including null clearing. Rendering is
