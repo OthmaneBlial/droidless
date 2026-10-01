@@ -300,16 +300,22 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
         raise SystemExit("Notepad title/body did not survive restart and reopen in the editor")
 
     survivor = next(row for row in rows if row[0] != original_id)
+    # Original Undo calls note.save(); the APK's INSERT omits its auto-increment ID.
+    restored_id = max(row[0] for row in rows) + 1
+    expected_undo_rows = sorted([survivor, (restored_id, revised_title, body)])
     command = [str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", app_data]
     feedback_text = "Deleted Note " + revised_title
-    for label, advances in [("shown", [250]), ("dismissed", [250, 3000, 250])]:
+    for label, actions in [
+        ("shown", ["--advance-ms", "250"]),
+        ("dismissed", ["--advance-ms", "250", "--advance-ms", "3000", "--advance-ms", "250"]),
+        ("undo", ["--advance-ms", "250", "--click", "UNDO", "--advance-ms", "250", "--advance-ms", "3000"]),
+    ]:
         with tempfile.TemporaryDirectory(prefix="droidless-notepad-feedback-") as feedback_root:
             feedback_data = Path(feedback_root) / "apps"
             shutil.copytree(app_data, feedback_data)
-            clock_actions = [arg for milliseconds in advances for arg in ["--advance-ms", str(milliseconds)]]
             process = subprocess.run([
                 str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(feedback_data),
-                "--click", revised_title, "--menu-item", "Delete", *clock_actions, str(notepad),
+                "--click", revised_title, "--menu-item", "Delete", *actions, str(notepad),
             ], text=True, capture_output=True, check=True, timeout=120)
             tree = json.loads(process.stdout)
             nodes = list(flatten(tree))
@@ -322,8 +328,26 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
                 raise SystemExit("Notepad timed dismissal did not remove its original Snackbar")
             with sqlite3.connect(feedback_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
                 remaining = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
-            if remaining != [survivor]:
+            expected_rows = expected_undo_rows if label == "undo" else [survivor]
+            if remaining != expected_rows:
                 raise SystemExit(f"Notepad feedback {label} did not retain the exact surviving row")
+            if label == "undo":
+                for phase, replay in [("restart", []), ("reopen", ["--click", revised_title])]:
+                    restarted = subprocess.run([
+                        str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(feedback_data),
+                        *replay, str(notepad),
+                    ], text=True, capture_output=True, check=True, timeout=120)
+                    nodes = list(flatten(json.loads(restarted.stdout)))
+                    if phase == "reopen":
+                        fields = [node["view"]["text"] for node in nodes if node["view"]["kind"] == "EditText"]
+                        if fields != [revised_title, body]:
+                            raise SystemExit("Notepad Undo did not reopen both restored fields")
+                    elif not {"Notes", revised_title, probe_titles[1]} <= {node["view"]["text"] for node in nodes}:
+                        raise SystemExit("Notepad Undo did not restore both list rows after restart")
+                    with sqlite3.connect(feedback_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
+                        remaining = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+                    if remaining != expected_undo_rows:
+                        raise SystemExit(f"Notepad Undo {phase} changed a restored row or its survivor")
     for label, actions in [
         ("delete", ["--click", revised_title, "--menu-item", "Delete"]),
         ("restart", []),
@@ -359,12 +383,18 @@ report["delete_return_restart_reopen_verified"] = True
 report["timed_delete_feedback_shown"] = True
 report["timed_delete_feedback_dismissed"] = True
 report["delete_feedback_clock_steps_ms"] = [250, 3000, 250]
+report["headless_delete_undo_verified"] = True
+report["undo_restored_id"] = restored_id
+report["undo_restored_title_body_restart_reopen_verified"] = True
+report["undo_survivor_id_title_body_retained"] = True
+report["undo_old_timeout_harmless"] = True
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
 print("PASS Notepad: existing row reopened, title/body edited, list refreshed and both fields retained after restart")
 print("PASS Notepad: original Delete menu returns to Notes; survivor ID/title/body survive restart and reopen")
 print("PASS Notepad: original Snackbar message/UNDO show at 250ms and are removed after timed dismissal; exact survivor retained")
+print("PASS Notepad: original UNDO restores title/body with a fresh ID; exact survivor, harmless old timeout, restart and reopen verified")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.
