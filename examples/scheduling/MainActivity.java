@@ -111,6 +111,25 @@ public class MainActivity extends Activity {
             }});
             try { WorkerContract.feed(); } catch (InterruptedException failure) { throw new IllegalStateException("main interrupted"); }
         }}); layout.addView(worker);
+        Button sleepJoin = new Button(this); sleepJoin.setText("Sleep, join and finish");
+        sleepJoin.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            if (ThreadWaitContract.alive() != 0) return;
+            final long started = SystemClock.uptimeMillis(); label.setText("Waiting for sleep and join");
+            ThreadWaitContract.prepare(0, 0, new Runnable() { public void run() {
+                if (Thread.currentThread() == Looper.getMainLooper().getThread() || SystemClock.uptimeMillis() - started < 10)
+                    throw new IllegalStateException("early/main join callback");
+                timerHandler.post(new Runnable() { public void run() {
+                    if (Thread.currentThread() != Looper.getMainLooper().getThread()
+                            || ThreadWaitContract.state() != 2 || ThreadWaitContract.joined() != 2
+                            || ThreadWaitContract.contended() != 1 || ThreadWaitContract.finished() != 1
+                            || ThreadWaitContract.alive() != 0 || !"kept-sleep".equals(ThreadWaitContract.output()))
+                        throw new IllegalStateException("sleep/join main result");
+                    label.setText("Sleep joined: kept-sleep");
+                    android.util.Log.i("SleepJoin", "Worker slept, joined and delivered on main");
+                    MainActivity.this.finish();
+                }});
+            }});
+        }}); layout.addView(sleepJoin);
         Button startLooper = new Button(this); startLooper.setText("Start Looper worker");
         startLooper.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
             if (WorkerLooperContract.alive() != 0) return;

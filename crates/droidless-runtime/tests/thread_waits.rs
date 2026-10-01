@@ -129,4 +129,20 @@ fn sleep_and_join_deadlines_interrupts_monitors_gc_and_shutdown() {
     assert_eq!(vm.poll_messages().unwrap(), 0);
     assert_eq!(vm.stack_depth(), 0);
     vm.collect();
+
+    let mut vm = runtime();
+    vm.launch().unwrap();
+    vm.click_text("Sleep, join and finish").unwrap();
+    vm.poll_messages().unwrap();
+    vm.collect();
+    assert_eq!(vm.advance_time(9).unwrap(), 0);
+    assert_eq!(
+        vm.snapshot().unwrap().children[0].view.text,
+        "Waiting for sleep and join"
+    );
+    assert_eq!(vm.advance_time(1).unwrap(), 1);
+    assert!(vm.activity.is_none());
+    assert_eq!(number(&mut vm, "alive"), 0);
+    assert_eq!(number(&mut vm, "finished"), 1);
+    assert_eq!(vm.stack_depth(), 0);
 }

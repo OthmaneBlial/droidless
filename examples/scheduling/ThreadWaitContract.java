@@ -75,7 +75,7 @@ public class ThreadWaitContract {
     public static int joined() { return joined; }
     public static int contended() { return contended; }
     public static int finished() { return finished; }
-    public static int alive() { return worker.isAlive() || joiner.isAlive() || contender.isAlive() ? 1 : 0; }
+    public static int alive() { return worker != null && (worker.isAlive() || joiner.isAlive() || contender.isAlive()) ? 1 : 0; }
     public static String output() { return output; }
     public static void main(String[] args) throws Exception {
         require(validate() == 255);

@@ -151,9 +151,20 @@ Executor checks feed a sleeping Callable before its deadline, proving its Future
 stays incomplete until the sleep finishes. Public Notepad contains sleep/join
 calls, but a completed public-APK workflow using them remains unverified.
 
+The authored Sleep, join and finish control also passes headless replay and an
+automated native-host replay. The CLI prequeues the click while time is frozen;
+sleep remains blocked until AppKit opens and the live runtime clock advances.
+Guest code checks the retained result, sleep/join/monitor outcomes and main Thread
+identity, logs completion, then finishes the Activity. The native log records a
+visible window before that completion, followed by onPause/onStop/onDestroy and
+exit status 0. This verifies native event-loop delivery and teardown; it does not
+claim manual native mouse input or a painted result before the immediate finish.
+
 ```sh
 cargo test -p droidless-runtime --test thread_waits --test executors --locked
 java -cp examples/scheduling/build/classes org.droidless.scheduling.ThreadWaitContract
+DROIDLESS_NATIVE_TRACE=1 target/release/droidless run --ephemeral fixtures/generated/scheduling.apk \
+  --click "Sleep, join and finish" --trace-lifecycle
 ```
 
 Primary references: [API-21 Thread](https://android.googlesource.com/platform/libcore/+/android-5.0.0_r1/libart/src/main/java/java/lang/Thread.java)

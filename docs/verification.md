@@ -1119,6 +1119,17 @@ remain explicit diagnostics. The original Notepad includes sleep/join calls, but
 its verified save/edit/restart flows do not establish a completed worker workflow
 using these new APIs.
 
+The authored Sleep, join and finish control now has separate automated native
+host evidence. The CLI prequeues the click with time frozen, so the sleeper and
+joiner remain blocked until AppKit opens and the live clock advances. Guest code
+then validates the kept value, completed join, released monitor and main Thread
+identity. The log records a visible native window, its SleepJoin completion,
+onPause/onStop/onDestroy and native exit in that order, with process status 0.
+Headless replay verifies the label still waits at 9 ms and the Activity finishes
+at 10 ms. Manual native mouse input and painting the result before immediate
+finish are not claimed. These remain authored checks, separate from public APK
+compatibility and Android reference-device comparison.
+
 Local CI passes 97 Rust tests, warning-free Clippy, optimized builds and 4,096
 seeded parser mutations. The original public APK compatibility replays remain
 passing. GitHub Actions stay disabled; the 50% checkpoint remains ahead.
@@ -1128,4 +1139,9 @@ sh tools/ci.sh
 cargo test -p droidless-runtime --test thread_waits --test executors --locked
 java -cp examples/scheduling/build/classes org.droidless.scheduling.ThreadWaitContract
 python3 tools/compatibility.py
+```
+
+```sh
+DROIDLESS_NATIVE_TRACE=1 target/release/droidless run --ephemeral fixtures/generated/scheduling.apk \
+  --click "Sleep, join and finish" --trace-lifecycle
 ```
