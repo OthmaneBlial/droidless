@@ -103,4 +103,14 @@ public final class WidgetProbe {
     }
     public static void stopScroll() { scroll.forceFinished(true); }
     public static void abortScroll() { scroll.abortAnimation(); }
+    public static void invalidateFrame() {
+        View view = host.findViewById(R.id.source);
+        view.computeScroll();
+        view.postInvalidateOnAnimation();
+        view.postInvalidateOnAnimation();
+        System.gc();
+    }
+    public static void invalidateDetachedFrame() {
+        new View(host).postInvalidateOnAnimation();
+    }
 }

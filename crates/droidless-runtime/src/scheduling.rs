@@ -24,6 +24,7 @@ pub(crate) struct MainQueue {
     epoch: Option<Instant>,
     sequence: u64,
     pub closed: bool,
+    pub redraw: bool,
     thread_id: u64,
     pub(crate) timer_id: u64,
     pub(crate) executor_id: u64,
@@ -81,7 +82,7 @@ impl Runtime {
         self.queue.time = time;
         self.poll_messages()
     }
-    /// Drain due messages in deadline/FIFO order and advance View property frames.
+    /// Drain due messages, advance View property frames and report requested redraws.
     pub fn poll_messages(&mut self) -> Result<usize> {
         ensure!(
             self.frames.is_empty() && self.queue.active.is_none(),
@@ -91,6 +92,7 @@ impl Runtime {
         self.drain_navigation()?;
         let mut worker_slices = 64;
         self.poll_workers(&mut worker_slices)?;
+        let redraw = std::mem::take(&mut self.queue.redraw);
         let mut count = 0;
         let looper = self.main_looper()?;
         while let Some((key, message)) = self.next_looper_message(looper)? {
@@ -123,10 +125,11 @@ impl Runtime {
         if count > 0 {
             self.collect();
         }
-        Ok(count)
+        Ok(count + usize::from(redraw))
     }
     pub(crate) fn stop_messages(&mut self) -> Result<()> {
         self.queue.closed = true;
+        self.queue.redraw = false;
         self.stop_property_animations()?;
         self.stop_workers()?;
         if let Some(thread) = self

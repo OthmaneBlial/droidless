@@ -4544,6 +4544,14 @@ impl Runtime {
                     .fields
                     .insert("droidless:view:over-scroll-mode".into(), vec![arg(1)?]);
             }
+            ("Landroid/view/View;", "computeScroll()V") => {
+                self.view_mut(receiver)?;
+            }
+            ("Landroid/view/View;", "postInvalidateOnAnimation()V") => {
+                self.view_mut(receiver)?;
+                // ponytail: coalesce full-frame redraws at the next host poll; no dirty rectangles or vsync emulation.
+                if !self.queue.closed && self.view_window_token(receiver)? != Word::ZERO { self.queue.redraw = true; }
+            }
             ("Landroid/view/View;", "requestLayout()V" | "requestApplyInsets()V" | "invalidate()V" | "invalidate(Landroid/graphics/Rect;)V")
             | ("Landroid/support/v7/widget/ContentFrameLayout;", "requestLayout()V") => {
                 // ponytail: desktop content has zero Android system-bar insets; request a layout

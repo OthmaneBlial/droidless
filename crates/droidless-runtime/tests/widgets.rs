@@ -171,6 +171,11 @@ fn compiled_widget_metadata_adapter_and_timed_scroll_contracts() {
         "interpolator failure retained temporary roots"
     );
     assert_eq!(vm.stack_depth(), 0);
+    call(&mut vm, "invalidateFrame", "V");
+    assert_eq!(vm.poll_messages().unwrap(), 1);
+    assert_eq!(vm.poll_messages().unwrap(), 0);
+    call(&mut vm, "invalidateDetachedFrame", "V");
+    assert_eq!(vm.poll_messages().unwrap(), 0);
     vm.close().unwrap();
 
     for (target, minimum, expected) in [
