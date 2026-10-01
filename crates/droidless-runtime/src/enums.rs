@@ -168,6 +168,7 @@ mod tests {
             ("Landroid/graphics/Paint$Style;", "STROKE", 1),
             ("Landroid/graphics/Path$FillType;", "EVEN_ODD", 1),
             ("Landroid/graphics/PorterDuff$Mode;", "SRC_IN", 5),
+            ("Landroid/widget/ImageView$ScaleType;", "CENTER_CROP", 6),
         ] {
             let field = Field {
                 class: class.into(),

@@ -1032,6 +1032,9 @@ impl Runtime {
             if current == "Landroid/os/Binder;" {
                 work.push("Landroid/os/IBinder;".into());
             }
+            if current == "Landroid/database/Cursor;" {
+                work.extend(["Ljava/io/Closeable;", "Ljava/lang/AutoCloseable;"].map(String::from));
+            }
             if current == "Landroid/app/Activity;" {
                 work.push("Landroid/view/Window$Callback;".into());
             }

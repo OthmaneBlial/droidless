@@ -2,12 +2,21 @@
 
 ## Unreleased
 
+- The unmodified public SwpieView APK now loads a host-selected folder and
+  displays three PNG/JPEG/WebP thumbnails in AppKit, then closes cleanly. Bounded
+  read-only document queries/streams, encoded URI paths, natural guest sorting
+  and seven ImageView scale modes now work. Authored checks cover GC, file
+  confinement, links and oversized streams. Local CI passes 82 Rust tests and
+  4,096 parser mutations. Full-screen viewer state remains blocked at
+  Bundle.putParcelableArrayList; no GitHub Actions are installed.
+
 - Activity results now preserve actual callers/request codes, snapshot return data
   at finish and deliver through guest callbacks before resume. Native folder
   selection returns a real session-local URI; window attachment tokens are stable.
   The authored native fixture and cancellation pass; SwpieView opens the chooser
-  and cancels cleanly. Host-API selection reaches getContentResolver; document
-  queries and streams remain ahead. Local CI passes 81 Rust tests and 4,096 seeded
+  and cancels cleanly. At this earlier milestone, host-API selection reached
+  getContentResolver; the document increment above resolves it. Local CI passed
+  81 Rust tests and 4,096 seeded
   parser mutations, with no GitHub Actions.
 
 - Adapter-backed GridView now creates real guest cells and delivers item clicks,

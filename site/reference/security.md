@@ -22,9 +22,14 @@ without reset. See [storage behavior and limits](storage.md).
 ACTION_OPEN_DOCUMENT_TREE is a separate explicit host choice: the native folder
 chooser retains a directory descriptor for the selected tree and returns an
 opaque content URI. Grants last only for the current runtime session, with a
-64-grant ceiling. URI parsing grants no access. Document queries/streams/writes
-and persistent permissions are not implemented yet; no guest path can select a
-host directory without this choice.
+64-grant ceiling. URI parsing grants no access. Read-only metadata queries and
+streams stay confined to the selected tree's open directory descriptor. Traversal,
+foreign/unknown grants, symlinks, special files and hard-linked files are rejected;
+unsafe child entries are omitted from enumeration. Intermediate directories and
+final files are opened without following links. Streams verify the opened file
+and bound declared and actual length to 64 MiB. Enumeration is capped at 4,096
+entries and path depth at 64. Grants disappear on runtime close/restart; writes,
+persistent permissions, other providers and ambient file URIs remain unavailable.
 
 General file, network, clipboard, camera, microphone, location, process and
 native-library APIs are unavailable. Inspected manifest permissions grant no host

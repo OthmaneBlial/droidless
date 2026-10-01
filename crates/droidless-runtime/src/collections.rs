@@ -484,9 +484,11 @@ impl Runtime {
             )?));
         }
         if method.class == "Ljava/util/Collections;" {
-            if signature == "sort(Ljava/util/List;Ljava/util/Comparator;)V" {
+            if signature == "sort(Ljava/util/List;Ljava/util/Comparator;)V"
+                || signature == "sort(Ljava/util/List;)V"
+            {
                 let list = *args.first().context("sort list missing")?;
-                let comparator = *args.get(1).context("sort comparator missing")?;
+                let comparator = args.get(1).copied().unwrap_or(Word::ZERO);
                 ensure!(
                     self.is_a(&self.heap.get(list)?.class, "Ljava/util/List;"),
                     "Collections.sort requires a List"
@@ -494,81 +496,89 @@ impl Runtime {
                 let (values, version) = self.collection(list)?;
                 let mut source = values.to_vec();
                 let mut target = vec![Word::ZERO; source.len()];
-                let mut width = 1;
-                while width < source.len() {
-                    for start in (0..source.len()).step_by(width * 2) {
-                        let middle = (start + width).min(source.len());
-                        let end = (start + width * 2).min(source.len());
-                        let (mut left, mut right, mut output) = (start, middle, start);
-                        while left < middle && right < end {
-                            let compared = if comparator == Word::ZERO {
+                let roots = self.native_roots.len();
+                self.native_roots.extend([list, comparator]);
+                self.native_roots.extend(source.iter().copied());
+                let sorted = (|| -> Result<()> {
+                    let mut width = 1;
+                    while width < source.len() {
+                        for start in (0..source.len()).step_by(width * 2) {
+                            let middle = (start + width).min(source.len());
+                            let end = (start + width * 2).min(source.len());
+                            let (mut left, mut right, mut output) = (start, middle, start);
+                            while left < middle && right < end {
+                                let compared = if comparator == Word::ZERO {
+                                    ensure!(
+                                        self.is_a(
+                                            &self.heap.get(source[left])?.class,
+                                            "Ljava/lang/Comparable;"
+                                        ),
+                                        fault(
+                                            "Ljava/lang/ClassCastException;",
+                                            "list element is not Comparable"
+                                        )
+                                    );
+                                    self.invoke(
+                                        Method {
+                                            class: "Ljava/lang/Comparable;".into(),
+                                            name: "compareTo".into(),
+                                            parameters: vec!["Ljava/lang/Object;".into()],
+                                            returns: "I".into(),
+                                        },
+                                        vec![source[left], source[right]],
+                                        true,
+                                    )?
+                                } else {
+                                    self.invoke(
+                                        Method {
+                                            class: "Ljava/util/Comparator;".into(),
+                                            name: "compare".into(),
+                                            parameters: vec!["Ljava/lang/Object;".into(); 2],
+                                            returns: "I".into(),
+                                        },
+                                        vec![comparator, source[left], source[right]],
+                                        true,
+                                    )?
+                                };
                                 ensure!(
-                                    self.is_a(
-                                        &self.heap.get(source[left])?.class,
-                                        "Ljava/lang/Comparable;"
-                                    ),
+                                    self.collection(list)?.1 == version,
                                     fault(
-                                        "Ljava/lang/ClassCastException;",
-                                        "list element is not Comparable"
+                                        "Ljava/util/ConcurrentModificationException;",
+                                        "list changed while sorting"
                                     )
                                 );
-                                self.invoke(
-                                    Method {
-                                        class: "Ljava/lang/Comparable;".into(),
-                                        name: "compareTo".into(),
-                                        parameters: vec!["Ljava/lang/Object;".into()],
-                                        returns: "I".into(),
-                                    },
-                                    vec![source[left], source[right]],
-                                    true,
-                                )?
-                            } else {
-                                self.invoke(
-                                    Method {
-                                        class: "Ljava/util/Comparator;".into(),
-                                        name: "compare".into(),
-                                        parameters: vec!["Ljava/lang/Object;".into(); 2],
-                                        returns: "I".into(),
-                                    },
-                                    vec![comparator, source[left], source[right]],
-                                    true,
-                                )?
-                            };
-                            ensure!(
-                                self.collection(list)?.1 == version,
-                                fault(
-                                    "Ljava/util/ConcurrentModificationException;",
-                                    "list changed while sorting"
-                                )
-                            );
-                            let order = compared
-                                .first()
-                                .context("compare returned no value")?
-                                .int()?;
-                            if order <= 0 {
+                                let order = compared
+                                    .first()
+                                    .context("compare returned no value")?
+                                    .int()?;
+                                if order <= 0 {
+                                    target[output] = source[left];
+                                    left += 1;
+                                } else {
+                                    target[output] = source[right];
+                                    right += 1;
+                                }
+                                output += 1;
+                            }
+                            while left < middle {
                                 target[output] = source[left];
                                 left += 1;
-                            } else {
+                                output += 1;
+                            }
+                            while right < end {
                                 target[output] = source[right];
                                 right += 1;
+                                output += 1;
                             }
-                            output += 1;
                         }
-                        while left < middle {
-                            target[output] = source[left];
-                            left += 1;
-                            output += 1;
-                        }
-                        while right < end {
-                            target[output] = source[right];
-                            right += 1;
-                            output += 1;
-                        }
+                        std::mem::swap(&mut source, &mut target);
+                        width *= 2;
                     }
-                    std::mem::swap(&mut source, &mut target);
-                    width *= 2;
-                }
-                self.change_collection(list, source)?;
+                    self.change_collection(list, source)?;
+                    Ok(())
+                })();
+                self.native_roots.truncate(roots);
+                sorted?;
                 return Ok(Some(vec![]));
             }
             if signature == "addAll(Ljava/util/Collection;[Ljava/lang/Object;)Z" {

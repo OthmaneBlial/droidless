@@ -11,13 +11,15 @@ The following are objectives, not completed capability claims.
    fixtures. SwpieView now passes AppCompat's bundled vector resource check in
    guest DEX, attaches its platform lifecycle fragment and constructs its toolbar,
    builds its GridView and BaseAdapter and opens a native folder chooser.
-   Cancellation exits cleanly; host-API folder selection now stops at
-   `getContentResolver()` in its result callback. Document queries and streams
-   are the next image-workflow work.
+   Cancellation exits cleanly; selected-folder queries, guest sorting and read-only
+   image streams now display three PNG/JPEG/WebP thumbnails in the unmodified APK's
+   native grid. Selecting a thumbnail stops at Bundle.putParcelableArrayList;
+   parcelled viewer state and full-screen image navigation are next.
    Authored grids now verify native image clicks, disabled items, observer updates
    and auto-fit/stretch geometry; viewport recycling and scrolling remain open. Independent-app
    image workflows, vector/animated drawables, pixel operations and Canvas remain
-   open. Gate: complete an image workflow in an independent app and compare it
+   open. The independent selected-folder thumbnail workflow is proven; complete
+   full-screen viewing and compare it
    with expected Android behavior.
 3. Multi-screen/persistence: explicit Intents/Bundle/back stack are proven in an
    authored native fixture. Activity result snapshots, request codes, cancellation
@@ -47,8 +49,8 @@ The following are objectives, not completed capability claims.
    Gate: a real APK completes its queued transactions and posts UI results.
 5. Isolated file/process APIs, broader lists/SQLite/network and independent image-app workflows: follow first failures in substantial third-party
    apps, with host capabilities explicit and tested. Current SwpieView startup
-   passes the bundled vector check and platform fragment attachment; no image
-   workflow is yet proven.
+   loads a selected folder into a native thumbnail grid; full-screen viewing,
+   gestures and broader provider access remain open.
 6. Linux native backend: common VM/View model, real Linux builds/render/input.
 7. Kotlin/AndroidX, then fragment Views/Compose/JNI/foreign libraries: major subsequent
    compatibility projects. No emulator fallback.

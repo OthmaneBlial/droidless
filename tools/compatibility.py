@@ -125,6 +125,29 @@ for options, label in [
         raise SystemExit("Activity result callback did not receive the expected guest payload")
 print("PASS Results fixture: child return snapshot and Back cancellation")
 
+swpie = root / "artifacts/apks/swpieview-1.3.2.apk"
+if not swpie.exists():
+    raise SystemExit(f"Missing {swpie}; run tools/fetch-swpieview.sh first")
+if hashlib.sha256(swpie.read_bytes()).hexdigest() != "7c7a17ddf254e6f7adb53786ab3928937a4de499785475278df2fe5a034f50f3":
+    raise SystemExit("SwpieView 1.3.2 checksum mismatch")
+document_replay = root / "target/release/examples/document-replay"
+for app, expected_label in [
+    (root / "fixtures/generated/documents.apk", "3 images · document streams"),
+    (swpie, None),
+]:
+    process = subprocess.run([
+        str(document_replay), str(app), str(root / "examples/images/assets"),
+    ], text=True, capture_output=True, check=True, timeout=120)
+    nodes = list(flatten(json.loads(process.stdout)))
+    images = [node for node in nodes if node["view"]["kind"] == "ImageView"]
+    if len(images) != 3 or "Decoded image views: 3" not in process.stderr:
+        raise SystemExit("Document replay did not decode all three selected-folder images")
+    if expected_label and expected_label not in [node["view"]["text"] for node in nodes]:
+        raise SystemExit("Document fixture did not complete its guest query/decode callback")
+    if not expected_label and any(image["view"]["image_scale"] != 6 for image in images):
+        raise SystemExit("SwpieView did not request CENTER_CROP for its thumbnails")
+print("PASS Documents and public SwpieView: selected-folder query, guest sort, three decoded thumbnails and clean close")
+
 notepad = root / "artifacts/apks/notepad-v1.0.0.apk"
 notepad_digest = "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f"
 if not notepad.exists():

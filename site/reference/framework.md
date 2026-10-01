@@ -66,11 +66,55 @@ pauses the caller, and returns cancellation or an opaque content URI through the
 same result path. A host-selected directory is retained as a session-local
 directory capability; URI.parse alone grants nothing. At most 64 tree grants and
 one pending chooser are supported. Headless execution reports the need for native
-selection explicitly. Document queries, streams, writes and persistent grants
-remain unsupported. [Security boundaries](security.md).
+selection explicitly. Bounded document queries and read-only streams now use
+these grants; writes and persistent grants remain unsupported. [Security boundaries](security.md).
 
 References: [API-21 Intent](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/Intent.java),
 [ActivityThread result delivery](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/app/ActivityThread.java).
+
+## Read-only document trees and image scaling
+
+Context.getContentResolver is canonical within a runtime. DocumentsContract tree/
+document ID extraction and URI builders preserve encoded path segments; Uri path
+segments are read-only Lists. These helpers grant no I/O. Only the runtime's own
+`content://droidless.documents` provider accepts access, and only for an actually
+selected session tree and its descendants.
+
+ContentResolver.query supports document metadata or immediate children, with
+`document_id`, `mime_type`, `_display_name`, `_size` and read-only `flags` columns.
+Null projection returns these five columns; explicit projection preserves order.
+Snapshots use the existing Cursor implementation and deterministic UTF-16 filename
+order. Selection arguments, custom sort orders, cancellation signals, other
+providers and unsupported columns fail explicitly. Enumeration is capped at
+4,096 entries and paths at 64 segments; non-UTF-8 names and malformed URI escapes
+are rejected. Symlinks, special files and hard-linked files are omitted from
+child enumeration and rejected for direct stream access.
+
+openInputStream uses the granted directory descriptor, opens every intermediate
+directory without following links and validates the final file descriptor. Streams
+snapshot at most 64 MiB of a regular, single-link file and reuse existing guest
+read/skip/available/close and BitmapFactory decoding. Both declared size and actual
+read length are bounded. No ambient `file://` or arbitrary guest path is exposed.
+Like API-21 DocumentsProvider, stream opening extracts the document ID even from
+a URI with a children suffix. [Security scope](security.md).
+
+Natural Collections.sort reuses the stable bounded List sort and virtual guest
+Comparable callbacks, including null-comparator sort. Snapshot elements remain
+rooted across guest GC/mutation; failures release temporary roots. String.lastIndexOf
+uses UTF-16 positions for String and character overloads, including supplementary
+code points, individual surrogate units and negative search bounds.
+
+ImageView.ScaleType has canonical enum values and retained get/set state.
+FIT_XY, FIT_START/CENTER/END, CENTER, CENTER_CROP and CENTER_INSIDE render through
+AppKit with clipping and uniform padding; XML scaleType is also retained. MATRIX
+and custom image matrices remain unsupported. The unmodified SwpieView APK now
+queries and decodes three selected-folder PNG/JPEG/WebP thumbnails and renders
+them natively with CENTER_CROP. Thumbnail selection still stops at the unsupported
+Bundle.putParcelableArrayList call before the full-screen image Activity.
+
+References: [API-21 DocumentsContract](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/provider/DocumentsContract.java),
+[DocumentsProvider](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/provider/DocumentsProvider.java),
+[SwpieView image code](https://github.com/err4nt/SwpieView/blob/d371afbe8337c6244e3ef0a41415b08b14f1c88c/app/src/main/java/org/voidptr/swpieview/ImageContainer.java).
 
 ## Platform fragments without Views
 

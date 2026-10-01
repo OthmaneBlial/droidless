@@ -25,6 +25,7 @@ pub struct View {
     pub text_color: u32,
     pub background: Option<u32>,
     pub gravity: u32,
+    pub image_scale: i32,
     pub grid: Option<Grid>,
     #[serde(skip)]
     pub image: Option<Vec<u8>>,
@@ -104,6 +105,7 @@ impl View {
             text_color: 0xff222222,
             background: None,
             gravity: 0,
+            image_scale: 3,
             grid: (name == "GridView").then(Grid::default),
             image: None,
         })

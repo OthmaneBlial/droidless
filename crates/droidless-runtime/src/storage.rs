@@ -75,19 +75,13 @@ fn child_dir(parent: &Dir, name: &str) -> Result<Dir> {
         .open_dir_nofollow(name)
         .with_context(|| format!("storage directory must not be a symlink: {name}"))
 }
-fn regular_file(file: &std::fs::File) -> Result<()> {
+pub(crate) fn regular_file(file: &std::fs::File) -> Result<()> {
     let metadata = file.metadata()?;
-    ensure!(
-        metadata.is_file(),
-        "preference storage must be a regular file"
-    );
+    ensure!(metadata.is_file(), "storage must be a regular file");
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        ensure!(
-            metadata.nlink() == 1,
-            "hard-linked preference storage rejected"
-        );
+        ensure!(metadata.nlink() == 1, "hard-linked storage rejected");
     }
     Ok(())
 }
@@ -381,10 +375,10 @@ impl Storage {
     }
 }
 
-fn validate_segment(segment: &str) -> Result<()> {
+pub(crate) fn validate_segment(segment: &str) -> Result<()> {
     ensure!(
         !segment.is_empty() && segment != "." && segment != ".." && !segment.contains(['/', '\0']),
-        "invalid app-private path segment"
+        "invalid filesystem path segment"
     );
     Ok(())
 }

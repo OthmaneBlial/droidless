@@ -9,7 +9,8 @@ typedef int (*Callback)(void *, uint32_t, size_t, const char *);
 typedef struct {
     size_t handle;
     uint32_t kind, enabled, editable, visible, foreground, background, has_background, gravity, key_listener;
-    float x, y, width, height, text_size;
+    int32_t image_scale;
+    float x, y, width, height, text_size, padding;
     const char *text;
     const char *description;
     size_t click_target;
@@ -21,6 +22,33 @@ typedef struct {
 @end
 @implementation FlippedView
 - (BOOL)isFlipped { return YES; }
+@end
+
+@interface DroidlessImage : NSImageView
+@property int32_t scaleType;
+@property CGFloat contentPadding;
+@end
+@implementation DroidlessImage
+- (BOOL)isFlipped { return YES; }
+- (void)drawRect:(NSRect)dirty {
+    (void)dirty;
+    NSImage *image = self.image;
+    if (!image || image.size.width <= 0 || image.size.height <= 0) return;
+    NSRect content = NSInsetRect(self.bounds, self.contentPadding, self.contentPadding);
+    if (content.size.width <= 0 || content.size.height <= 0) return;
+    CGFloat scale = MIN(content.size.width / image.size.width, content.size.height / image.size.height);
+    if (self.scaleType == 5) scale = 1;
+    if (self.scaleType == 6) scale = MAX(content.size.width / image.size.width, content.size.height / image.size.height);
+    if (self.scaleType == 7) scale = MIN(1, scale);
+    NSSize size = self.scaleType == 1 ? content.size : NSMakeSize(image.size.width * scale, image.size.height * scale);
+    CGFloat alignment = self.scaleType == 2 ? 0 : (self.scaleType == 4 ? 1 : .5);
+    NSRect target = NSMakeRect(content.origin.x + (content.size.width - size.width) * alignment,
+                              content.origin.y + (content.size.height - size.height) * alignment, size.width, size.height);
+    [NSGraphicsContext saveGraphicsState];
+    [[NSBezierPath bezierPathWithRect:content] addClip];
+    [image drawInRect:target fromRect:NSZeroRect operation:NSCompositingOperationSourceOver fraction:1 respectFlipped:YES hints:nil];
+    [NSGraphicsContext restoreGraphicsState];
+}
 @end
 
 @interface DroidlessClick : NSClickGestureRecognizer
@@ -130,7 +158,7 @@ void dl_view(void *opaque, const NativeView *node) {
             text.drawsBackground = YES;
             view = text;
         } else if (node->kind == 4) {
-            NSImageView *image = [NSImageView new];
+            NSImageView *image = [DroidlessImage new];
             image.imageScaling = NSImageScaleProportionallyUpOrDown;
             view = image;
         } else {view = [FlippedView new];}
@@ -172,6 +200,10 @@ void dl_view(void *opaque, const NativeView *node) {
         field.accessibilityLabel = description ?: text;
     } else if ([view isKindOfClass:[NSImageView class]]) {
         ((NSImageView *)view).image = image;
+        DroidlessImage *nativeImage = (DroidlessImage *)view;
+        nativeImage.scaleType = node->image_scale;
+        nativeImage.contentPadding = node->padding;
+        [nativeImage setNeedsDisplay:YES];
     }
     if (![view isKindOfClass:[NSButton class]]) {
         DroidlessClick *click = nil;

@@ -194,7 +194,17 @@
       "native_close_exit_zero": true,
       "headless_conformance_verified": true,
       "android_reference_verified": false,
-      "notes": "Authored compiled fixture: child result data is copied at finish, Back cancels, and a real native folder choice returns an opaque URI. Compiled checks cover Intent action/type/data/copy semantics, stopped and finished callers, lifecycle order, window attachment tokens, GC, callback failure cleanup and the 64-grant ceiling. Document queries, streams, writes and persistent grants remain unsupported."
+      "notes": "Authored compiled fixture: child result data is copied at finish, Back cancels, and a real native folder choice returns an opaque URI. Compiled checks cover Intent action/type/data/copy semantics, stopped and finished callers, lifecycle order, window attachment tokens, GC, callback failure cleanup and the 64-grant ceiling. The separate Documents fixture covers bounded queries and streams; writes and persistent grants remain unsupported."
+    },
+    {
+      "package": "org.droidless.documents",
+      "origin": "droidless-fixture",
+      "status": "interactive-fixture",
+      "source": "examples/documents",
+      "headless_conformance_verified": true,
+      "native_ui": false,
+      "android_reference_verified": false,
+      "notes": "Compiled guest fixture queries a selected directory, decodes and closes three image streams, and preserves filename accessibility labels across GC. Checks cover natural/null-comparator stable sort and mutation faults, URI encoding and read-only segments, seven ScaleType values, file/foreign/ungranted URIs, traversal, symlinks, hard links, nested files, stream snapshot/close, Cursor close, UTF-16 searches and a 64 MiB stream ceiling. Native public-app rendering is verified separately in SwpieView."
     },
     {
       "package": "org.voidptr.swpieview",
@@ -202,13 +212,17 @@
       "origin": "third-party",
       "artifact_url": "https://f-droid.org/repo/org.voidptr.swpieview_15.apk",
       "sha256": "7c7a17ddf254e6f7adb53786ab3928937a4de499785475278df2fe5a034f50f3",
-      "status": "folder-selection-blocked",
+      "status": "folder-thumbnails-subset",
       "native_ui": true,
-      "notes": "Original F-Droid APK unmodified and not redistributed. Startup opens a real native folder chooser; cancellation reaches the APK finish path and exits 0. Host-API selection of the owned image fixture folder reaches ImageListView.onActivityResult, then fails at getContentResolver()Landroid/content/ContentResolver;. Native positive selection was not verified for this public APK because the UI automation tool lost dialog access. No document query, stream or independent image-viewer workflow is claimed.",
+      "notes": "Original F-Droid APK unmodified and not redistributed. Optimized native macOS startup opens the folder chooser; selecting examples/images/assets runs guest directory queries, Comparable sorting and stream decoding, displays three PNG/JPEG/WebP thumbnails with CENTER_CROP, and closes with exit 0. Optimized host replay verifies the same three decoded images and close. Selecting a thumbnail reaches ImageStack.toBundle, then stops at Bundle.putParcelableArrayList; full-screen viewing, gestures and slideshow remain unsupported.",
       "native_folder_picker_verified": true,
       "native_picker_cancel_exit_zero": true,
       "host_selection_callback_verified": true,
-      "independent_image_workflow_verified": false
+      "independent_image_workflow_verified": true,
+      "native_images_verified": true,
+      "native_close_exit_zero": true,
+      "native_folder_selection_verified": true,
+      "full_screen_viewer_verified": false
     }
   ]
 }

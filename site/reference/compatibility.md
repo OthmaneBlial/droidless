@@ -33,8 +33,10 @@ assignment reach AppKit image views. `Resources.getXml` exposes a bounded binary
 XML pull cursor and resource-ID-backed typed attributes, tested by an authored
 APK. SwpieView passes its bundled vector configuration check and attaches its
 platform ReportFragment, constructs its toolbar/GridView/BaseAdapter and opens a
-native folder chooser. Cancellation closes cleanly; host-API folder selection
-reaches the unsupported `getContentResolver()` call in its result callback.
+native folder chooser. Selecting the owned image folder now runs its query,
+guest sort and image-stream decode, displaying three thumbnails in AppKit and
+closing cleanly. Selecting an image stops at Bundle.putParcelableArrayList before
+its full-screen Activity.
 Bitmap pixel manipulation, Android Canvas/vector
 drawing and an independent image workflow remain unproven.
 A targeted support-RecyclerView layout pass renders two saved titles from the
@@ -64,7 +66,8 @@ startActivity/startActivityForResult, getIntent, action/type/data metadata,
 setResult, finish/isFinishing/onBackPressed, Bundle typed extras and back-stack
 lifecycle. Authored checks cover result snapshots, cancellation, stopped callers,
 GC and callback failures. Native ACTION_OPEN_DOCUMENT_TREE returns the actual
-folder choice as a session-local URI; document queries and streams remain open.
+folder choice as a session-local URI; bounded queries and read-only streams are
+implemented. [Document and scaling scope](framework.md#read-only-document-trees-and-image-scaling).
 The v0.1.0 release predates these additions. [Result and picker scope](framework.md#activity-results-and-native-folder-selection).
 Application lifecycle observers add bounded registration/removal, GC-rooted
 snapshot delivery from six Activity super methods and canonical getApplication

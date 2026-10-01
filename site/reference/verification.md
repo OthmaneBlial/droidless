@@ -627,9 +627,9 @@ startup now also passes AnimatorListenerAdapter, manifest ApplicationInfo, timed
 OverScroller construction, virtual background setting and toolbar content
 descriptions. GridView inflation, BaseAdapter construction and item-listener
 registration now complete. Native startup opens a real folder chooser, and
-cancellation reaches the app finish path with exit 0. Host-API selection reaches
-`getContentResolver()Landroid/content/ContentResolver;` in its result callback.
-This proves startup progress, not vector rendering or a usable image-viewer workflow. [APK source](https://github.com/err4nt/SwpieView).
+cancellation reaches the app finish path with exit 0. The subsequent document
+provider increment queries and decodes three selected-folder thumbnails and
+renders them natively; full-screen viewing and vector rendering remain open. [APK source](https://github.com/err4nt/SwpieView).
 
 ```sh
 sh tools/fetch-swpieview.sh
@@ -717,6 +717,9 @@ target/release/droidless run --ephemeral fixtures/generated/grids.apk
 
 ## Activity results and host-selected folders
 
+This records the earlier `fea6961` increment; the document workflow below
+supersedes its public-app blocker.
+
 Verified 2026-10-01 with the compiled `org.droidless.results` APK and current
 optimized binary. Native Open child → Return result displays
 `Result 7:-1:at finish:image/png`; Pick folder opens NSOpenPanel and selecting
@@ -750,4 +753,47 @@ cargo test -p droidless-runtime --test results
 sh tools/ci.sh
 python3 tools/compatibility.py
 target/release/droidless run --ephemeral fixtures/generated/results.apk
+```
+
+## Independent selected-folder thumbnail workflow
+
+Verified 2026-10-01 with the original checksum-pinned SwpieView 1.3.2 APK. Both
+debug and optimized native macOS runs open NSOpenPanel. Selecting the repository's
+`examples/images/assets` folder executes the APK's real directory query,
+ImageContainer Comparable sort, BaseAdapter getView and BitmapFactory stream
+decoding. The AppKit window displays three PNG/JPEG/WebP thumbnails, with the
+requested CENTER_CROP scaling and padding. Accessibility state contains three
+images; the debug native screenshot visibly confirms the artwork. Normal close
+exits 0 in both builds. No APK modifications or Android engine are involved.
+
+The optimized compatibility replay additionally checks three decoded images and
+CENTER_CROP state in the public APK, and the authored Documents fixture's
+`3 images · document streams` result. Existing calculator, image, grid, result
+and Notepad two-note save/restart replays all pass. The host replay's explicit
+folder argument drives the same completion API as the native picker; it does not
+pretend headless mode displayed a dialog.
+
+The compiled Documents contract also checks canonical resolver identity,
+percent-encoded UTF-8 path segments and read-only Lists, stable natural and
+null-comparator sorting with GC/mutation failures, seven image-scale values,
+ungranted/foreign/file URIs, traversal, symlinks, hard links, nested files, stream
+snapshots and close faults, Cursor close, UTF-16 search indices and oversized
+stream rejection. Grants do not survive a fresh runtime. Local CI passes
+82 Rust tests, Clippy, both optimized executables and 4,096 parser mutations.
+GitHub Actions remain disabled.
+
+Thumbnail selection in the optimized host replay invokes the public APK's actual
+onItemClick and ImageStack.toBundle. It stops at
+`Bundle.putParcelableArrayList(Ljava/lang/String;Ljava/util/ArrayList;)V` in
+classes.dex at PC 0x0009. This milestone proves selected-folder thumbnails;
+full-screen viewing, gesture navigation and slideshow remain unproven.
+
+```sh
+cargo test -p droidless-runtime --test documents
+sh tools/ci.sh
+python3 tools/compatibility.py
+target/release/droidless run --ephemeral --size 390x844 artifacts/apks/swpieview-1.3.2.apk
+target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets
+# Reproduce the next blocker:
+target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets --click-first-image
 ```

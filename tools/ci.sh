@@ -7,4 +7,5 @@ cargo check --workspace --locked
 cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo build --workspace --release --locked
+cargo build --release --locked -p droidless-runtime --example document-replay
 cargo run --release --locked -p droidless-formats --example fuzz-smoke

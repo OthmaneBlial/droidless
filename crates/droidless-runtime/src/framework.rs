@@ -13,6 +13,16 @@ pub(crate) const OBSERVERS: &str =
 
 pub(crate) fn graphics_enum_names(class: &str) -> Option<&'static [&'static str]> {
     Some(match class {
+        "Landroid/widget/ImageView$ScaleType;" => &[
+            "MATRIX",
+            "FIT_XY",
+            "FIT_START",
+            "FIT_CENTER",
+            "FIT_END",
+            "CENTER",
+            "CENTER_CROP",
+            "CENTER_INSIDE",
+        ],
         "Landroid/graphics/PorterDuff$Mode;" => &[
             "CLEAR", "SRC", "DST", "SRC_OVER", "DST_OVER", "SRC_IN", "DST_IN", "SRC_OUT",
             "DST_OUT", "SRC_ATOP", "DST_ATOP", "XOR", "DARKEN", "LIGHTEN", "MULTIPLY", "SCREEN",
@@ -209,6 +219,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/os/Bundle;",
             "Landroid/content/Intent;",
             "Landroid/net/Uri;",
+            "Landroid/content/ContentResolver;",
+            "Landroid/provider/DocumentsContract;",
             "Landroid/os/Binder;",
             "Landroid/os/IBinder;",
             "Landroid/content/ComponentName;",
@@ -1632,6 +1644,28 @@ impl Runtime {
                 result.push(Word::from(i32::from(
                     self.heap.text(receiver)?.ends_with(self.heap.text(arg(1)?)?),
                 )))
+            }
+            ("Ljava/lang/String;", "lastIndexOf(I)I" | "lastIndexOf(II)I"
+                | "lastIndexOf(Ljava/lang/String;)I" | "lastIndexOf(Ljava/lang/String;I)I") => {
+                let source = self.heap.text(receiver)?.encode_utf16().collect::<Vec<_>>();
+                let needle = if method.parameters[0] == "I" {
+                    let code = arg(1)?.int()?;
+                    if (0..=0xffff).contains(&code) {
+                        vec![code as u16]
+                    } else {
+                    let Some(character) = u32::try_from(arg(1)?.int()?).ok().and_then(char::from_u32) else {
+                        return Ok(Some(vec![Word::from(-1)]));
+                    };
+                    let mut buffer = [0; 2];
+                    character.encode_utf16(&mut buffer).to_vec()
+                    }
+                } else { self.heap.text(arg(1)?)?.encode_utf16().collect::<Vec<_>>() };
+                let from = if method.parameters.len() == 2 { arg(2)?.int()? } else { i32::MAX };
+                let found = (0..=source.len()).rev().find(|index| {
+                    *index as i64 <= i64::from(from)
+                        && source.get(*index..index.saturating_add(needle.len())) == Some(needle.as_slice())
+                });
+                result.push(Word::from(found.map_or(-1, |index| index as i32)));
             }
             ("Ljava/lang/String;", "contains(Ljava/lang/CharSequence;)Z") => {
                 result.push(Word::from(i32::from(
@@ -3484,6 +3518,21 @@ impl Runtime {
             | ("Landroid/widget/TextView;", "setMinLines(I)V") => {
                 self.heap.get_mut(receiver)?.fields.insert(format!("droidless:text:{}", method.name), vec![arg(1)?]);
             }
+            ("Landroid/widget/ImageView;", "getScaleType()Landroid/widget/ImageView$ScaleType;") => {
+                let ordinal = self.view_mut(receiver)?.image_scale;
+                let class = "Landroid/widget/ImageView$ScaleType;";
+                let name = graphics_enum_names(class).unwrap()[ordinal as usize];
+                result.push(self.graphics_enum_object(&Field { class: class.into(), name: name.into(), ty: class.into() })?);
+            }
+            ("Landroid/widget/ImageView;", "setScaleType(Landroid/widget/ImageView$ScaleType;)V") => {
+                let value = arg(1)?;
+                ensure!(value != Word::ZERO, fault("Ljava/lang/NullPointerException;", "null scale type"));
+                let object = self.heap.get(value)?;
+                ensure!(object.class == "Landroid/widget/ImageView$ScaleType;", "expected ImageView.ScaleType");
+                let ordinal = object.fields.get("droidless:enum:ordinal").and_then(|v| v.first()).context("uninitialized scale type")?.int()?;
+                ensure!((1..=7).contains(&ordinal), "ImageView matrix scaling is unsupported");
+                self.view_mut(receiver)?.image_scale = ordinal;
+            }
             ("Landroid/widget/ImageView;", "getDrawable()Landroid/graphics/drawable/Drawable;") => {
                 result.push(
                     self.heap
@@ -4695,6 +4744,13 @@ impl Runtime {
                     }
                 }
                 "orientation" => view.orientation = raw.data as i32,
+                "scaleType" if view.kind == "ImageView" => {
+                    ensure!(
+                        (1..=7).contains(&raw.data),
+                        "ImageView matrix scaling is unsupported"
+                    );
+                    view.image_scale = raw.data as i32;
+                }
                 "textSize" => view.text_size = dimension(&self.attribute(raw)?)?,
                 "textColor" => {
                     let v = self.attribute(raw)?;
