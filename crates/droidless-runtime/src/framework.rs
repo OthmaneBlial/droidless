@@ -184,6 +184,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/content/ContextWrapper;",
             "Landroid/content/res/TypedArray;",
             "Landroid/util/TypedValue;",
+            "Landroid/util/StateSet;",
             "Landroid/util/Log;",
             "Landroid/content/res/ColorStateList;",
             "Landroid/graphics/drawable/Drawable;",
@@ -3157,6 +3158,23 @@ impl Runtime {
             ("Landroid/graphics/Rect;", "<init>()V" | "setEmpty()V") => {
                 for edge in ["left", "top", "right", "bottom"] {
                     self.heap.get_mut(receiver)?.fields.insert(format!("Landroid/graphics/Rect;->{edge}:I"), vec![Word::ZERO]);
+                }
+            }
+            ("Landroid/util/StateSet;", "trimStateSet([II)[I") => {
+                let states = arg(0)?;
+                let Data::Array { element, values } = &self.heap.get(states)?.data else { bail!("StateSet requires an int array") };
+                ensure!(element == "I", "StateSet requires an int array");
+                let size = arg(1)?.int()?;
+                ensure!(size >= 0, fault("Ljava/lang/NegativeArraySizeException;", "negative StateSet size"));
+                let size = size as usize;
+                ensure!(size <= values.len(), fault("Ljava/lang/ArrayIndexOutOfBoundsException;", "StateSet size exceeds array length"));
+                if size == values.len() {
+                    result.push(states);
+                } else {
+                    let values = values[..size].to_vec();
+                    let trimmed = self.array("I".into(), size)?;
+                    self.heap.get_mut(trimmed)?.data = Data::Array { element: "I".into(), values };
+                    result.push(trimmed);
                 }
             }
             ("Landroid/graphics/RectF;", "<init>()V") => {

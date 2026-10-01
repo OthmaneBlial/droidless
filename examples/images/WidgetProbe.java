@@ -19,6 +19,21 @@ public final class WidgetProbe {
     private static ScrollFrame frame, hidden;
     public static void verify(Activity activity) {
         host = activity;
+        int[] states = {16842910, -16842919, 0, 0};
+        int[] trimmed = android.util.StateSet.trimStateSet(states, 2);
+        System.gc();
+        if (trimmed == states || trimmed.length != 2 || trimmed[0] != states[0] || trimmed[1] != states[1]
+            || android.util.StateSet.trimStateSet(states, 4) != states
+            || android.util.StateSet.trimStateSet(states, 0).length != 0)
+            throw new IllegalStateException("StateSet prefix or identity");
+        trimmed[0] = 7;
+        if (states[0] != 16842910) throw new IllegalStateException("StateSet copy aliases input");
+        try { android.util.StateSet.trimStateSet(null, 0); throw new IllegalStateException("null states accepted"); }
+        catch (NullPointerException expected) {}
+        try { android.util.StateSet.trimStateSet(states, -1); throw new IllegalStateException("negative size accepted"); }
+        catch (NegativeArraySizeException expected) {}
+        try { android.util.StateSet.trimStateSet(states, 5); throw new IllegalStateException("large size accepted"); }
+        catch (IndexOutOfBoundsException expected) {}
         android.content.res.Resources resources = activity.getResources();
         int[] resourceIds = {R.layout.main, R.id.source, R.style.ProbeText, R.drawable.sample_alias};
         String[] entryNames = {"main", "source", "ProbeText", "sample_alias"};
