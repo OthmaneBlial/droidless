@@ -53,8 +53,11 @@ The following are objectives, not completed capability claims.
    compiled contract. Headless Delete returns to Notes, preserves the survivor's
    ID/title/body after restart and reopens its exact fields. AppKit now bridges
    foreground options through the existing guest lifecycle/selection checks; a
-   standalone native component contract passes. Physical menu input and the
-   complete public timed feedback/dismissal remain ahead.
+   standalone native component contract passes. Physical menu input and
+   native timed feedback/dismissal remain ahead. Headless replay shows the original
+   deletion message and UNDO label at 250 ms, then removes the Snackbar after
+   another 3000+250 ms with the exact surviving row retained. Selecting Undo also
+   remains ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

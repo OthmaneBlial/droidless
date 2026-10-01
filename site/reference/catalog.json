@@ -186,7 +186,7 @@
       "native_keyboard_verified": true,
       "native_save_verified": true,
       "multi_note_restart_verified": true,
-      "notes": "Original release APK unmodified. Headless replay saves two notes, reopens one through its row listener, edits title and multiline body, refreshes the list and restores both fields after restart with the original row ID. Native AppKit checks select an existing row with the mouse, edit its title/body with keyboard input, save through Back and reopen both exact fields in a fresh process. Both native processes close with exit status zero. Headless malformed-body replay logs the real SAX fault with its retained DEX PC, displays the APK's own !ERROR! marker and leaves the stored row unchanged when opened. XML metacharacters still do not round-trip through the original serializer; rich formatting, drawing, worker flow and visual fidelity remain unverified. Not redistributed. The original AppCompat menu and Delete selection execute. Only the intended SQLite row is removed; the other retains its original ID/title/body. Snackbar child binding, queued Handler delivery, float clamping and RecyclerView detached-child removal now execute. Snackbar child measurement now creates the actual measured text Layout and reads its line count. LinearLayout.getOrientation and retained relative padding also resolve. Snackbar completes measurement and starts its original ViewPropertyAnimator translation/alpha callbacks. Headless Delete returns to Notes, removes only the intended row, renders the survivor immediately and after restart, and reopens its exact title/body with the original ID. The bounded property-animation profile passes authored clock/GC/fault checks; native menu input and the complete public timed feedback/dismissal remain unverified. The AppKit Options bridge is now implemented and component-checked. The current native editor opened with a traced visible window, but UI control could not attach (cgWindowNotFound); physical menu selection and native Delete remain unverified.",
+      "notes": "Original release APK unmodified. Headless replay saves two notes, reopens one through its row listener, edits title and multiline body, refreshes the list and restores both fields after restart with the original row ID. Native AppKit checks select an existing row with the mouse, edit its title/body with keyboard input, save through Back and reopen both exact fields in a fresh process. Both native processes close with exit status zero. Headless malformed-body replay logs the real SAX fault with its retained DEX PC, displays the APK's own !ERROR! marker and leaves the stored row unchanged when opened. XML metacharacters still do not round-trip through the original serializer; rich formatting, drawing, worker flow and visual fidelity remain unverified. Not redistributed. The original AppCompat menu and Delete selection execute. Only the intended SQLite row is removed; the other retains its original ID/title/body. Snackbar child binding, queued Handler delivery, float clamping and RecyclerView detached-child removal now execute. Snackbar child measurement now creates the actual measured text Layout and reads its line count. LinearLayout.getOrientation and retained relative padding also resolve. Snackbar completes measurement and starts its original ViewPropertyAnimator translation/alpha callbacks. Headless Delete returns to Notes, removes only the intended row, renders the survivor immediately and after restart, and reopens its exact title/body with the original ID. The bounded property-animation profile passes authored clock/GC/fault checks. Headless timed replay shows the original delete message and UNDO label at 250 ms, then removes the Snackbar after another 3000+250 ms while retaining the exact survivor row. Undo selection, native menu input and native timed feedback/dismissal remain unverified. The AppKit Options bridge is now implemented and component-checked. The current native editor opened with a traced visible window, but UI control could not attach (cgWindowNotFound); physical menu selection and native Delete remain unverified.",
       "release_tag": "v1.0.0",
       "headless_viewport": [
         390,
@@ -210,7 +210,15 @@
       "headless_options_menu_construction_verified": true,
       "headless_note_delete_workflow_verified": true,
       "native_options_menu_input_verified": false,
-      "headless_delete_survivor_id_title_body_retained": true
+      "headless_delete_survivor_id_title_body_retained": true,
+      "headless_timed_delete_feedback_verified": true,
+      "headless_timed_delete_dismissal_verified": true,
+      "headless_delete_feedback_clock_steps_ms": [
+        250,
+        3000,
+        250
+      ],
+      "native_timed_delete_feedback_verified": false
     },
     {
       "package": "org.droidless.grids",

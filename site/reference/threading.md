@@ -14,9 +14,9 @@ interrupt becomes available. This remains a bounded subset, not full Java concur
 | Looper | getMainLooper, myLooper, getThread; prepare once per worker, loop delivery, quit and quitSafely; main quit/quitSafely throw IllegalStateException |
 | Handler construction | (), (Looper), (Callback), (Looper, Callback); implicit construction selects the current prepared Looper; unprepared workers throw RuntimeException |
 | Runnable posts | post(Runnable), postDelayed(Runnable, long), postAtTime(Runnable, long), postAtTime(Runnable, Object, long) |
-| Message delivery | obtainMessage(), obtainMessage(int), obtainMessage(int, Object), sendMessage(Message), sendMessageDelayed(Message, long), sendMessageAtTime(Message, long), dispatchMessage(Message), handleMessage(Message) |
+| Message delivery | obtainMessage(), obtainMessage(int), obtainMessage(int, Object), obtainMessage(int, int, int, Object), sendMessage(Message), sendMessageDelayed(Message, long), sendMessageAtTime(Message, long), dispatchMessage(Message), handleMessage(Message) |
 | Cancellation | hasCallbacks(Runnable), removeCallbacks(Runnable), removeCallbacks(Runnable, Object), removeCallbacksAndMessages(Object) |
-| Message | constructor(), obtain(), getTarget, setTarget, getCallback, getWhen; public what/arg1/arg2/obj fields |
+| Message | constructor(), obtain(), obtain(Handler, int, Object), getTarget, setTarget, getCallback, getWhen; public what/arg1/arg2/obj fields |
 | Clock | SystemClock.uptimeMillis and elapsedRealtime return process-relative monotonic milliseconds |
 | Wall clock | System.currentTimeMillis and Date deadlines follow deterministic advancement; native mode reads host wall time |
 | Thread | currentThread; constructors (String) and (Runnable, String); getName/setName/getId/isAlive/isDaemon; setDaemon before start; start once, interrupt/isInterrupted/interrupted, holdsLock; explicit run() calls the stored Runnable |
@@ -45,11 +45,21 @@ Negative delays become zero; past absolute deadlines are due at the next poll.
 Each Message is one-shot: queued or consumed Messages cannot be sent again.
 Dispatch/cancellation clears payloads and marks the Message consumed. Public
 pooling/recycle and other obtain overloads are unsupported.
+The three-argument static factory retains the target, signed what code and object
+identity without enqueueing. Null target/payload and zero default fields pass the
+compiled scheduling check, alongside actual delayed delivery, GC and duplicate
+enqueue rejection. [Message API reference](https://developer.android.com/reference/android/os/Message).
+The four-argument Handler factory shares this allocation path and also retains
+signed arg1/arg2 values; the compiled callback reads all fields after delayed
+delivery and GC. [Handler API reference](https://developer.android.com/reference/android/os/Handler).
 
 ## Host clocks and shutdown
 
 Headless execution starts at zero and advances only through `--advance-ms` or
 Runtime.advance_time. Immediate posts drain after launch and each replay action.
+Before each CLI time step, the current View tree is laid out and polled at its
+existing time, so guest onLayout callbacks and automatic animations start before
+the clock moves. Runtime.advance_time itself does not perform layout.
 Native AppKit execution uses Rust Instant and polls at event-loop boundaries,
 with an idle wait of up to 50 ms. It redraws after callbacks mutate guest Views.
 This does not model Android device boot time, deep sleep or precise timer latency.

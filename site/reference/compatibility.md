@@ -46,8 +46,11 @@ the other row, then reaches its original Snackbar feedback. Measurement and the
 original translation/alpha start callbacks now execute. Headless Delete returns
 to Notes, renders the survivor immediately and after restart, and reopens its
 exact title/body with the original SQLite ID. The bounded timed View-property
-profile passes compiled clock/GC/fault checks; full public timed feedback/dismissal
-and native menu input remain unverified. Generic `<view class="…">` layout inflation invokes the
+profile passes compiled clock/GC/fault checks. Timed headless replay shows the
+original deletion message and UNDO label at 250 ms; another 3000+250 ms delivers
+timeout/dismissal callbacks and removes the Snackbar, retaining the exact survivor
+row. Selecting Undo, native timed feedback/dismissal and native menu input remain
+unverified. Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree
 through callback GC. View live-region mode bits are retained; Android accessibility

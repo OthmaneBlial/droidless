@@ -486,6 +486,9 @@ Duration, start delay, null/guest interpolators and listener replacement are
 retained. The shared monotonic clock advances real render properties; native
 polling redraws frames even when no Handler message is due. Rendering continues
 to use the existing native alpha and translated geometry.
+CLI time steps lay out the current frame and poll at its current time before
+advancing. The compiled Scheduling fixture starts an automatic animation from
+onLayout; the CLI check verifies rendered x=50 and alpha=0.5 at 50 ms.
 
 Each batch owns a ValueAnimator progress token. Guest start, update, cancel and
 end callbacks receive that same token through DEX dispatch. Its duration/delay,

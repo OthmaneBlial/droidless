@@ -123,9 +123,12 @@ support repeatable experiments. `--size WIDTHxHEIGHT` selects a 128–4096 logic
 enabled menu callback. Headless Notepad Delete returns to Notes and preserves the
 survivor's ID/title/body after restart. AppKit now offers an Options menu bridge;
 physical menu input remains unverified. [Menu scope](docs/compatibility.md).
+Timed headless replay also shows the original delete feedback and removes its
+Snackbar after timeout; selecting Undo remains unverified.
 Current source adds `--input TEXT` for the first visible EditText, per-package
 preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only runs.
-`--advance-ms MILLISECONDS` advances the deterministic clock for queued APK callbacks.
+`--advance-ms MILLISECONDS` lays out and polls the current frame
+before advancing the deterministic clock and delivering due APK callbacks.
 
 </details>
 
@@ -188,7 +191,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Touch and gestures | [Authored Java fixture](examples/touch/MainActivity.java) | Single-pointer dispatch, child coordinates/capture, click fallback, timed taps/double taps/presses, scroll/fling, cancellation and callback GC/error cleanup. SwpieView replay verifies actual next/previous images; native taps hide/show controls. Native drag verification remains pending |
 | Photo grid | [Authored Java/XML fixture](examples/grids/MainActivity.java) | Guest BaseAdapter cells, auto-fit and four stretch modes, observer updates and native photo clicks with 64-bit IDs; disabled items ignore clicks and Refresh replaces seven photos with four |
 | Widgets | [Authored Java contracts](examples/images/WidgetProbe.java) | Timed scrolling, manifest application metadata, listener overrides, virtual background dispatch and content-description retention; image accessibility labels verified in native AppKit |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Headless two-row save/restart. Native existing-row mouse selection, keyboard title/body edits, Back save and exact field restoration after a fresh process; original SQLite ID retained |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Headless two-row save/restart and timed Delete feedback/dismissal. Native existing-row mouse selection, keyboard title/body edits, Back save and exact field restoration after a fresh process; original SQLite ID retained |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).
@@ -203,7 +206,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 103 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 104 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

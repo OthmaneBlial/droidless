@@ -1,6 +1,6 @@
 # First interactive milestone evidence
 
-Latest local source gate: 103 Rust tests, warning-free Clippy, optimized builds
+Latest local source gate: 104 Rust tests, warning-free Clippy, optimized builds
 and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
 
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
@@ -1485,3 +1485,41 @@ builds and 4,096 seeded parser mutations. The native component check compiles wi
 warnings treated as errors and passes. All public APK compatibility replays,
 including original Notepad Delete/return/restart/reopen, pass. GitHub Actions
 remain disabled and the 50% checkpoint remains active.
+
+## Current-source replay frames and timed Notepad feedback
+
+Date: 2026-10-01. CLI time steps now lay out and poll the current frame before
+advancing its deterministic clock. This lets guest onLayout callbacks and
+automatic property animations start at the existing time. The compiled Scheduling
+fixture switches to a TextView that starts its animation from onLayout; the CLI
+check verifies rendered x=50 and alpha=0.5 at 50 ms. The previous development
+binary, replaying the same fixture, produced x=0 and alpha=1 instead.
+Runtime.advance_time continues to leave layout to its caller.
+
+The unchanged, digest-pinned Notepad APK then exposed two real factory gaps:
+Message.obtain(Handler, int, Object) at the show animation's end, and
+Handler.obtainMessage(int, int, int, Object) in its timeout/dismissal path. Both
+reuse the existing Message allocation and owned queues. The compiled Scheduling
+check reproduces each unsupported call before its fix and verifies null defaults,
+signed codes/arguments, payload identity, deferred callback delivery, duplicate
+enqueue rejection and retention through GC after the fixes.
+
+The original APK's deletion message and UNDO label appear with alpha=1 inside
+the 390×844 viewport at 250 ms. Advancing another 3000 ms and then 250 ms runs its
+timeout and dismissal callbacks and removes the Snackbar from the View tree.
+The exact surviving SQLite ID/title/body remain unchanged. A copied original-APK
+test database also passes this timed sequence in the debug CLI, exits zero and
+leaves both source seed rows unchanged. The permanent public replay retains the
+existing immediate Delete, fresh-process list and exact survivor reopen checks
+alongside the new shown/dismissed cases.
+
+Selecting Undo, physical native menu input, native timed feedback/dismissal and
+Android differential frame timing remain unverified. The bounded property profile
+does not implement full Choreographer frame-phase parity. The 50% checkpoint
+remains active.
+
+Full local CI passes 104 Rust tests, warning-free Clippy, optimized CLI/document
+replay builds and 4,096 seeded parser mutations. The optimized public APK
+compatibility replay passes, including the new feedback visibility, timed removal
+and exact survivor checks. Site clipboard success/denial checks also pass. GitHub
+Actions remain disabled; these checks ran locally.
