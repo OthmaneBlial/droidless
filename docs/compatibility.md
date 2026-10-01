@@ -49,8 +49,11 @@ exact title/body with the original SQLite ID. The bounded timed View-property
 profile passes compiled clock/GC/fault checks. Timed headless replay shows the
 original deletion message and UNDO label at 250 ms; another 3000+250 ms delivers
 timeout/dismissal callbacks and removes the Snackbar, retaining the exact survivor
-row. Selecting Undo, native timed feedback/dismissal and native menu input remain
-unverified. Generic `<view class="…">` layout inflation invokes the
+row. Headless Undo runs the original listener, restores the title/body with a fresh
+auto-increment ID, preserves the survivor and reopens the restored fields after a
+fresh process; advancing past the old timeout causes no further change. Native
+Delete/Undo input and native timed feedback/dismissal remain unverified. Generic
+`<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree
 through callback GC. View live-region mode bits are retained; Android accessibility

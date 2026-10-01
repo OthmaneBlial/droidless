@@ -123,8 +123,9 @@ support repeatable experiments. `--size WIDTHxHEIGHT` selects a 128–4096 logic
 enabled menu callback. Headless Notepad Delete returns to Notes and preserves the
 survivor's ID/title/body after restart. AppKit now offers an Options menu bridge;
 physical menu input remains unverified. [Menu scope](docs/compatibility.md).
-Timed headless replay also shows the original delete feedback and removes its
-Snackbar after timeout; selecting Undo remains unverified.
+Timed headless replay also shows the original delete feedback, removes its
+Snackbar after timeout, and runs Undo to restore both fields with a fresh row ID
+that survives restart and reopen. Native Delete/Undo input remains unverified.
 Current source adds `--input TEXT` for the first visible EditText, per-package
 preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only runs.
 `--advance-ms MILLISECONDS` lays out and polls the current frame

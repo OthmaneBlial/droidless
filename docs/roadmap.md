@@ -56,8 +56,10 @@ The following are objectives, not completed capability claims.
    standalone native component contract passes. Physical menu input and
    native timed feedback/dismissal remain ahead. Headless replay shows the original
    deletion message and UNDO label at 250 ms, then removes the Snackbar after
-   another 3000+250 ms with the exact surviving row retained. Selecting Undo also
-   remains ahead.
+   another 3000+250 ms with the exact surviving row retained. Headless Undo now
+   restores title/body with a fresh auto-increment ID, preserves the survivor and
+   reopens the restored fields after restart. The old timeout causes no further
+   change. Physical Delete/Undo input remains ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

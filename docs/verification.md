@@ -1523,3 +1523,33 @@ replay builds and 4,096 seeded parser mutations. The optimized public APK
 compatibility replay passes, including the new feedback visibility, timed removal
 and exact survivor checks. Site clipboard success/denial checks also pass. GitHub
 Actions remain disabled; these checks ran locally.
+
+## Current-source original Notepad Undo
+
+Date: 2026-10-01. The unchanged pinned APK now passes Delete → 250 ms → UNDO →
+250 ms → 3000 ms. Its original action listener restores the title and multiline
+body, removes the Snackbar and leaves the other note's exact ID/title/body intact.
+Advancing past the former timeout produces no later deletion or repeated feedback.
+Fresh processes render both notes and reopen the restored title/body through the
+original row callback; both rows retain their verified values after reopen.
+
+The restored row receives ID 3 after deleting ID 1 from a two-row seed. This follows
+the original [Undo listener](https://github.com/MohMah/android-notepad/blob/v1.0.0/app/src/main/java/ir/cafebazaar/notepad/activities/home/Adapter.java),
+which calls note.save(), and its [auto-increment model](https://github.com/MohMah/android-notepad/blob/v1.0.0/app/src/main/java/ir/cafebazaar/notepad/models/Note.java).
+The packaged DEX contains a Note INSERT that lists title/body/drawing/createdAt
+columns and omits id. The observed fresh ID is consistent with
+[SQLite AUTOINCREMENT](https://www.sqlite.org/autoinc.html); the survivor keeps ID 2.
+The regression verifies the APK's behavior and does not rewrite its persistence.
+No runtime source change was needed for this workflow.
+
+A freshly rebuilt unsigned bundle opened the original editor against a copied
+two-row database. Native tracing reported a visible 390×720 window entirely on
+screen. UI control still returned cgWindowNotFound, so no physical Options,
+Delete or Undo action is claimed. Only the owned diagnostic process was stopped
+explicitly; both copied test rows remained exact. No fresh normal native close
+result is claimed. Native Delete/Undo and timed feedback remain unverified.
+
+The full local gate passes 104 Rust tests, Clippy, optimized CLI/document replay
+builds and 4,096 seeded parser mutations. The expanded optimized public replay
+passes restoration, fresh-ID, survivor, old-timeout, restart and reopen checks.
+GitHub Actions remain disabled and the 50% checkpoint remains active.
