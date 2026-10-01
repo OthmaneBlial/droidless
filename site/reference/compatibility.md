@@ -160,7 +160,7 @@ interaction and independent public-APK Looper workflows remain unverified.
 - Java float string scientific-notation edge cases differ from Rust formatting.
 - Failed class initialization is sticky and retains causes; concurrent initialization
   is unsupported. Instruction/field/method checks are not a complete Java type verifier.
-- Main waits, blocking native-bridge callbacks/initializers, sleep/join, wait/notify,
+- Main blocking waits, blocking native-bridge callbacks/initializers, general wait/notify,
   nested Looper pumps/priority, parallel execution, Timer finalization and JVM process-liveness parity are unsupported.
 - Other bulk collections, custom Map copies/views, CopyOnWriteArrayList write revalidation,
   ListIterator/subList, custom class loaders, method/field reflection, general file I/O,

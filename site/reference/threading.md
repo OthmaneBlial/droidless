@@ -20,6 +20,7 @@ interrupt becomes available. This remains a bounded subset, not full Java concur
 | Clock | SystemClock.uptimeMillis and elapsedRealtime return process-relative monotonic milliseconds |
 | Wall clock | System.currentTimeMillis and Date deadlines follow deterministic advancement; native mode reads host wall time |
 | Thread | currentThread; constructors (String) and (Runnable, String); getName/setName/getId/isAlive/isDaemon; setDaemon before start; start once, interrupt/isInterrupted/interrupted, holdsLock; explicit run() calls the stored Runnable |
+| Thread waits | sleep(long), sleep(long, int); join(), join(long), join(long, int); positive sleep and live-thread join suspend workers; zero sleep and inactive-thread join also work on main |
 | Timer | constructors (), (boolean), (String), (String, boolean); schedule(TimerTask, long/Date) and repeating long/Date + period overloads; scheduleAtFixedRate repeating long/Date + period overloads; cancel(), purge() |
 | TimerTask | constructor(), cancel(), scheduledExecutionTime(); actual APK run() executes on the Timer's guest worker |
 | Executors | newSingleThreadExecutor(), newFixedThreadPool(int), newCachedThreadPool(); deferred execute and Callable/Runnable submit overloads |
@@ -109,7 +110,7 @@ return from loop once remaining work is drained. Main quit remains illegal.
 Uncaught guest callback exceptions unwind to the actual loop caller, which can
 catch the original cause and reenter loop; active message roots are retired.
 Host close cancels queued and suspended callbacks. Nested loop calls on one worker,
-MessageQueue APIs, barriers, idle handlers, Looper logging, priority, sleep/join and
+MessageQueue APIs, barriers, idle handlers, Looper logging, priority and
 timed queue waits remain unsupported.
 
 Primary references: [API-21 Looper](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/os/Looper.java),
@@ -122,6 +123,52 @@ main continuation/native bridge expansion must preserve these waits, not turn
 blocking into inline execution. Host close/root finish cancels worker continuations
 and releases their roots/locks without claiming guest finally execution at process
 shutdown. Main callbacks and widgets retain their host main-thread requirement.
+
+## Worker sleep and join
+
+Thread sleep/join reuse the existing completion wait mechanism. Positive sleep
+retains all caller frames and held monitors, waits on the runtime clock, and
+throws InterruptedException with a cleared flag when interrupted. Zero sleep
+checks interruption and returns immediately. Joining a live Thread waits for
+actual termination or its original timeout; joining a NEW/terminated Thread
+returns immediately and preserves an existing interrupt flag. An interrupted
+suspended join throws and clears the flag. Self-join remains a real wait.
+
+Negative milliseconds and nanoseconds outside 0..999999 throw a guest
+IllegalArgumentException. Positive sub-millisecond time rounds up on the shared
+millisecond clock; nanosecond timing fidelity is not claimed. API-21 join durations
+whose nanosecond conversion overflows are treated as indefinite waits. Other
+deadline arithmetic retains the runtime's signed-long clock ceiling.
+Positive main-thread sleep and live-thread main join remain explicit diagnostics,
+as do waits across synchronous native bridges or class initialization. No blocked
+wait is replaced by inline execution or fabricated termination.
+
+The compiled [ThreadWaitContract](../examples/scheduling/ThreadWaitContract.java)
+checks deadlines, timed/self/indefinite joins, monitor retention, interrupts,
+argument faults, inactive join, GC and shutdown. Its portable contract separately
+passes on desktop Java; the DROIDLESS driver advances the deterministic clock.
+Executor checks feed a sleeping Callable before its deadline, proving its Future
+stays incomplete until the sleep finishes. Public Notepad contains sleep/join
+calls, but a completed public-APK workflow using them remains unverified.
+
+The authored Sleep, join and finish control also passes headless replay and an
+automated native-host replay. The CLI prequeues the click while time is frozen;
+sleep remains blocked until AppKit opens and the live runtime clock advances.
+Guest code checks the retained result, sleep/join/monitor outcomes and main Thread
+identity, logs completion, then finishes the Activity. The native log records a
+visible window before that completion, followed by onPause/onStop/onDestroy and
+exit status 0. This verifies native event-loop delivery and teardown; it does not
+claim manual native mouse input or a painted result before the immediate finish.
+
+```sh
+cargo test -p droidless-runtime --test thread_waits --test executors --locked
+java -cp examples/scheduling/build/classes org.droidless.scheduling.ThreadWaitContract
+DROIDLESS_NATIVE_TRACE=1 target/release/droidless run --ephemeral fixtures/generated/scheduling.apk \
+  --click "Sleep, join and finish" --trace-lifecycle
+```
+
+Primary references: [API-21 Thread](https://android.googlesource.com/platform/libcore/+/android-5.0.0_r1/libart/src/main/java/java/lang/Thread.java)
+and [Java Thread](https://docs.oracle.com/javase/8/docs/api/java/lang/Thread.html).
 
 ## Executors and Future results
 
