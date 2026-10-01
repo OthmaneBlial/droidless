@@ -25,6 +25,30 @@ impl Runtime {
         let signature = method.signature();
         match (method.class.as_str(), signature.as_str()) {
             (
+                "Ljava/lang/String;",
+                "replaceAll(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+            ) => {
+                let source = self.heap.text(argument(0)?)?.to_owned();
+                let pattern = self.heap.text(argument(1)?)?;
+                let replacement = self.heap.text(argument(2)?)?;
+                ensure!(
+                    source.len() <= MAX_INPUT_BYTES && pattern.len() <= MAX_PATTERN_BYTES,
+                    "String.replaceAll input exceeds runtime limit"
+                );
+                let regex = RegexBuilder::new(pattern)
+                    .size_limit(MAX_REGEX_SIZE)
+                    .dfa_size_limit(MAX_REGEX_SIZE)
+                    .build()
+                    .map_err(|error| {
+                        fault(
+                            "Ljava/util/regex/PatternSyntaxException;",
+                            error.to_string(),
+                        )
+                    })?;
+                let replaced = regex.replace_all(&source, replacement).into_owned();
+                Ok(Some(vec![self.heap.string(replaced)?]))
+            }
+            (
                 "Ljava/util/regex/Pattern;",
                 "compile(Ljava/lang/String;)Ljava/util/regex/Pattern;",
             ) => {
@@ -244,6 +268,22 @@ mod tests {
             "Ljava/util/regex/Matcher;",
             &[pattern, input],
         )[0]
+    }
+    #[test]
+    fn string_replace_all_expands_capture_groups() {
+        let mut vm = runtime();
+        let source = vm.heap.string("note 12".into()).unwrap();
+        let pattern = vm.heap.string("([0-9]+)".into()).unwrap();
+        let replacement = vm.heap.string("#$1".into()).unwrap();
+        let output = call(
+            &mut vm,
+            "Ljava/lang/String;",
+            "replaceAll",
+            &["Ljava/lang/String;", "Ljava/lang/String;"],
+            "Ljava/lang/String;",
+            &[source, pattern, replacement],
+        )[0];
+        assert_eq!(vm.heap.text(output).unwrap(), "note #12");
     }
     fn string(vm: &mut Runtime, class: &str, matcher: Word, group: Option<i32>) -> Option<String> {
         let (name, parameters, args) = match group {

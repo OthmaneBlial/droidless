@@ -8,7 +8,10 @@ use rusqlite::{
     Connection, params_from_iter,
     types::{Value, ValueRef},
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 
 const OPEN_HELPER: &str = "Landroid/database/sqlite/SQLiteOpenHelper;";
 const DATABASE: &str = "Landroid/database/sqlite/SQLiteDatabase;";
@@ -667,10 +670,84 @@ impl Runtime {
 
     fn content_values_native(
         &mut self,
-        _method: &Method,
-        _args: &[Word],
+        method: &Method,
+        args: &[Word],
     ) -> Result<Option<Vec<Word>>> {
-        Ok(None)
+        let receiver = *args.first().context("ContentValues receiver missing")?;
+        let signature = method.signature();
+        if signature == "<init>()V" {
+            self.heap.get_mut(receiver)?.data = Data::ContentValues(BTreeMap::new());
+            return Ok(Some(vec![]));
+        }
+        if signature == "getAsString(Ljava/lang/String;)Ljava/lang/String;" {
+            let key = self.heap.text(args[1])?;
+            let value = match &self.heap.get(receiver)?.data {
+                Data::ContentValues(values) => values.get(key).cloned(),
+                _ => bail!("uninitialized ContentValues"),
+            };
+            let Some(value) = value else {
+                return Ok(Some(vec![Word::ZERO]));
+            };
+            let value = match value {
+                SqlValue::Null => return Ok(Some(vec![Word::ZERO])),
+                SqlValue::Integer(value) => value.to_string(),
+                SqlValue::Real(value) => value.to_string(),
+                SqlValue::Text(value) => value,
+                SqlValue::Blob(_) => {
+                    return Err(fault(
+                        "Ljava/lang/ClassCastException;",
+                        "cannot convert ContentValues blob to String",
+                    ));
+                }
+            };
+            return Ok(Some(vec![self.heap.string(value)?]));
+        }
+        let key = args
+            .get(1)
+            .map(|value| self.heap.text(*value).map(str::to_owned))
+            .transpose()?;
+        let inserted = if signature.starts_with("put(Ljava/lang/String;") {
+            Some(self.sql_value(args[2])?)
+        } else if signature == "putNull(Ljava/lang/String;)V" {
+            Some(SqlValue::Null)
+        } else {
+            None
+        };
+        let values = match &mut self.heap.get_mut(receiver)?.data {
+            Data::ContentValues(values) => values,
+            _ => bail!("uninitialized ContentValues"),
+        };
+        match signature.as_str() {
+            "put(Ljava/lang/String;Ljava/lang/String;)V"
+            | "put(Ljava/lang/String;Ljava/lang/Byte;)V"
+            | "put(Ljava/lang/String;Ljava/lang/Short;)V"
+            | "put(Ljava/lang/String;Ljava/lang/Integer;)V"
+            | "put(Ljava/lang/String;Ljava/lang/Long;)V"
+            | "put(Ljava/lang/String;Ljava/lang/Float;)V"
+            | "put(Ljava/lang/String;Ljava/lang/Double;)V"
+            | "put(Ljava/lang/String;Ljava/lang/Boolean;)V"
+            | "put(Ljava/lang/String;[B)V" => {
+                values.insert(key.context("ContentValues key missing")?, inserted.unwrap());
+                Ok(Some(vec![]))
+            }
+            "putNull(Ljava/lang/String;)V" => {
+                values.insert(key.context("ContentValues key missing")?, SqlValue::Null);
+                Ok(Some(vec![]))
+            }
+            "containsKey(Ljava/lang/String;)Z" => Ok(Some(vec![Word::from(i32::from(
+                values.contains_key(key.as_deref().context("ContentValues key missing")?),
+            ))])),
+            "size()I" => Ok(Some(vec![Word::from(values.len() as i32)])),
+            "remove(Ljava/lang/String;)V" => {
+                values.remove(key.as_deref().context("ContentValues key missing")?);
+                Ok(Some(vec![]))
+            }
+            "clear()V" => {
+                values.clear();
+                Ok(Some(vec![]))
+            }
+            _ => Ok(None),
+        }
     }
 
     fn cursor_native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
@@ -946,6 +1023,85 @@ mod tests {
             args.to_vec(),
             false,
         )
+    }
+
+    #[test]
+    fn content_values_round_trip_text_and_null_entries() {
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/intents.apk")).unwrap(),
+        )
+        .unwrap();
+        let values = vm.heap.instance("Landroid/content/ContentValues;").unwrap();
+        call(
+            &mut vm,
+            "Landroid/content/ContentValues;",
+            "<init>",
+            &[],
+            "V",
+            &[values],
+        )
+        .unwrap();
+
+        let title = vm.heap.string("title".into()).unwrap();
+        let note = vm.heap.string("No pink".into()).unwrap();
+        call(
+            &mut vm,
+            "Landroid/content/ContentValues;",
+            "put",
+            &["Ljava/lang/String;", "Ljava/lang/String;"],
+            "V",
+            &[values, title, note],
+        )
+        .unwrap();
+        let text = call(
+            &mut vm,
+            "Landroid/content/ContentValues;",
+            "getAsString",
+            &["Ljava/lang/String;"],
+            "Ljava/lang/String;",
+            &[values, title],
+        )
+        .unwrap()[0];
+        assert_eq!(vm.heap.text(text).unwrap(), "No pink");
+
+        let body = vm.heap.string("body".into()).unwrap();
+        call(
+            &mut vm,
+            "Landroid/content/ContentValues;",
+            "putNull",
+            &["Ljava/lang/String;"],
+            "V",
+            &[values, body],
+        )
+        .unwrap();
+        assert_eq!(
+            call(
+                &mut vm,
+                "Landroid/content/ContentValues;",
+                "containsKey",
+                &["Ljava/lang/String;"],
+                "Z",
+                &[values, body],
+            )
+            .unwrap()[0]
+                .int()
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            call(
+                &mut vm,
+                "Landroid/content/ContentValues;",
+                "size",
+                &[],
+                "I",
+                &[values]
+            )
+            .unwrap()[0]
+                .int()
+                .unwrap(),
+            2
+        );
     }
 
     #[test]

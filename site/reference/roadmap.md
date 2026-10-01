@@ -13,13 +13,13 @@ The following are objectives, not completed capability claims.
    proven in an authored native fixture. Basic HashSet/ArrayList/HashMap/LinkedHashMap
    and live read-only Set/List views pass compiled conformance. Native map bulk
    copying and primitive Class metadata now complete more DBFlow setup in the
-   unmodified Notepad. Snapshot CopyOnWriteArrayList construction now resolves;
-   the fixed API-21 profile and lifecycle-observer registration resolve too.
-   Startup stops at FileInputStream in Stetho's process-name lookup before Activity
-   creation. APK-local lookup/reflective
-   construction and inherited fields also resolve. The neutral public calculator proves boxed Double
-   execution through native clicks. Follow that failure, then the actual storage/
-   UI needs of a real notes/todo APK with restart/persistence tests.
+   unmodified Notepad. Snapshot CopyOnWriteArrayList construction, the fixed API-21
+   profile, lifecycle observers and its DBFlow startup now resolve. The Notes list
+   and note editor render headlessly; tapping ＋ and entering text changes the
+   original APK's editable View tree. Saving/restarting the third-party note and
+   native-window input are still unverified. Follow those storage/UI paths next.
+   The neutral public calculator continues to prove boxed Double execution
+   through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
    callbacks are proven. Immediate FIFO queue operations also pass compiled and
    desktop Java conformance. Managed DEX call continuations now pause/resume with

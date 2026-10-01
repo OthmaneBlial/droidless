@@ -140,10 +140,15 @@
       "origin": "third-party",
       "artifact_url": "https://github.com/MohMah/android-notepad/releases/download/v1.0.0/notepad-v1.0.0.apk",
       "sha256": "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f",
-      "status": "startup-blocked",
+      "status": "headless-interaction-subset",
       "native_ui": false,
-      "first_failure": "unsupported class Ljava/io/FileInputStream; in Lcom/b/a/a/e;->b()Ljava/lang/String; at PC 0x0006, e.a() PC 0x000a (Application.onCreate PC 0x0056)",
-      "notes": "Parsed; DBFlow collections, reflection, inherited fields, deferred Thread.start, primitive TYPE metadata, map copying, read-only/snapshot-list construction, fixed SDK profile and lifecycle-observer registration resolve. Stetho process-name lookup reaches FileInputStream for /proc/self/cmdline. No Activity/UI, observer delivery or independently working notes/worker workflow reached. Original release APK unmodified and not redistributed.",
+      "native_mouse_verified": false,
+      "headless_viewport": [390, 844],
+      "headless_scenarios": 1,
+      "headless_note_editor_verified": true,
+      "headless_text_input_verified": true,
+      "save_restart_verified": false,
+      "notes": "Original release APK unmodified. Headless launch shows Notes; tapping ＋ opens NoteActivity with two editable fields and the Created moments ago label. Typing No pink updates the first field in the emitted View tree. Save/restart, native AppKit input, worker flow and visual fidelity remain unverified. Not redistributed.",
       "release_tag": "v1.0.0"
     }
   ]

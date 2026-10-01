@@ -185,6 +185,28 @@ impl Runtime {
         args: &[Word],
     ) -> Result<Option<Vec<Word>>> {
         let signature = method.signature();
+        if method.class == "Ldroidless/runtime/map/Entry;" {
+            let receiver = *args.first().context("Map.Entry receiver missing")?;
+            let value = match signature.as_str() {
+                "getKey()Ljava/lang/Object;" => self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:map-entry:key")
+                    .and_then(|values| values.first())
+                    .copied(),
+                "getValue()Ljava/lang/Object;" => self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:map-entry:value")
+                    .and_then(|values| values.first())
+                    .copied(),
+                _ => return Ok(None),
+            }
+            .context("Map.Entry has no value")?;
+            return Ok(Some(vec![value]));
+        }
         if [
             "Landroid/util/SparseArray;",
             "Landroid/util/SparseIntArray;",
@@ -239,6 +261,28 @@ impl Runtime {
                         bail!("uninitialized SparseArray");
                     };
                     vec![Word::from(values.len() as i32)]
+                }
+                "keyAt(I)I" | "valueAt(I)Ljava/lang/Object;" => {
+                    let index = usize::try_from(arg(1)?.int()?).map_err(|_| {
+                        fault(
+                            "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                            "SparseArray index out of bounds",
+                        )
+                    })?;
+                    let Data::SparseArray(values) = &self.heap.get(receiver)?.data else {
+                        bail!("uninitialized SparseArray");
+                    };
+                    let (key, value) = values.iter().nth(index).ok_or_else(|| {
+                        fault(
+                            "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                            "SparseArray index out of bounds",
+                        )
+                    })?;
+                    if signature == "keyAt(I)I" {
+                        vec![Word::from(*key)]
+                    } else {
+                        vec![*value]
+                    }
                 }
                 "clear()V" => {
                     let Data::SparseArray(values) = &mut self.heap.get_mut(receiver)?.data else {
@@ -571,6 +615,7 @@ impl Runtime {
             "Ljava/util/HashMap;",
             "Ljava/util/LinkedHashMap;",
             "Ljava/util/WeakHashMap;",
+            "Ljava/util/concurrent/ConcurrentHashMap;",
         ]
         .contains(&method.class.as_str())
         {
@@ -812,6 +857,78 @@ impl Runtime {
             "isEmpty()Z" => result.push(Word::from(i32::from(
                 self.collection(receiver)?.0.is_empty(),
             ))),
+            "toArray()[Ljava/lang/Object;" => {
+                let values = self.collection(receiver)?.0.to_vec();
+                let array = self.array("Ljava/lang/Object;".into(), values.len())?;
+                let Data::Array { values: slots, .. } = &mut self.heap.get_mut(array)?.data else {
+                    bail!("new object array has invalid storage");
+                };
+                for (slot, value) in slots.iter_mut().zip(values) {
+                    *slot = vec![value];
+                }
+                result.push(array);
+            }
+            "toArray([Ljava/lang/Object;)[Ljava/lang/Object;" => {
+                let destination = arg(1)?;
+                ensure!(
+                    destination != Word::ZERO,
+                    fault("Ljava/lang/NullPointerException;", "array is null")
+                );
+                let (element, length) = match &self.heap.get(destination)?.data {
+                    Data::Array { element, values }
+                        if element.starts_with('L') || element.starts_with('[') =>
+                    {
+                        (element.clone(), values.len())
+                    }
+                    _ => {
+                        return Err(fault(
+                            "Ljava/lang/ArrayStoreException;",
+                            "toArray requires a reference array",
+                        ));
+                    }
+                };
+                let values = self.collection(receiver)?.0.to_vec();
+                let roots = self.native_roots.len();
+                self.native_roots.extend([receiver, destination]);
+                self.native_roots.extend(values.iter().copied());
+                let converted = (|| -> Result<Word> {
+                    for value in values.iter().copied().filter(|value| *value != Word::ZERO) {
+                        let class = self.heap.get(value)?.class.clone();
+                        ensure!(
+                            class == element || self.is_a(&class, &element),
+                            fault(
+                                "Ljava/lang/ArrayStoreException;",
+                                "collection element is incompatible with destination array",
+                            )
+                        );
+                    }
+                    let array = if length < values.len() {
+                        self.array(element.clone(), values.len())?
+                    } else {
+                        destination
+                    };
+                    let Data::Array {
+                        element: actual_element,
+                        values: slots,
+                    } = &mut self.heap.get_mut(array)?.data
+                    else {
+                        bail!("toArray destination lost array storage");
+                    };
+                    ensure!(
+                        *actual_element == element,
+                        "toArray destination component type changed"
+                    );
+                    for (slot, value) in slots.iter_mut().zip(values.iter().copied()) {
+                        *slot = vec![value];
+                    }
+                    if length > values.len() {
+                        slots[values.len()] = vec![Word::ZERO];
+                    }
+                    Ok(array)
+                })();
+                self.native_roots.truncate(roots);
+                result.push(converted?);
+            }
             "contains(Ljava/lang/Object;)Z" => {
                 let found = if tree_set {
                     self.tree_find(receiver, arg(1)?)?.is_some()
@@ -1074,6 +1191,27 @@ impl Runtime {
                 self.heap.get_mut(view)?.data = Data::Collection { values, version: 0 };
                 result.push(view);
             }
+            "keySet()Ljava/util/Set;" => {
+                // ponytail: Map.keySet is a snapshot; add a live view if callers mutate during iteration.
+                let values = self.map(owner)?.0.iter().map(|(key, _)| *key).collect();
+                let view = self.heap.instance("Ljava/util/HashSet;")?;
+                self.heap.get_mut(view)?.data = Data::Collection { values, version: 0 };
+                result.push(view);
+            }
+            "entrySet()Ljava/util/Set;" => {
+                let entries = self.map(owner)?.0.to_vec();
+                let set = self.heap.instance("Ljava/util/HashSet;")?;
+                let mut values = Vec::with_capacity(entries.len());
+                for (key, value) in entries {
+                    let entry = self.heap.instance("Ldroidless/runtime/map/Entry;")?;
+                    let fields = &mut self.heap.get_mut(entry)?.fields;
+                    fields.insert("droidless:map-entry:key".into(), vec![key]);
+                    fields.insert("droidless:map-entry:value".into(), vec![value]);
+                    values.push(entry);
+                }
+                self.heap.get_mut(set)?.data = Data::Collection { values, version: 0 };
+                result.push(set);
+            }
             "putAll(Ljava/util/Map;)V" => {
                 let source = arg(1)?;
                 for map in [owner, source] {
@@ -1083,6 +1221,7 @@ impl Runtime {
                             "Ljava/util/HashMap;"
                                 | "Ljava/util/LinkedHashMap;"
                                 | "Ljava/util/WeakHashMap;"
+                                | "Ljava/util/concurrent/ConcurrentHashMap;"
                         ),
                         "unsupported putAll with custom Map implementations or subclass hooks"
                     );

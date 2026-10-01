@@ -4,7 +4,7 @@ use crate::{
     vm::Runtime,
 };
 use anyhow::{Context, Result, bail, ensure};
-use droidless_formats::dex::{Field, Method};
+use droidless_formats::dex::{Annotation, EncodedValue, Field, Method};
 
 pub(crate) fn primitive_wrapper(class: &str) -> Option<&'static str> {
     Some(match class {
@@ -66,6 +66,73 @@ fn class_name(descriptor: &str) -> String {
 }
 
 impl Runtime {
+    fn annotation_value(&mut self, value: &EncodedValue) -> Result<Word> {
+        Ok(match value {
+            EncodedValue::Bits(value) => Word::Bits(*value as u32),
+            EncodedValue::String(value) => self.heap.string(value.clone())?,
+            EncodedValue::Type(value) => self.class_object(value)?,
+            EncodedValue::Null => Word::ZERO,
+            EncodedValue::Field(_) | EncodedValue::Method(_) => {
+                bail!("field/method references are not valid runtime annotation values")
+            }
+            EncodedValue::Enum { class, name } => {
+                let class = self.class_object(class)?;
+                let name = self.heap.string(name.clone())?;
+                *self
+                    .invoke(
+                        Method {
+                            class: "Ljava/lang/Enum;".into(),
+                            name: "valueOf".into(),
+                            parameters: vec![
+                                "Ljava/lang/Class;".into(),
+                                "Ljava/lang/String;".into(),
+                            ],
+                            returns: "Ljava/lang/Enum;".into(),
+                        },
+                        vec![class, name],
+                        false,
+                    )?
+                    .first()
+                    .context("enum valueOf returned no value")?
+            }
+            EncodedValue::Annotation(annotation) => self.reflected_annotation(annotation)?,
+            EncodedValue::Array(values) => {
+                let array = self.array("Ljava/lang/Object;".into(), values.len())?;
+                for (index, value) in values.iter().enumerate() {
+                    let word = self.annotation_value(value)?;
+                    if let Data::Array { values, .. } = &mut self.heap.get_mut(array)?.data {
+                        values[index] = vec![word];
+                    }
+                }
+                array
+            }
+        })
+    }
+
+    fn reflected_annotation(&mut self, annotation: &Annotation) -> Result<Word> {
+        let proxy_class = format!(
+            "Ldroidless/runtime/annotation/{};",
+            annotation
+                .class
+                .trim_start_matches('L')
+                .trim_end_matches(';')
+        );
+        let object = self.heap.instance(&proxy_class)?;
+        let class = self.heap.string(annotation.class.clone())?;
+        self.heap
+            .get_mut(object)?
+            .fields
+            .insert("droidless:annotation:class".into(), vec![class]);
+        for (name, value) in &annotation.values {
+            let value = self.annotation_value(value)?;
+            self.heap
+                .get_mut(object)?
+                .fields
+                .insert(format!("droidless:annotation:value:{name}"), vec![value]);
+        }
+        Ok(object)
+    }
+
     pub(crate) fn primitive_field(&self, field: &Field) -> Option<&'static str> {
         if field.name == "TYPE"
             && field.ty == "Ljava/lang/Class;"
@@ -146,11 +213,132 @@ impl Runtime {
         }
         None
     }
+    fn reflected_method_object(
+        &mut self,
+        method: Method,
+        access: u32,
+        annotations: &[Annotation],
+    ) -> Result<Word> {
+        let object = self.heap.instance("Ljava/lang/reflect/Method;")?;
+        self.heap.get_mut(object)?.data = Data::ReflectedMethod(method.clone());
+        self.heap.get_mut(object)?.fields.insert(
+            "droidless:reflect:modifiers".into(),
+            vec![Word::from(access as i32)],
+        );
+        let parameters = self.array("Ljava/lang/Class;".into(), method.parameters.len())?;
+        for (index, parameter) in method.parameters.iter().enumerate() {
+            let class = self.class_object(parameter)?;
+            if let Data::Array { values, .. } = &mut self.heap.get_mut(parameters)?.data {
+                values[index] = vec![class];
+            }
+        }
+        self.heap
+            .get_mut(object)?
+            .fields
+            .insert("droidless:reflect:parameters".into(), vec![parameters]);
+        let annotations = annotations
+            .iter()
+            .filter(|annotation| annotation.visibility == 1)
+            .map(|annotation| self.reflected_annotation(annotation))
+            .collect::<Result<Vec<_>>>()?;
+        self.heap
+            .get_mut(object)?
+            .fields
+            .insert("droidless:reflect:annotations".into(), annotations);
+        Ok(object)
+    }
+
+    fn reflected_method_access(&self, method: &Method) -> Option<(u32, Vec<Annotation>)> {
+        let (dex, class) = self.class_location(&method.class)?;
+        let definition = &self.apk.dex[dex].classes[class];
+        definition.methods.iter().find_map(|encoded| {
+            (self.apk.dex[dex].methods[encoded.index].signature() == method.signature())
+                .then(|| (encoded.access, encoded.annotations.clone()))
+        })
+    }
+
+    fn annotation_proxy_native(
+        &mut self,
+        method: &Method,
+        args: &[Word],
+    ) -> Result<Option<Vec<Word>>> {
+        let receiver = *args.first().context("annotation receiver missing")?;
+        let argument = |index| {
+            args.get(index)
+                .copied()
+                .context("annotation argument missing")
+        };
+        let signature = method.signature();
+        if signature == "annotationType()Ljava/lang/Class;" {
+            let descriptor = format!(
+                "L{}",
+                method
+                    .class
+                    .trim_start_matches("Ldroidless/runtime/annotation/")
+            );
+            return Ok(Some(vec![self.class_object(&descriptor)?]));
+        }
+        if signature == "equals(Ljava/lang/Object;)Z" {
+            return Ok(Some(vec![Word::from(i32::from(receiver == argument(1)?))]));
+        }
+        if signature == "hashCode()I" {
+            return Ok(Some(vec![Word::from(receiver.reference()? as i32)]));
+        }
+        if signature == "toString()Ljava/lang/String;" {
+            let descriptor = format!(
+                "L{}",
+                method
+                    .class
+                    .trim_start_matches("Ldroidless/runtime/annotation/")
+            );
+            return Ok(Some(vec![
+                self.heap.string(format!("@{}", class_name(&descriptor)))?,
+            ]));
+        }
+        let key = format!("droidless:annotation:value:{}", method.name);
+        if let Some(value) = self
+            .heap
+            .get(receiver)?
+            .fields
+            .get(&key)
+            .and_then(|values| values.first())
+            .copied()
+        {
+            return Ok(Some(vec![value]));
+        }
+        if method.returns == "Lorg/greenrobot/eventbus/ThreadMode;" && method.name == "a" {
+            let class = self.class_object("Lorg/greenrobot/eventbus/ThreadMode;")?;
+            let name = self.heap.string("POSTING".into())?;
+            let value = *self
+                .invoke(
+                    Method {
+                        class: "Ljava/lang/Enum;".into(),
+                        name: "valueOf".into(),
+                        parameters: vec!["Ljava/lang/Class;".into(), "Ljava/lang/String;".into()],
+                        returns: "Ljava/lang/Enum;".into(),
+                    },
+                    vec![class, name],
+                    false,
+                )?
+                .first()
+                .context("enum valueOf returned no value")?;
+            self.heap.get_mut(receiver)?.fields.insert(key, vec![value]);
+            return Ok(Some(vec![value]));
+        }
+        Ok(Some(if method.returns == "V" {
+            vec![]
+        } else {
+            vec![Word::ZERO]
+        }))
+    }
     pub(crate) fn reflection_native(
         &mut self,
         method: &Method,
         args: &[Word],
     ) -> Result<Option<Vec<Word>>> {
+        if method.class.starts_with("Ldroidless/runtime/annotation/") {
+            return self.annotation_proxy_native(method, args);
+        }
         let arg = |n| args.get(n).copied().context("reflection argument missing");
         let mut result = vec![];
         match (method.class.as_str(), method.signature().as_str()) {
@@ -182,6 +370,7 @@ impl Runtime {
                 let class = self.reflected_class(arg(0)?)?;
                 result.push(self.heap.string(class_name(&class))?);
             }
+            ("Ljava/lang/Class;", "desiredAssertionStatus()Z") => result.push(Word::ZERO),
             ("Ljava/lang/Class;", "getSimpleName()Ljava/lang/String;") => {
                 let class = self.reflected_class(arg(0)?)?;
                 let simple = if class.starts_with('[') {
@@ -203,6 +392,51 @@ impl Runtime {
                 };
                 result.push(self.heap.string(simple)?);
             }
+            ("Ljava/lang/Class;", "getSuperclass()Ljava/lang/Class;") => {
+                let class = self.reflected_class(arg(0)?)?;
+                let interface = self.class_location(&class).is_some_and(|(dex, index)| {
+                    self.apk.dex[dex].classes[index].access & 0x200 != 0
+                });
+                result.push(if interface {
+                    Word::ZERO
+                } else if let Some(parent) = self.parent(&class) {
+                    self.class_object(&parent)?
+                } else {
+                    Word::ZERO
+                });
+            }
+            ("Ljava/lang/Class;", "getDeclaredMethods()[Ljava/lang/reflect/Method;") => {
+                let class = self.reflected_class(arg(0)?)?;
+                let methods = self
+                    .class_location(&class)
+                    .map(|(dex, index)| {
+                        self.apk.dex[dex].classes[index]
+                            .methods
+                            .iter()
+                            .filter_map(|encoded| {
+                                let method = self.apk.dex[dex].methods[encoded.index].clone();
+                                (!method.name.starts_with('<')).then_some((
+                                    method,
+                                    encoded.access,
+                                    encoded.annotations.clone(),
+                                ))
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                ensure!(
+                    methods.len() <= 65_536,
+                    "declared method reflection limit reached"
+                );
+                let array = self.array("Ljava/lang/reflect/Method;".into(), methods.len())?;
+                for (index, (method, access, annotations)) in methods.into_iter().enumerate() {
+                    let reflected = self.reflected_method_object(method, access, &annotations)?;
+                    if let Data::Array { values, .. } = &mut self.heap.get_mut(array)?.data {
+                        values[index] = vec![reflected];
+                    }
+                }
+                result.push(array);
+            }
             ("Ljava/lang/Class;", "cast(Ljava/lang/Object;)Ljava/lang/Object;") => {
                 let class = self.reflected_class(arg(0)?)?;
                 let object = arg(1)?;
@@ -213,6 +447,13 @@ impl Runtime {
                     ));
                 }
                 result.push(object);
+            }
+            ("Ljava/lang/Class;", "isAssignableFrom(Ljava/lang/Class;)Z") => {
+                let target = self.reflected_class(arg(0)?)?;
+                let source = self.reflected_class(arg(1)?)?;
+                result.push(Word::from(i32::from(
+                    source == target || self.is_a(&source, &target),
+                )));
             }
             (
                 "Ljava/lang/Class;",
@@ -242,9 +483,71 @@ impl Runtime {
                             ),
                         )
                     })?;
-                let object = self.heap.instance("Ljava/lang/reflect/Method;")?;
-                self.heap.get_mut(object)?.data = Data::ReflectedMethod(reflected);
+                let (access, annotations) =
+                    self.reflected_method_access(&reflected).unwrap_or_default();
+                let object = self.reflected_method_object(reflected, access, &annotations)?;
                 result.push(object);
+            }
+            ("Ljava/lang/reflect/Method;", "getName()Ljava/lang/String;") => {
+                let Data::ReflectedMethod(reflected) = &self.heap.get(arg(0)?)?.data else {
+                    bail!("uninitialized reflected Method")
+                };
+                result.push(self.heap.string(reflected.name.clone())?);
+            }
+            ("Ljava/lang/reflect/Method;", "getModifiers()I") => {
+                let modifiers = self
+                    .heap
+                    .get(arg(0)?)?
+                    .fields
+                    .get("droidless:reflect:modifiers")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO);
+                result.push(modifiers);
+            }
+            ("Ljava/lang/reflect/Method;", "getParameterTypes()[Ljava/lang/Class;") => {
+                let parameters = self
+                    .heap
+                    .get(arg(0)?)?
+                    .fields
+                    .get("droidless:reflect:parameters")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .context("reflected Method has no parameter list")?;
+                result.push(parameters);
+            }
+            ("Ljava/lang/reflect/Method;", "getReturnType()Ljava/lang/Class;") => {
+                let Data::ReflectedMethod(reflected) = &self.heap.get(arg(0)?)?.data else {
+                    bail!("uninitialized reflected Method")
+                };
+                let returns = reflected.returns.clone();
+                result.push(self.class_object(&returns)?);
+            }
+            (
+                "Ljava/lang/reflect/Method;",
+                "getAnnotation(Ljava/lang/Class;)Ljava/lang/annotation/Annotation;",
+            ) => {
+                let requested = self.reflected_class(arg(1)?)?;
+                let annotations = self
+                    .heap
+                    .get(arg(0)?)?
+                    .fields
+                    .get("droidless:reflect:annotations")
+                    .cloned()
+                    .unwrap_or_default();
+                let annotation = annotations
+                    .into_iter()
+                    .find(|annotation| {
+                        self.heap
+                            .get(*annotation)
+                            .ok()
+                            .and_then(|object| object.fields.get("droidless:annotation:class"))
+                            .and_then(|values| values.first())
+                            .and_then(|value| self.heap.text(*value).ok())
+                            == Some(requested.as_str())
+                    })
+                    .unwrap_or(Word::ZERO);
+                result.push(annotation);
             }
             // Class overrides Object.toString; falling through would expose a wrong handle string.
             ("Ljava/lang/Class;", "toString()Ljava/lang/String;") => {

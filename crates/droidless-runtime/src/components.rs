@@ -72,11 +72,11 @@ impl Runtime {
             words.len() == crate::heap::default_value(&ty).len(),
             "invalid Bundle value width"
         );
-        if ty == "Ljava/lang/String;" {
+        if ty.starts_with(['L', '[']) {
             if words[0] != Word::ZERO {
                 ensure!(
-                    self.heap.get(words[0])?.class == ty,
-                    "Bundle expects String"
+                    self.is_a(&self.heap.get(words[0])?.class, &ty),
+                    "Bundle value has the wrong type"
                 );
             }
         } else {
@@ -288,6 +288,7 @@ impl Runtime {
                     "putFloat(Ljava/lang/String;F)V",
                     "putDouble(Ljava/lang/String;D)V",
                     "putBoolean(Ljava/lang/String;Z)V",
+                    "putSerializable(Ljava/lang/String;Ljava/io/Serializable;)V",
                 ]
                 .contains(&sig) =>
             {
@@ -313,6 +314,7 @@ impl Runtime {
                     "getDouble(Ljava/lang/String;D)D",
                     "getBoolean(Ljava/lang/String;)Z",
                     "getBoolean(Ljava/lang/String;Z)Z",
+                    "getSerializable(Ljava/lang/String;)Ljava/io/Serializable;",
                 ]
                 .contains(&sig) =>
             {
@@ -331,6 +333,18 @@ impl Runtime {
                 result.push(Word::from(i32::from(
                     values.contains_key(self.heap.text(arg(1)?)?),
                 )));
+            }
+            ("Landroid/os/Bundle;", "get(Ljava/lang/String;)Ljava/lang/Object;") => {
+                let Data::Bundle(values) = &self.heap.get(receiver)?.data else {
+                    bail!("expected Bundle")
+                };
+                result.push(
+                    values
+                        .get(self.heap.text(arg(1)?)?)
+                        .and_then(|(_, words)| words.first())
+                        .copied()
+                        .unwrap_or(Word::ZERO),
+                );
             }
             ("Landroid/os/Bundle;", "remove(Ljava/lang/String;)V") => {
                 let key = self.heap.text(arg(1)?)?.to_owned();
@@ -505,6 +519,7 @@ impl Runtime {
                     "putExtra(Ljava/lang/String;F)Landroid/content/Intent;",
                     "putExtra(Ljava/lang/String;D)Landroid/content/Intent;",
                     "putExtra(Ljava/lang/String;Z)Landroid/content/Intent;",
+                    "putExtra(Ljava/lang/String;Ljava/io/Serializable;)Landroid/content/Intent;",
                 ]
                 .contains(&sig) =>
             {
@@ -526,6 +541,7 @@ impl Runtime {
                     "getFloatExtra(Ljava/lang/String;F)F",
                     "getDoubleExtra(Ljava/lang/String;D)D",
                     "getBooleanExtra(Ljava/lang/String;Z)Z",
+                    "getSerializableExtra(Ljava/lang/String;)Ljava/io/Serializable;",
                 ]
                 .contains(&sig) =>
             {
@@ -595,6 +611,22 @@ impl Runtime {
                         .insert("extras".into(), vec![extras]);
                 }
                 self.queue_navigation(Navigation::Start(copy))?;
+            }
+            ("Landroid/app/Activity;", "startActivityForResult(Landroid/content/Intent;I)V")
+            | (
+                "Landroid/app/Activity;",
+                "startActivityForResult(Landroid/content/Intent;ILandroid/os/Bundle;)V",
+            ) => {
+                self.invoke(
+                    Method {
+                        class: "Landroid/content/Context;".into(),
+                        name: "startActivity".into(),
+                        parameters: vec!["Landroid/content/Intent;".into()],
+                        returns: "V".into(),
+                    },
+                    vec![receiver, arg(1)?],
+                    false,
+                )?;
             }
             ("Landroid/app/Activity;", "getIntent()Landroid/content/Intent;") => {
                 result.push(self.screen(receiver)?.intent);

@@ -41,8 +41,25 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/Integer;",
             "Ljava/lang/Long;",
             "Ljava/lang/Number;",
+            "Ljava/lang/Math;",
             "Ljava/lang/Thread;",
+            "Ljava/lang/ThreadLocal;",
+            "Ljava/util/Date;",
+            "Ljava/util/Locale;",
+            "Ljava/util/ResourceBundle;",
+            "Ljava/util/ListResourceBundle;",
+            "Ljava/util/BitSet;",
+            "Ljava/util/concurrent/Executors;",
+            "Ljava/util/concurrent/Executor;",
+            "Ljava/util/concurrent/ExecutorService;",
+            "Ljava/util/concurrent/ThreadPoolExecutor;",
+            "Ljava/util/concurrent/ConcurrentHashMap;",
+            "Landroid/animation/Animator;",
+            "Landroid/animation/ObjectAnimator;",
+            "Landroid/animation/StateListAnimator;",
             "Ljava/lang/ThreadGroup;",
+            "Landroid/view/animation/Animation;",
+            "Landroid/view/animation/AnimationUtils;",
             "Landroid/view/animation/AccelerateDecelerateInterpolator;",
             "Landroid/view/animation/AccelerateInterpolator;",
             "Landroid/view/animation/DecelerateInterpolator;",
@@ -94,12 +111,19 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/content/res/AssetManager;",
             "Landroid/content/res/Resources$Theme;",
             "Landroid/content/res/Configuration;",
+            "Landroid/content/ContextWrapper;",
             "Landroid/content/res/TypedArray;",
             "Landroid/util/TypedValue;",
             "Landroid/util/Log;",
             "Landroid/content/res/ColorStateList;",
             "Landroid/graphics/drawable/Drawable;",
+            "Landroid/graphics/drawable/Drawable$ConstantState;",
+            "Landroid/graphics/drawable/Drawable$Callback;",
             "Landroid/graphics/drawable/ColorDrawable;",
+            "Landroid/graphics/drawable/GradientDrawable;",
+            "Landroid/graphics/drawable/LayerDrawable;",
+            "Landroid/graphics/drawable/RippleDrawable;",
+            "Landroid/graphics/drawable/InsetDrawable;",
             "Landroid/util/DisplayMetrics;",
             "Landroid/util/SparseArray;",
             "Landroid/util/SparseIntArray;",
@@ -114,7 +138,13 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/widget/OverScroller;",
             "Landroid/view/Window;",
             "Landroid/view/ViewTreeObserver;",
+            "Landroid/view/ViewOutlineProvider;",
+            "Landroid/text/TextUtils$TruncateAt;",
             "Landroid/view/WindowManager$LayoutParams;",
+            "Landroid/view/ViewGroup$LayoutParams;",
+            "Landroid/view/ViewGroup$MarginLayoutParams;",
+            "Landroid/widget/LinearLayout$LayoutParams;",
+            "Landroid/widget/FrameLayout$LayoutParams;",
             "Landroid/view/View$AccessibilityDelegate;",
             "Landroid/view/LayoutInflater;",
             "Landroid/view/LayoutInflater$Factory;",
@@ -241,6 +271,47 @@ impl Runtime {
             && field.name == "SDK_INT"
             && self.class_location(&field.class).is_none()
     }
+    pub(crate) fn view_outline_provider_field(&self, field: &Field) -> bool {
+        field.class == "Landroid/view/ViewOutlineProvider;"
+            && field.name == "BOUNDS"
+            && field.ty == "Landroid/view/ViewOutlineProvider;"
+            && self.class_location(&field.class).is_none()
+    }
+    pub(crate) fn text_truncate_at_field(&self, field: &Field) -> bool {
+        field.class == "Landroid/text/TextUtils$TruncateAt;"
+            && field.ty == field.class
+            && ["START", "MIDDLE", "END", "MARQUEE", "END_SMALL"].contains(&field.name.as_str())
+            && self.class_location(&field.class).is_none()
+    }
+    pub(crate) fn text_truncate_at_object(&mut self, field: &Field) -> Result<Word> {
+        let key = field.key();
+        if let Some(value) = self.statics.get(&key).and_then(|values| values.first()) {
+            return Ok(*value);
+        }
+        let value = self.heap.instance(&field.class)?;
+        let name = self.intern(field.name.clone())?;
+        let ordinal = ["START", "MIDDLE", "END", "MARQUEE", "END_SMALL"]
+            .iter()
+            .position(|name| *name == field.name)
+            .context("unknown TextUtils.TruncateAt value")?;
+        let fields = &mut self.heap.get_mut(value)?.fields;
+        fields.insert("droidless:enum:name".into(), vec![name]);
+        fields.insert(
+            "droidless:enum:ordinal".into(),
+            vec![Word::from(ordinal as i32)],
+        );
+        self.statics.insert(key, vec![value]);
+        Ok(value)
+    }
+    pub(crate) fn view_outline_provider_object(&mut self, field: &Field) -> Result<Word> {
+        let key = field.key();
+        if let Some(value) = self.statics.get(&key).and_then(|values| values.first()) {
+            return Ok(*value);
+        }
+        let value = self.heap.instance(&field.class)?;
+        self.statics.insert(key, vec![value]);
+        Ok(value)
+    }
     pub(crate) fn porter_duff_mode(&mut self, name: &str) -> Result<Word> {
         let ordinal = porter_duff_mode_ordinal(name)
             .with_context(|| format!("unknown PorterDuff mode {name}"))?;
@@ -318,6 +389,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.time_unit_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.thread_local_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.system_services_native(method, args)? {
@@ -623,10 +697,518 @@ impl Runtime {
                         .context("uninitialized ColorDrawable")?,
                 );
             }
+            ("Landroid/graphics/drawable/GradientDrawable;", "<init>()V") => {
+                self.heap.get(receiver)?;
+            }
+            ("Landroid/graphics/drawable/LayerDrawable;", "<init>([Landroid/graphics/drawable/Drawable;)V") => {
+                let layers = arg(1)?;
+                ensure!(matches!(self.heap.get(layers)?.data, Data::Array { .. }), "LayerDrawable layers must be an array");
+                self.heap.get_mut(receiver)?.fields.insert("droidless:drawable:layers".into(), vec![layers]);
+            }
+            ("Landroid/graphics/drawable/RippleDrawable;", "<init>(Landroid/content/res/ColorStateList;Landroid/graphics/drawable/Drawable;Landroid/graphics/drawable/Drawable;)V") => {
+                for (field, value) in [
+                    ("droidless:drawable:ripple-color", arg(1)?),
+                    ("droidless:drawable:ripple-content", arg(2)?),
+                    ("droidless:drawable:ripple-mask", arg(3)?),
+                ] {
+                    if value != Word::ZERO { self.heap.get(value)?; }
+                    self.heap.get_mut(receiver)?.fields.insert(field.into(), vec![value]);
+                }
+            }
+            ("Landroid/graphics/drawable/InsetDrawable;", "<init>(Landroid/graphics/drawable/Drawable;IIII)V") => {
+                let drawable = arg(1)?;
+                self.heap.get(drawable)?;
+                self.heap.get_mut(receiver)?.fields.insert("droidless:drawable:inset-content".into(), vec![drawable]);
+            }
+            ("Landroid/animation/StateListAnimator;", "<init>()V") => {
+                self.heap.get(receiver)?;
+            }
+            ("Ljava/util/BitSet;", "<init>(I)V") => {
+                let size = arg(1)?.int()?;
+                if size < 0 { return Err(fault("Ljava/lang/NegativeArraySizeException;", size.to_string())); }
+                ensure!(size <= 1_000_000, "BitSet size limit reached");
+                self.heap.get_mut(receiver)?.fields.insert("droidless:bitset:values".into(), vec![Word::ZERO; size as usize]);
+            }
+            ("Ljava/util/BitSet;", "set(IZ)V") => {
+                let index = arg(1)?.int()?;
+                if index < 0 { return Err(fault("Ljava/lang/IndexOutOfBoundsException;", index.to_string())); }
+                ensure!(index < 1_000_000, "BitSet size limit reached");
+                let value = Word::from(i32::from(arg(2)?.truth()));
+                let values = self.heap.get_mut(receiver)?.fields.entry("droidless:bitset:values".into()).or_default();
+                values.resize(values.len().max(index as usize + 1), Word::ZERO);
+                values[index as usize] = value;
+            }
+            ("Ljava/util/BitSet;", "set(IIZ)V") => {
+                let from = arg(1)?.int()?;
+                let to = arg(2)?.int()?;
+                if from < 0 || to < from { return Err(fault("Ljava/lang/IndexOutOfBoundsException;", format!("{from}..{to}"))); }
+                ensure!(to <= 1_000_000, "BitSet size limit reached");
+                let value = Word::from(i32::from(arg(3)?.truth()));
+                let values = self.heap.get_mut(receiver)?.fields.entry("droidless:bitset:values".into()).or_default();
+                values.resize(values.len().max(to as usize), Word::ZERO);
+                values[from as usize..to as usize].fill(value);
+            }
+            ("Ljava/util/BitSet;", "clear()V") => {
+                if let Some(values) = self.heap.get_mut(receiver)?.fields.get_mut("droidless:bitset:values") { values.fill(Word::ZERO); }
+            }
+            ("Ljava/util/BitSet;", "clear(I)V") => {
+                let index = arg(1)?.int()?;
+                if index < 0 { return Err(fault("Ljava/lang/IndexOutOfBoundsException;", index.to_string())); }
+                if let Some(value) = self.heap.get_mut(receiver)?.fields.get_mut("droidless:bitset:values").and_then(|values| values.get_mut(index as usize)) { *value = Word::ZERO; }
+            }
+            ("Ljava/util/BitSet;", "get(I)Z") => {
+                let index = arg(1)?.int()?;
+                if index < 0 { return Err(fault("Ljava/lang/IndexOutOfBoundsException;", index.to_string())); }
+                let set = self.heap.get(receiver)?.fields.get("droidless:bitset:values").and_then(|values| values.get(index as usize)).is_some_and(|value| value.truth());
+                result.push(Word::from(i32::from(set)));
+            }
+            ("Ljava/util/BitSet;", "isEmpty()Z") => {
+                let empty = self.heap.get(receiver)?.fields.get("droidless:bitset:values").is_none_or(|values| values.iter().all(|value| !value.truth()));
+                result.push(Word::from(i32::from(empty)));
+            }
+            ("Ljava/util/Date;", "<init>()V") => {
+                let now = self.invoke(Method { class: "Ljava/lang/System;".into(), name: "currentTimeMillis".into(), parameters: vec![], returns: "J".into() }, vec![], false)?;
+                self.heap.get_mut(receiver)?.fields.insert("droidless:date:time".into(), now);
+            }
+            ("Ljava/util/Date;", "<init>(J)V" | "setTime(J)V") => {
+                let millis = args.get(1..3).context("Date timestamp missing")?.to_vec();
+                self.heap.get_mut(receiver)?.fields.insert("droidless:date:time".into(), millis);
+            }
+            ("Ljava/util/Date;", "getTime()J") => {
+                let time = self.heap.get(receiver)?.fields.get("droidless:date:time").cloned().unwrap_or_else(|| wide(0));
+                result.extend(time);
+            }
+            ("Ljava/util/Date;", "before(Ljava/util/Date;)Z")
+            | ("Ljava/util/Date;", "after(Ljava/util/Date;)Z")
+            | ("Ljava/util/Date;", "compareTo(Ljava/util/Date;)I") => {
+                let left = self.heap.get(receiver)?.fields.get("droidless:date:time").cloned().unwrap_or_else(|| wide(0));
+                let right = self.heap.get(arg(1)?)?.fields.get("droidless:date:time").cloned().unwrap_or_else(|| wide(0));
+                let comparison = crate::heap::bits64(&left)?.cmp(&crate::heap::bits64(&right)?);
+                result.push(Word::from(if method.name == "before" { i32::from(comparison.is_lt()) } else if method.name == "after" { i32::from(comparison.is_gt()) } else { comparison as i32 }));
+            }
+            ("Ljava/util/concurrent/Executors;", "newCachedThreadPool()Ljava/util/concurrent/ExecutorService;") => {
+                result.push(self.heap.instance("Ljava/util/concurrent/ThreadPoolExecutor;")?);
+            }
+            ("Ljava/util/concurrent/Executor;", "execute(Ljava/lang/Runnable;)V") => {
+                // ponytail: cached-pool tasks run in caller order; add worker scheduling when an APK depends on concurrency.
+                self.invoke(
+                    Method { class: "Ljava/lang/Runnable;".into(), name: "run".into(), parameters: vec![], returns: "V".into() },
+                    vec![arg(1)?],
+                    true,
+                )?;
+            }
+            ("Ljava/util/concurrent/ExecutorService;", "shutdown()V") => { self.heap.get(receiver)?; }
+            ("Ljava/util/concurrent/ExecutorService;", "shutdownNow()Ljava/util/List;") => {
+                result.push(self.heap.instance("Ljava/util/ArrayList;")?);
+            }
+            ("Ljava/util/concurrent/ExecutorService;", "isShutdown()Z" | "isTerminated()Z") => { result.push(Word::ZERO); }
+            ("Ljava/util/concurrent/ExecutorService;", "awaitTermination(JLjava/util/concurrent/TimeUnit;)Z") => { result.push(Word::from(1)); }
+            ("Landroid/animation/StateListAnimator;", "addState([ILandroid/animation/Animator;)V") => {
+                let state = arg(1)?;
+                let animator = arg(2)?;
+                self.heap.get(state)?;
+                self.heap.get(animator)?;
+                let fields = &mut self.heap.get_mut(receiver)?.fields;
+                fields.entry("droidless:animation:states".into()).or_default().extend([state, animator]);
+            }
+            ("Landroid/animation/ObjectAnimator;", "ofFloat(Ljava/lang/Object;Ljava/lang/String;[F)Landroid/animation/ObjectAnimator;") => {
+                let target = arg(0)?;
+                let property = arg(1)?;
+                let values = arg(2)?;
+                self.heap.get(target)?;
+                self.heap.text(property)?;
+                self.heap.get(values)?;
+                let animator = self.heap.instance("Landroid/animation/ObjectAnimator;")?;
+                let fields = &mut self.heap.get_mut(animator)?.fields;
+                fields.insert("droidless:animation:target".into(), vec![target]);
+                fields.insert("droidless:animation:property".into(), vec![property]);
+                fields.insert("droidless:animation:values".into(), vec![values]);
+                result.push(animator);
+            }
+            ("Landroid/animation/Animator;", "setInterpolator(Landroid/animation/TimeInterpolator;)V") => {
+                let interpolator = arg(1)?;
+                self.heap.get(interpolator)?;
+                self.heap.get_mut(receiver)?.fields.insert("droidless:animation:interpolator".into(), vec![interpolator]);
+            }
+            ("Landroid/graphics/drawable/GradientDrawable;", "setShape(I)V") => {
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:drawable:shape".into(), vec![arg(1)?]);
+            }
+            ("Landroid/graphics/drawable/GradientDrawable;", "setColor(I)V") => {
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("color".into(), vec![arg(1)?]);
+            }
+            ("Landroid/graphics/drawable/GradientDrawable;", "setCornerRadius(F)V") => {
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:drawable:corner-radius".into(), vec![arg(1)?]);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "<init>()V") => {
+                self.heap.get(receiver)?;
+            }
+            ("Landroid/graphics/drawable/Drawable$ConstantState;", "<init>()V") => {
+                self.heap.get(receiver)?;
+            }
+            ("Landroid/graphics/drawable/Drawable;", "mutate()Landroid/graphics/drawable/Drawable;") => {
+                self.heap.get(receiver)?;
+                result.push(receiver);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "setCallback(Landroid/graphics/drawable/Drawable$Callback;)V") => {
+                let callback = arg(1)?;
+                if callback != Word::ZERO {
+                    self.heap.get(callback)?;
+                }
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:drawable:callback".into(), vec![callback]);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "isVisible()Z") => {
+                let visible = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:drawable:visible")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::from(1));
+                result.push(visible);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "setVisible(ZZ)Z") => {
+                let visible = arg(1)?;
+                let previous = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:drawable:visible")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::from(1));
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:drawable:visible".into(), vec![visible]);
+                result.push(Word::from(i32::from(previous != visible)));
+            }
+            ("Landroid/graphics/drawable/Drawable;", "getState()[I") => {
+                let state = if let Some(state) = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:drawable:state")
+                    .and_then(|values| values.first())
+                    .copied()
+                {
+                    state
+                } else {
+                    let state = self.array("I".into(), 0)?;
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert("droidless:drawable:state".into(), vec![state]);
+                    state
+                };
+                result.push(state);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "setState([I)Z") => {
+                let state = arg(1)?;
+                let next = match &self.heap.get(state)?.data {
+                    Data::Array { element, values } if element == "I" => values,
+                    _ => bail!("Drawable state must be an int array"),
+                };
+                let previous = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:drawable:state")
+                    .and_then(|values| values.first())
+                    .copied();
+                let changed = if let Some(previous) = previous {
+                    match &self.heap.get(previous)?.data {
+                        Data::Array { element, values } if element == "I" => values != next,
+                        _ => bail!("stored Drawable state is not an int array"),
+                    }
+                } else {
+                    !next.is_empty()
+                };
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:drawable:state".into(), vec![state]);
+                result.push(Word::from(i32::from(changed)));
+            }
+            ("Landroid/graphics/drawable/Drawable;", "getLevel()I") => {
+                let level = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:drawable:level")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO);
+                result.push(level);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "setLevel(I)Z") => {
+                let level = arg(1)?;
+                let previous = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:drawable:level")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO);
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:drawable:level".into(), vec![level]);
+                result.push(Word::from(i32::from(previous != level)));
+            }
+            ("Landroid/graphics/drawable/Drawable;", "getBounds()Landroid/graphics/Rect;") => {
+                let bounds = if let Some(bounds) = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:drawable:bounds")
+                    .and_then(|values| values.first())
+                    .copied()
+                {
+                    bounds
+                } else {
+                    let bounds = self.heap.instance("Landroid/graphics/Rect;")?;
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert("droidless:drawable:bounds".into(), vec![bounds]);
+                    bounds
+                };
+                result.push(bounds);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "setBounds(Landroid/graphics/Rect;)V") => {
+                let bounds = arg(1)?;
+                self.heap.get(bounds)?;
+                let copy = self.heap.get(bounds)?.fields.clone();
+                let stored = if let Some(stored) = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:drawable:bounds")
+                    .and_then(|values| values.first())
+                    .copied()
+                {
+                    stored
+                } else {
+                    self.heap.instance("Landroid/graphics/Rect;")?
+                };
+                self.heap.get_mut(stored)?.fields = copy;
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:drawable:bounds".into(), vec![stored]);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "setBounds(IIII)V") => {
+                let bounds = self.heap.instance("Landroid/graphics/Rect;")?;
+                let fields = &mut self.heap.get_mut(bounds)?.fields;
+                for (name, value) in ["left", "top", "right", "bottom"]
+                    .into_iter()
+                    .zip(args.iter().skip(1).copied())
+                {
+                    fields.insert(name.into(), vec![value]);
+                }
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:drawable:bounds".into(), vec![bounds]);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "getConstantState()Landroid/graphics/drawable/Drawable$ConstantState;") => {
+                result.push(Word::ZERO);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "invalidateSelf()V") => {
+                self.heap.get(receiver)?;
+            }
+            ("Landroid/graphics/drawable/Drawable;", "clearColorFilter()V") => {
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .remove("droidless:drawable:color-filter");
+            }
+            ("Landroid/graphics/drawable/Drawable;", "setColorFilter(ILandroid/graphics/PorterDuff$Mode;)V") => {
+                self.heap.get(receiver)?;
+                self.heap.get(arg(2)?)?;
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:drawable:color-filter".into(), vec![arg(1)?, arg(2)?]);
+            }
+            ("Landroid/graphics/drawable/Drawable;", "setColorFilter(Landroid/graphics/ColorFilter;)V") => {
+                let filter = arg(1)?;
+                if filter != Word::ZERO {
+                    self.heap.get(filter)?;
+                }
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:drawable:color-filter".into(), vec![filter]);
+            }
+            ("Landroid/content/res/ColorStateList;", "getDefaultColor()I") => {
+                let fields = &self.heap.get(receiver)?.fields;
+                if let Some(color) = fields.get("droidless:color-state-list:default").and_then(|values| values.first()) {
+                    result.push(*color);
+                } else {
+                    let resource = fields
+                    .get("resourceId")
+                    .and_then(|values| values.first())
+                    .context("ColorStateList has no resource ID")?
+                    .int()? as u32;
+                    result.push(Word::from(self.apk.resources.resolve(resource)?.data as i32));
+                }
+            }
+            ("Landroid/content/res/ColorStateList;", "getColorForState([II)I") => {
+                let state = arg(1)?;
+                self.heap.get(state)?;
+                let fields = &self.heap.get(receiver)?.fields;
+                let color = if let Some(color) = fields.get("droidless:color-state-list:default").and_then(|values| values.first()) {
+                    *color
+                } else {
+                let resource = fields
+                    .get("resourceId")
+                    .and_then(|values| values.first())
+                    .map(|value| value.int())
+                    .transpose()?;
+                if let Some(resource) = resource {
+                    Word::from(self.apk.resources.resolve(resource as u32).map_or(arg(2)?.int()?, |value| value.data as i32))
+                } else {
+                    arg(2)?
+                }
+                };
+                result.push(color);
+            }
+            ("Landroid/content/res/ColorStateList;", "isStateful()Z") => {
+                result.push(Word::ZERO);
+            }
+            ("Landroid/content/res/ColorStateList;", "valueOf(I)Landroid/content/res/ColorStateList;") => {
+                let color_list = self.heap.instance("Landroid/content/res/ColorStateList;")?;
+                self.heap.get_mut(color_list)?.fields.insert("droidless:color-state-list:default".into(), vec![arg(0)?]);
+                result.push(color_list);
+            }
             ("Landroid/util/Log;", "isLoggable(Ljava/lang/String;I)Z") => {
                 self.heap.text(arg(0)?)?;
                 arg(1)?.int()?;
                 result.push(Word::ZERO);
+            }
+            ("Ljava/util/ResourceBundle;", "getBundle(Ljava/lang/String;Ljava/util/Locale;)Ljava/util/ResourceBundle;") => {
+                let base = self.heap.text(arg(0)?)?.replace('.', "/");
+                let locale = self.heap.get(arg(1)?)?;
+                let language = locale
+                    .fields
+                    .get("droidless:locale:language")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .map(|value| self.heap.text(value))
+                    .transpose()?
+                    .unwrap_or("");
+                let country = locale
+                    .fields
+                    .get("droidless:locale:country")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .map(|value| self.heap.text(value))
+                    .transpose()?
+                    .unwrap_or("");
+                let candidates = [
+                    (!language.is_empty() && !country.is_empty())
+                        .then(|| format!("L{base}_{language}_{country};")),
+                    (!language.is_empty()).then(|| format!("L{base}_{language};")),
+                    Some(format!("L{base};")),
+                ];
+                let class = candidates
+                    .into_iter()
+                    .flatten()
+                    .find(|candidate| self.class_location(candidate).is_some())
+                    .context("ResourceBundle class not found")?;
+                let bundle = self.new_instance(&class)?;
+                self.invoke(
+                    Method {
+                        class,
+                        name: "<init>".into(),
+                        parameters: vec![],
+                        returns: "V".into(),
+                    },
+                    vec![bundle],
+                    false,
+                )?;
+                result.push(bundle);
+            }
+            ("Ljava/util/ResourceBundle;", "getString(Ljava/lang/String;)Ljava/lang/String;") => {
+                let key = arg(1)?;
+                let Some(value) = resource_bundle_object(self, receiver, key)? else {
+                    return Err(fault(
+                        "Ljava/util/MissingResourceException;",
+                        format!("resource bundle key {:?} was not found", self.heap.text(key)?),
+                    ));
+                };
+                self.heap.text(value).map_err(|_| {
+                    fault(
+                        "Ljava/lang/ClassCastException;",
+                        "resource bundle value is not a String",
+                    )
+                })?;
+                result.push(value);
+            }
+            ("Ljava/util/ResourceBundle;", "containsKey(Ljava/lang/String;)Z") => {
+                result.push(Word::from(i32::from(
+                    resource_bundle_object(self, receiver, arg(1)?)?.is_some(),
+                )));
+            }
+            ("Ljava/util/ListResourceBundle;", "<init>()V")
+            | ("Ljava/util/ResourceBundle;", "<init>()V") => {}
+            ("Ljava/util/Locale;", "getDefault()Ljava/util/Locale;") => {
+                let key = "droidless:locale:default";
+                let locale = if let Some(locale) = self.statics.get(key).and_then(|v| v.first()) {
+                    *locale
+                } else {
+                    let locale = self.heap.instance("Ljava/util/Locale;")?;
+                    for (field, value) in [("language", "en"), ("country", "US"), ("variant", "")] {
+                        let value = self.heap.string(value.into())?;
+                        self.heap.get_mut(locale)?.fields.insert(
+                            format!("droidless:locale:{field}"),
+                            vec![value],
+                        );
+                    }
+                    self.statics.insert(key.into(), vec![locale]);
+                    locale
+                };
+                result.push(locale);
+            }
+            ("Ljava/util/Locale;", "getLanguage()Ljava/lang/String;")
+            | ("Ljava/util/Locale;", "getCountry()Ljava/lang/String;")
+            | ("Ljava/util/Locale;", "getVariant()Ljava/lang/String;") => {
+                let field = match method.name.as_str() {
+                    "getLanguage" => "language",
+                    "getCountry" => "country",
+                    _ => "variant",
+                };
+                result.push(
+                    *self
+                        .heap
+                        .get(receiver)?
+                        .fields
+                        .get(&format!("droidless:locale:{field}"))
+                        .and_then(|v| v.first())
+                        .context("uninitialized Locale")?,
+                );
+            }
+            ("Ljava/util/Locale;", "toString()Ljava/lang/String;") => {
+                let language = self.heap.get(receiver)?.fields.get("droidless:locale:language").and_then(|v| v.first()).copied().context("uninitialized Locale")?;
+                let country = self.heap.get(receiver)?.fields.get("droidless:locale:country").and_then(|v| v.first()).copied().context("uninitialized Locale")?;
+                let language = self.heap.text(language)?;
+                let country = self.heap.text(country)?;
+                result.push(self.heap.string(if country.is_empty() { language.into() } else { format!("{language}_{country}") })?);
             }
             ("Ljava/lang/String;", "toString()Ljava/lang/String;") => {
                 self.heap.text(receiver)?;
@@ -739,10 +1321,24 @@ impl Runtime {
                     })?;
                 result.push(Word::Bits(u32::from(c)));
             }
+            ("Ljava/lang/String;", "toCharArray()[C") => {
+                let values = self.heap.text(receiver)?.encode_utf16().collect::<Vec<_>>();
+                let array = self.array("C".into(), values.len())?;
+                if let Data::Array { values: target, .. } = &mut self.heap.get_mut(array)?.data {
+                    for (slot, value) in target.iter_mut().zip(values) {
+                        slot[0] = Word::Bits(u32::from(value));
+                    }
+                }
+                result.push(array);
+            }
             ("Ljava/lang/String;", "valueOf(I)Ljava/lang/String;")
             | ("Ljava/lang/Integer;", "toString(I)Ljava/lang/String;") => {
                 let s = arg(0)?.int()?.to_string();
                 result.push(self.heap.string(s)?);
+            }
+            ("Ljava/lang/String;", "valueOf(J)Ljava/lang/String;")
+            | ("Ljava/lang/Long;", "toString(J)Ljava/lang/String;") => {
+                result.push(self.heap.string((bits64(args)? as i64).to_string())?);
             }
             ("Ljava/lang/Integer;", "valueOf(I)Ljava/lang/Integer;") => {
                 let value = arg(0)?;
@@ -826,6 +1422,26 @@ impl Runtime {
                         .and_then(|values| values.first())
                         .context("uninitialized Integer")?,
                 );
+            }
+            ("Ljava/lang/Number;", "intValue()I") => {
+                let object = self.heap.get(receiver)?;
+                let value = object
+                    .fields
+                    .get("value")
+                    .context("uninitialized Number")?;
+                let value = match object.class.as_str() {
+                    "Ljava/lang/Byte;"
+                    | "Ljava/lang/Character;"
+                    | "Ljava/lang/Short;"
+                    | "Ljava/lang/Integer;" => value[0].int()?,
+                    "Ljava/lang/Long;" => bits64(value)? as i64 as i32,
+                    "Ljava/lang/Float;" => {
+                        f32::from_bits(value[0].int()? as u32) as i32
+                    }
+                    "Ljava/lang/Double;" => f64::from_bits(bits64(value)?) as i32,
+                    class => bail!("unsupported Number subclass {class}"),
+                };
+                result.push(Word::from(value));
             }
             ("Ljava/lang/Integer;", "equals(Ljava/lang/Object;)Z") => {
                 let other = arg(1)?;
@@ -972,9 +1588,6 @@ impl Runtime {
             | ("Ljava/lang/Double;", "hashCode()I") => {
                 bail!("unsupported Double method {}", method.key());
             }
-            ("Ljava/lang/Long;", "toString(J)Ljava/lang/String;") => {
-                result.push(self.heap.string((bits64(args)? as i64).to_string())?);
-            }
             ("Ljava/lang/Double;", "parseDouble(Ljava/lang/String;)D") => {
                 let value = self
                     .heap
@@ -1006,6 +1619,12 @@ impl Runtime {
                 result.push(Word::from(value));
             }
             ("Ljava/lang/StringBuilder;", "<init>()V") => {
+                self.heap.get_mut(receiver)?.data = Data::Builder(String::new())
+            }
+            ("Ljava/lang/StringBuilder;", "<init>(I)V") => {
+                let capacity = arg(1)?.int()?;
+                if capacity < 0 { return Err(fault("Ljava/lang/NegativeArraySizeException;", capacity.to_string())); }
+                ensure!(capacity <= 1_048_576, "StringBuilder capacity limit reached");
                 self.heap.get_mut(receiver)?.data = Data::Builder(String::new())
             }
             ("Ljava/lang/StringBuilder;", "<init>(Ljava/lang/String;)V") => {
@@ -1103,6 +1722,9 @@ impl Runtime {
                     _ => x.powf(f64::from_bits(bits64(&args[2..])?)),
                 };
                 result = wide(value.to_bits());
+            }
+            ("Ljava/lang/Math;", "abs(J)J") => {
+                result = wide((bits64(args)? as i64).wrapping_abs() as u64);
             }
             ("Landroid/app/Activity;", "<init>()V")
             | ("Landroid/app/Application;", "<init>()V") => {
@@ -1485,9 +2107,48 @@ impl Runtime {
                 let value = self.apk.resources.resolve(arg(1)?.int()? as u32)?;
                 result.push(Word::from(i32::from(value.data != 0)));
             }
+            ("Landroid/content/res/Resources;", "getColor(I)I")
+            | ("Landroid/content/res/Resources;", "getColor(ILandroid/content/res/Resources$Theme;)I")
+            | ("Landroid/content/Context;", "getColor(I)I") => {
+                let value = self.apk.resources.resolve(arg(1)?.int()? as u32)?;
+                ensure!((0x1c..=0x1f).contains(&value.kind), "resource is not a color");
+                result.push(Word::from(value.data as i32));
+            }
+            ("Landroid/content/res/Resources;", "getInteger(I)I") => {
+                let id = arg(1)?.int()? as u32;
+                let value = match id {
+                    0x010e0000 => 200,
+                    0x010e0001 => 400,
+                    0x010e0002 => 500,
+                    _ => {
+                        let value = self.apk.resources.resolve(id)?;
+                        ensure!(
+                            [0x10, 0x11].contains(&value.kind),
+                            "resource is not an integer"
+                        );
+                        value.data as i32
+                    }
+                };
+                result.push(Word::from(value));
+            }
             ("Landroid/content/res/Resources;", "getDimensionPixelOffset(I)I") => {
                 let value = self.apk.resources.resolve(arg(1)?.int()? as u32)?;
                 result.push(Word::from(dimension(value)?.trunc() as i32));
+            }
+            ("Landroid/content/res/Resources;", "getDimension(I)F") => {
+                let value = self.apk.resources.resolve(arg(1)?.int()? as u32)?;
+                result.push(Word::Bits(dimension(value)?.to_bits()));
+            }
+            ("Landroid/content/res/Resources;", "getDimensionPixelSize(I)I") => {
+                let value = dimension(
+                    self.apk.resources.resolve(arg(1)?.int()? as u32)?,
+                )?;
+                let rounded = value.round() as i32;
+                result.push(Word::from(if rounded == 0 && value != 0.0 {
+                    if value.is_sign_positive() { 1 } else { -1 }
+                } else {
+                    rounded
+                }));
             }
             ("Landroid/content/res/Resources;", "getValue(ILandroid/util/TypedValue;Z)V") => {
                 let id = arg(1)?.int()? as u32;
@@ -1927,6 +2588,16 @@ impl Runtime {
             ("Landroid/graphics/Rect;", "<init>()V") => {
                 self.heap.get(receiver)?;
             }
+            ("Landroid/content/res/Resources;", "<init>(Landroid/content/res/AssetManager;Landroid/util/DisplayMetrics;Landroid/content/res/Configuration;)V") => {
+                for (name, value) in [
+                    ("droidless:resources:assets", arg(1)?),
+                    ("droidless:resources:display-metrics", arg(2)?),
+                    ("droidless:resources:configuration", arg(3)?),
+                ] {
+                    self.heap.get(value)?;
+                    self.heap.get_mut(receiver)?.fields.insert(name.into(), vec![value]);
+                }
+            }
             ("Landroid/graphics/Paint;", "<init>()V") => {
                 self.heap.get(receiver)?;
             }
@@ -1943,6 +2614,66 @@ impl Runtime {
             ("Landroid/graphics/Rect;", "set(Landroid/graphics/Rect;)V") => {
                 self.heap.get_mut(receiver)?.fields = self.heap.get(arg(1)?)?.fields.clone();
             }
+            ("Landroid/content/ContextWrapper;", "<init>(Landroid/content/Context;)V")
+            | ("Landroid/content/ContextWrapper;", "attachBaseContext(Landroid/content/Context;)V") => {
+                let context = arg(1)?;
+                self.heap.get(context)?;
+                self.heap.get_mut(receiver)?.fields.insert("droidless:context:base".into(), vec![context]);
+            }
+            ("Landroid/content/ContextWrapper;", "getBaseContext()Landroid/content/Context;") => {
+                let context = self.heap.get(receiver)?.fields.get("droidless:context:base").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO);
+                result.push(context);
+            }
+            ("Landroid/view/ViewGroup$LayoutParams;", "<init>(II)V")
+            | ("Landroid/view/ViewGroup$MarginLayoutParams;", "<init>(II)V") => {
+                let fields = &mut self.heap.get_mut(receiver)?.fields;
+                fields.insert("Landroid/view/ViewGroup$LayoutParams;->width:I".into(), vec![arg(1)?]);
+                fields.insert("Landroid/view/ViewGroup$LayoutParams;->height:I".into(), vec![arg(2)?]);
+            }
+            ("Landroid/widget/LinearLayout$LayoutParams;", "<init>(II)V") => {
+                let fields = &mut self.heap.get_mut(receiver)?.fields;
+                fields.insert("Landroid/view/ViewGroup$LayoutParams;->width:I".into(), vec![arg(1)?]);
+                fields.insert("Landroid/view/ViewGroup$LayoutParams;->height:I".into(), vec![arg(2)?]);
+            }
+            ("Landroid/widget/LinearLayout$LayoutParams;", "<init>(IIF)V") => {
+                let fields = &mut self.heap.get_mut(receiver)?.fields;
+                fields.insert("Landroid/view/ViewGroup$LayoutParams;->width:I".into(), vec![arg(1)?]);
+                fields.insert("Landroid/view/ViewGroup$LayoutParams;->height:I".into(), vec![arg(2)?]);
+                fields.insert("Landroid/widget/LinearLayout$LayoutParams;->weight:F".into(), vec![arg(3)?]);
+            }
+            ("Landroid/widget/FrameLayout$LayoutParams;", "<init>(II)V") => {
+                let fields = &mut self.heap.get_mut(receiver)?.fields;
+                fields.insert("Landroid/view/ViewGroup$LayoutParams;->width:I".into(), vec![arg(1)?]);
+                fields.insert("Landroid/view/ViewGroup$LayoutParams;->height:I".into(), vec![arg(2)?]);
+            }
+            ("Landroid/widget/FrameLayout$LayoutParams;", "<init>(III)V") => {
+                let fields = &mut self.heap.get_mut(receiver)?.fields;
+                fields.insert("Landroid/view/ViewGroup$LayoutParams;->width:I".into(), vec![arg(1)?]);
+                fields.insert("Landroid/view/ViewGroup$LayoutParams;->height:I".into(), vec![arg(2)?]);
+                fields.insert("Landroid/widget/FrameLayout$LayoutParams;->gravity:I".into(), vec![arg(3)?]);
+            }
+            ("Landroid/view/ViewGroup$MarginLayoutParams;", "setMargins(IIII)V") => {
+                let fields = &mut self.heap.get_mut(receiver)?.fields;
+                for (name, value) in ["leftMargin", "topMargin", "rightMargin", "bottomMargin"]
+                    .into_iter()
+                    .zip(args.iter().skip(1).copied())
+                {
+                    fields.insert(format!("Landroid/view/ViewGroup$MarginLayoutParams;->{name}:I"), vec![value]);
+                }
+            }
+            (
+                "Landroid/view/View;"
+                | "Landroid/view/ViewGroup;",
+                "<init>(Landroid/content/Context;)V",
+            ) => {
+                self.view_mut(receiver)?;
+                let context = arg(1)?;
+                self.heap.get(context)?;
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:view:context".into(), vec![context]);
+            }
             ("Landroid/util/TypedValue;", "<init>()V") => {
                 self.heap.get(receiver)?;
             }
@@ -1956,7 +2687,13 @@ impl Runtime {
                 | "Landroid/widget/FrameLayout;"
                 | "Landroid/widget/TextView;"
                 | "Landroid/widget/Button;"
-                | "Landroid/widget/EditText;",
+                | "Landroid/widget/EditText;"
+                | "Landroid/widget/ImageView;"
+                | "Landroid/widget/ImageButton;"
+                | "Landroid/widget/RelativeLayout;"
+                | "Landroid/widget/ScrollView;"
+                | "Landroid/widget/HorizontalScrollView;"
+                | "Landroid/widget/Space;",
                 "<init>(Landroid/content/Context;Landroid/util/AttributeSet;)V",
             )
             | (
@@ -1966,7 +2703,13 @@ impl Runtime {
                 | "Landroid/widget/FrameLayout;"
                 | "Landroid/widget/TextView;"
                 | "Landroid/widget/Button;"
-                | "Landroid/widget/EditText;",
+                | "Landroid/widget/EditText;"
+                | "Landroid/widget/ImageView;"
+                | "Landroid/widget/ImageButton;"
+                | "Landroid/widget/RelativeLayout;"
+                | "Landroid/widget/ScrollView;"
+                | "Landroid/widget/HorizontalScrollView;"
+                | "Landroid/widget/Space;",
                 "<init>(Landroid/content/Context;Landroid/util/AttributeSet;I)V",
             ) => {
                 self.view_mut(receiver)?;
@@ -2039,6 +2782,12 @@ impl Runtime {
             | ("Landroid/widget/FrameLayout;", "<init>(Landroid/content/Context;)V")
             | ("Landroid/widget/TextView;", "<init>(Landroid/content/Context;)V")
             | ("Landroid/widget/Button;", "<init>(Landroid/content/Context;)V")
+            | ("Landroid/widget/ImageView;", "<init>(Landroid/content/Context;)V")
+            | ("Landroid/widget/ImageButton;", "<init>(Landroid/content/Context;)V")
+            | ("Landroid/widget/RelativeLayout;", "<init>(Landroid/content/Context;)V")
+            | ("Landroid/widget/ScrollView;", "<init>(Landroid/content/Context;)V")
+            | ("Landroid/widget/HorizontalScrollView;", "<init>(Landroid/content/Context;)V")
+            | ("Landroid/widget/Space;", "<init>(Landroid/content/Context;)V")
             | ("Landroid/widget/EditText;", "<init>(Landroid/content/Context;)V") => {
                 self.view_mut(receiver)?;
                 self.heap.get(arg(1)?)?;
@@ -2050,10 +2799,50 @@ impl Runtime {
             ("Landroid/widget/LinearLayout;", "setOrientation(I)V") => {
                 self.view_mut(receiver)?.orientation = arg(1)?.int()?
             }
+            ("Landroid/widget/LinearLayout;", "setGravity(I)V")
+            | ("Landroid/widget/TextView;", "setGravity(I)V") => {
+                self.view_mut(receiver)?.gravity = arg(1)?.int()? as u32;
+            }
+            ("Landroid/widget/LinearLayout;", "getGravity()I")
+            | ("Landroid/widget/TextView;", "getGravity()I") => {
+                result.push(Word::from(self.view_mut(receiver)?.gravity as i32));
+            }
+            (
+                "Landroid/view/ViewGroup;",
+                "setOnHierarchyChangeListener(Landroid/view/ViewGroup$OnHierarchyChangeListener;)V",
+            ) => {
+                let listener = arg(1)?;
+                if listener != Word::ZERO {
+                    self.heap.get(listener)?;
+                }
+                self.heap.get_mut(receiver)?.fields.insert(
+                    "droidless:view:hierarchy-listener".into(),
+                    vec![listener],
+                );
+            }
+            ("Landroid/view/ViewGroup;", "checkLayoutParams(Landroid/view/ViewGroup$LayoutParams;)Z") => {
+                let params = arg(1)?;
+                result.push(Word::from(i32::from(
+                    params != Word::ZERO
+                        && self.is_a(&self.heap.get(params)?.class, "Landroid/view/ViewGroup$LayoutParams;"),
+                )));
+            }
             ("Landroid/view/ViewGroup;", "addView(Landroid/view/View;)V") => {
                 let child = arg(1)?;
                 self.view_mut(child)?;
                 self.view_mut(receiver)?.children.push(child);
+                self.heap.get_mut(child)?.fields.insert("droidless:view:parent".into(), vec![receiver]);
+                self.hierarchy_change(receiver, child, true)?;
+            }
+            ("Landroid/view/ViewGroup;", "addView(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V") => {
+                let child = arg(1)?;
+                let params = arg(2)?;
+                self.view_mut(child)?;
+                if params != Word::ZERO { self.heap.get(params)?; }
+                self.heap.get_mut(child)?.fields.insert("droidless:view:parent".into(), vec![receiver]);
+                self.heap.get_mut(child)?.fields.insert("droidless:view:layout-params".into(), vec![params]);
+                self.view_mut(receiver)?.children.push(child);
+                self.hierarchy_change(receiver, child, true)?;
             }
             ("Landroid/view/ViewGroup;", "getChildCount()I") => {
                 result.push(Word::from(self.view_mut(receiver)?.children.len() as i32));
@@ -2071,7 +2860,20 @@ impl Runtime {
                 });
             }
             ("Landroid/view/ViewGroup;", "removeAllViews()V") => {
-                self.view_mut(receiver)?.children.clear();
+                let children = std::mem::take(&mut self.view_mut(receiver)?.children);
+                for child in children {
+                    self.heap.get_mut(child)?.fields.remove("droidless:view:parent");
+                    self.hierarchy_change(receiver, child, false)?;
+                }
+            }
+            ("Landroid/view/ViewGroup;", "removeView(Landroid/view/View;)V") => {
+                let child = arg(1)?;
+                let children = &mut self.view_mut(receiver)?.children;
+                if let Some(index) = children.iter().position(|view| *view == child) {
+                    children.remove(index);
+                    self.heap.get_mut(child)?.fields.remove("droidless:view:parent");
+                    self.hierarchy_change(receiver, child, false)?;
+                }
             }
             ("Landroid/view/ViewGroup;", "setMotionEventSplittingEnabled(Z)V") => {
                 self.heap
@@ -2105,6 +2907,62 @@ impl Runtime {
                 let text = self.view_mut(receiver)?.text.clone();
                 result.push(self.heap.string(text)?);
             }
+            ("Landroid/widget/TextView;", "setEllipsize(Landroid/text/TextUtils$TruncateAt;)V") => {
+                let value = arg(1)?;
+                if value != Word::ZERO { self.heap.get(value)?; }
+                self.heap.get_mut(receiver)?.fields.insert("droidless:text:ellipsize".into(), vec![value]);
+            }
+            ("Landroid/widget/TextView;", "setSingleLine()V") => {
+                self.heap.get_mut(receiver)?.fields.insert("droidless:text:single-line".into(), vec![Word::from(1)]);
+            }
+            ("Landroid/widget/TextView;", "setSingleLine(Z)V") => {
+                self.heap.get_mut(receiver)?.fields.insert("droidless:text:single-line".into(), vec![arg(1)?]);
+            }
+            ("Landroid/widget/TextView;", "setMaxLines(I)V")
+            | ("Landroid/widget/TextView;", "setMinLines(I)V") => {
+                self.heap.get_mut(receiver)?.fields.insert(format!("droidless:text:{}", method.name), vec![arg(1)?]);
+            }
+            ("Landroid/widget/ImageView;", "getDrawable()Landroid/graphics/drawable/Drawable;") => {
+                result.push(
+                    self.heap
+                        .get(receiver)?
+                        .fields
+                        .get("droidless:image:drawable")
+                        .and_then(|values| values.first())
+                        .copied()
+                        .unwrap_or(Word::ZERO),
+                );
+            }
+            ("Landroid/widget/ImageView;", "setImageDrawable(Landroid/graphics/drawable/Drawable;)V") => {
+                let drawable = arg(1)?;
+                if drawable != Word::ZERO {
+                    ensure!(
+                        self.is_a(&self.heap.get(drawable)?.class, "Landroid/graphics/drawable/Drawable;"),
+                        "ImageView requires a Drawable"
+                    );
+                }
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:image:drawable".into(), vec![drawable]);
+            }
+            ("Landroid/widget/ImageView;", "setImageResource(I)V") => {
+                let id = arg(1)?.int()?;
+                let drawable = if id == 0 {
+                    Word::ZERO
+                } else {
+                    let drawable = self.heap.instance("Landroid/graphics/drawable/Drawable;")?;
+                    self.heap
+                        .get_mut(drawable)?
+                        .fields
+                        .insert("resourceId".into(), vec![Word::from(id)]);
+                    drawable
+                };
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:image:drawable".into(), vec![drawable]);
+            }
             ("Landroid/widget/TextView;", "setTextSize(F)V") => {
                 let size = f32::from_bits(arg(1)?.int()? as u32);
                 ensure!(size.is_finite() && size >= 0.0, "invalid text size");
@@ -2112,9 +2970,6 @@ impl Runtime {
             }
             ("Landroid/widget/TextView;", "setTextColor(I)V") => {
                 self.view_mut(receiver)?.text_color = arg(1)?.int()? as u32
-            }
-            ("Landroid/widget/TextView;", "setGravity(I)V") => {
-                self.view_mut(receiver)?.gravity = arg(1)?.int()? as u32
             }
             ("Landroid/widget/TextView;", "setKeyListener(Landroid/text/method/KeyListener;)V") => {
                 ensure!(arg(1)? == Word::ZERO, "non-null KeyListener unsupported");
@@ -2139,6 +2994,26 @@ impl Runtime {
                     self.heap.get(listener)?;
                     Some(listener)
                 };
+            }
+            ("Landroid/view/View;", "setOnFocusChangeListener(Landroid/view/View$OnFocusChangeListener;)V") => {
+                let listener = arg(1)?;
+                if listener != Word::ZERO {
+                    self.heap.get(listener)?;
+                }
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:view:focus-change-listener".into(), vec![listener]);
+            }
+            ("Landroid/view/View;", "setOnTouchListener(Landroid/view/View$OnTouchListener;)V") => {
+                let listener = arg(1)?;
+                if listener != Word::ZERO {
+                    self.heap.get(listener)?;
+                }
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:view:touch-listener".into(), vec![listener]);
             }
             ("Landroid/view/View;", "setOnApplyWindowInsetsListener(Landroid/view/View$OnApplyWindowInsetsListener;)V") => {
                 self.heap.get(receiver)?;
@@ -2169,11 +3044,25 @@ impl Runtime {
                 self.heap.get(receiver)?;
                 self.heap.get(arg(1)?)?;
             }
-            ("Landroid/view/ViewTreeObserver;", "addOnGlobalLayoutListener(Landroid/view/ViewTreeObserver$OnGlobalLayoutListener;)V")
-            | ("Landroid/view/ViewTreeObserver;", "removeOnGlobalLayoutListener(Landroid/view/ViewTreeObserver$OnGlobalLayoutListener;)V")
+            ("Landroid/view/ViewTreeObserver;", "addOnGlobalLayoutListener(Landroid/view/ViewTreeObserver$OnGlobalLayoutListener;)V") => {
+                let listener = arg(1)?;
+                self.heap.get(listener)?;
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .entry("droidless:global-layout-listeners".into())
+                    .or_default()
+                    .push(listener);
+            }
+            ("Landroid/view/ViewTreeObserver;", "removeOnGlobalLayoutListener(Landroid/view/ViewTreeObserver$OnGlobalLayoutListener;)V")
             | ("Landroid/view/ViewTreeObserver;", "removeGlobalOnLayoutListener(Landroid/view/ViewTreeObserver$OnGlobalLayoutListener;)V") => {
-                self.heap.get(receiver)?;
-                self.heap.get(arg(1)?)?;
+                let listener = arg(1)?;
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .entry("droidless:global-layout-listeners".into())
+                    .or_default()
+                    .retain(|registered| *registered != listener);
             }
             ("Landroid/view/ViewTreeObserver;", "isAlive()Z") => {
                 self.heap.get(receiver)?;
@@ -2182,11 +3071,6 @@ impl Runtime {
             ("Landroid/view/ViewTreeObserver;", "dispatchOnPreDraw()Z") => {
                 self.heap.get(receiver)?;
                 result.push(Word::from(1));
-            }
-            ("Landroid/view/View;", "removeCallbacks(Ljava/lang/Runnable;)Z") => {
-                self.view_mut(receiver)?;
-                self.heap.get(arg(1)?)?;
-                result.push(Word::ZERO);
             }
             ("Landroid/view/View;", "computeFitSystemWindows(Landroid/graphics/Rect;Landroid/graphics/Rect;)V") => {
                 self.heap.get(receiver)?;
@@ -2209,7 +3093,14 @@ impl Runtime {
             ("Landroid/view/View;", "getId()I") => {
                 result.push(Word::Bits(self.view_mut(receiver)?.id))
             }
+            ("Landroid/view/View;", "getVisibility()I") => {
+                result.push(Word::from(self.view_mut(receiver)?.visible));
+            }
             ("Landroid/view/View;", "isLaidOut()Z") => {
+                self.view_mut(receiver)?;
+                result.push(Word::ZERO);
+            }
+            ("Landroid/view/View;", "isInEditMode()Z") => {
                 self.view_mut(receiver)?;
                 result.push(Word::ZERO);
             }
@@ -2228,6 +3119,57 @@ impl Runtime {
             | ("Landroid/view/View;", "getHeight()I") => {
                 self.view_mut(receiver)?;
                 result.push(Word::ZERO);
+            }
+            ("Landroid/view/View;", "getParent()Landroid/view/ViewParent;") => {
+                let parent = self.heap.get(receiver)?.fields.get("droidless:view:parent").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO);
+                result.push(parent);
+            }
+            ("Landroid/view/View;", "setTag(Ljava/lang/Object;)V") => {
+                let tag = arg(1)?;
+                if tag != Word::ZERO { self.heap.get(tag)?; }
+                self.heap.get_mut(receiver)?.fields.insert("droidless:view:tag".into(), vec![tag]);
+            }
+            ("Landroid/view/View;", "getTag()Ljava/lang/Object;") => {
+                let tag = self.heap.get(receiver)?.fields.get("droidless:view:tag").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO);
+                result.push(tag);
+            }
+            ("Landroid/view/View;", "setTag(ILjava/lang/Object;)V") => {
+                let tag = arg(2)?;
+                if tag != Word::ZERO { self.heap.get(tag)?; }
+                self.heap.get_mut(receiver)?.fields.insert(format!("droidless:view:tag:{}", arg(1)?.int()?), vec![tag]);
+            }
+            ("Landroid/view/View;", "getTag(I)Ljava/lang/Object;") => {
+                let tag = self.heap.get(receiver)?.fields.get(&format!("droidless:view:tag:{}", arg(1)?.int()?)).and_then(|values| values.first()).copied().unwrap_or(Word::ZERO);
+                result.push(tag);
+            }
+            ("Landroid/view/View;", "post(Ljava/lang/Runnable;)Z")
+            | ("Landroid/view/View;", "postDelayed(Ljava/lang/Runnable;J)Z") => {
+                let handler = if let Some(handler) = self.heap.get(receiver)?.fields.get("droidless:view:handler").and_then(|values| values.first()).copied() {
+                    handler
+                } else {
+                    let handler = self.heap.instance("Landroid/os/Handler;")?;
+                    self.invoke(Method { class: "Landroid/os/Handler;".into(), name: "<init>".into(), parameters: vec![], returns: "V".into() }, vec![handler], false)?;
+                    self.heap.get_mut(receiver)?.fields.insert("droidless:view:handler".into(), vec![handler]);
+                    handler
+                };
+                let mut forwarded = vec![handler, arg(1)?];
+                if method.name == "postDelayed" { forwarded.extend_from_slice(args.get(2..4).context("missing postDelayed interval")?); }
+                let posted = self.invoke(
+                    Method { class: "Landroid/os/Handler;".into(), name: method.name.clone(), parameters: method.parameters.clone(), returns: "Z".into() },
+                    forwarded,
+                    false,
+                )?;
+                result.extend(posted);
+            }
+            ("Landroid/view/View;", "removeCallbacks(Ljava/lang/Runnable;)Z") => {
+                let handler = self.heap.get(receiver)?.fields.get("droidless:view:handler").and_then(|values| values.first()).copied();
+                let mut removed = false;
+                if let Some(handler) = handler {
+                    let found = self.invoke(Method { class: "Landroid/os/Handler;".into(), name: "hasCallbacks".into(), parameters: vec!["Ljava/lang/Runnable;".into()], returns: "Z".into() }, vec![handler, arg(1)?], false)?;
+                    removed = found.first().is_some_and(|value| value.truth());
+                    self.invoke(Method { class: "Landroid/os/Handler;".into(), name: "removeCallbacks".into(), parameters: vec!["Ljava/lang/Runnable;".into()], returns: "V".into() }, vec![handler, arg(1)?], false)?;
+                }
+                result.push(Word::from(i32::from(removed)));
             }
             ("Landroid/view/View;", "setOverScrollMode(I)V") => {
                 self.heap
@@ -2252,6 +3194,9 @@ impl Runtime {
             }
             ("Landroid/view/View;", "setEnabled(Z)V") => {
                 self.view_mut(receiver)?.enabled = arg(1)?.int()? != 0
+            }
+            ("Landroid/view/View;", "setSaveFromParentEnabled(Z)V") => {
+                self.heap.get_mut(receiver)?.fields.insert("droidless:view:save-from-parent".into(), vec![arg(1)?]);
             }
             ("Landroid/view/View;", "setWillNotDraw(Z)V")
             | ("Landroid/support/v7/widget/ViewStubCompat;", "setWillNotDraw(Z)V") => {
@@ -2340,6 +3285,66 @@ impl Runtime {
                     .fields
                     .insert("droidless:view:elevation".into(), vec![arg(1)?]);
             }
+            ("Landroid/view/View;", "setStateListAnimator(Landroid/animation/StateListAnimator;)V") => {
+                let animator = arg(1)?;
+                if animator != Word::ZERO { self.heap.get(animator)?; }
+                self.heap.get_mut(receiver)?.fields.insert("droidless:view:state-list-animator".into(), vec![animator]);
+            }
+            ("Landroid/view/View;", "setLayoutParams(Landroid/view/ViewGroup$LayoutParams;)V") => {
+                let params = arg(1)?;
+                if params != Word::ZERO { self.heap.get(params)?; }
+                self.heap.get_mut(receiver)?.fields.insert("droidless:view:layout-params".into(), vec![params]);
+            }
+            ("Landroid/view/View;", "getLayoutParams()Landroid/view/ViewGroup$LayoutParams;") => {
+                let params = self.heap.get(receiver)?.fields.get("droidless:view:layout-params").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO);
+                result.push(params);
+            }
+            ("Landroid/view/View;", "setOutlineProvider(Landroid/view/ViewOutlineProvider;)V") => {
+                let provider = arg(1)?;
+                if provider != Word::ZERO {
+                    self.heap.get(provider)?;
+                }
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:view:outline-provider".into(), vec![provider]);
+            }
+            ("Landroid/view/View;", "setClipToOutline(Z)V") => {
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:view:clip-to-outline".into(), vec![arg(1)?]);
+            }
+            ("Landroid/view/View;", "startAnimation(Landroid/view/animation/Animation;)V") => {
+                let animation = arg(1)?;
+                if animation != Word::ZERO {
+                    ensure!(
+                        self.is_a(&self.heap.get(animation)?.class, "Landroid/view/animation/Animation;"),
+                        "View animation has the wrong type"
+                    );
+                }
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:view:animation".into(), vec![animation]);
+            }
+            ("Landroid/view/View;", "getAnimation()Landroid/view/animation/Animation;") => {
+                result.push(
+                    self.heap
+                        .get(receiver)?
+                        .fields
+                        .get("droidless:view:animation")
+                        .and_then(|values| values.first())
+                        .copied()
+                        .unwrap_or(Word::ZERO),
+                );
+            }
+            ("Landroid/view/View;", "clearAnimation()V") => {
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .remove("droidless:view:animation");
+            }
             ("Landroid/view/View;", "setScrollContainer(Z)V") => {
                 self.heap
                     .get_mut(receiver)?
@@ -2391,6 +3396,34 @@ impl Runtime {
             .view
             .as_mut()
             .context("framework method expects a View")
+    }
+    fn hierarchy_change(&mut self, parent: Word, child: Word, added: bool) -> Result<()> {
+        let listener = self
+            .heap
+            .get(parent)?
+            .fields
+            .get("droidless:view:hierarchy-listener")
+            .and_then(|values| values.first())
+            .copied()
+            .unwrap_or(Word::ZERO);
+        if listener != Word::ZERO {
+            self.invoke(
+                Method {
+                    class: "Landroid/view/ViewGroup$OnHierarchyChangeListener;".into(),
+                    name: if added {
+                        "onChildViewAdded"
+                    } else {
+                        "onChildViewRemoved"
+                    }
+                    .into(),
+                    parameters: vec!["Landroid/view/View;".into(); 2],
+                    returns: "V".into(),
+                },
+                vec![listener, parent, child],
+                true,
+            )?;
+        }
+        Ok(())
     }
     pub(crate) fn resource_text(&self, id: u32) -> Result<String> {
         // Android's stable public framework string IDs, not application-specific output.
@@ -2504,7 +3537,15 @@ impl Runtime {
     }
     fn attribute(&self, value: &Value) -> Result<Value> {
         if value.kind == 1 {
-            Ok(self.apk.resources.resolve(value.data)?.clone())
+            if value.data == 0 {
+                Ok(Value {
+                    kind: 0x1f,
+                    data: 0,
+                    text: None,
+                })
+            } else {
+                Ok(self.apk.resources.resolve(value.data)?.clone())
+            }
         } else {
             Ok(value.clone())
         }
@@ -2520,7 +3561,12 @@ impl Runtime {
                 .clone()
                 .context("FrameLayout is not a ViewGroup")?;
             for child in &element.children {
-                view.children.push(self.inflate(child, depth + 1, context)?);
+                let child = self.inflate(child, depth + 1, context)?;
+                self.heap
+                    .get_mut(child)?
+                    .fields
+                    .insert("droidless:view:parent".into(), vec![container]);
+                view.children.push(child);
             }
             self.heap.get_mut(container)?.view = Some(view);
             return Ok(container);
@@ -2549,6 +3595,13 @@ impl Runtime {
         for (name, raw) in &element.attributes {
             match name.as_str() {
                 "text" => {
+                    view.text = if raw.kind == 1 {
+                        self.resource_text(raw.data)?
+                    } else {
+                        raw.display()
+                    }
+                }
+                "title" if class == "Landroid/support/v7/widget/Toolbar;" => {
                     view.text = if raw.kind == 1 {
                         self.resource_text(raw.data)?
                     } else {
@@ -2607,9 +3660,18 @@ impl Runtime {
             "invalid layout numeric attribute"
         );
         for child in &element.children {
-            view.children.push(self.inflate(child, depth + 1, context)?);
+            let child = self.inflate(child, depth + 1, context)?;
+            self.heap
+                .get_mut(child)?
+                .fields
+                .insert("droidless:view:parent".into(), vec![word]);
+            view.children.push(child);
         }
+        let children = view.children.clone();
         self.heap.get_mut(word)?.view = Some(view);
+        for child in children {
+            self.hierarchy_change(word, child, true)?;
+        }
         Ok(word)
     }
     fn drawable_color(&self, raw: &Value, depth: usize) -> Result<Option<u32>> {
@@ -2643,6 +3705,45 @@ impl Runtime {
         }
         Ok(None)
     }
+}
+fn resource_bundle_object(runtime: &mut Runtime, bundle: Word, key: Word) -> Result<Option<Word>> {
+    let contents = runtime
+        .invoke(
+            Method {
+                class: "Ljava/util/ListResourceBundle;".into(),
+                name: "getContents".into(),
+                parameters: vec![],
+                returns: "[[Ljava/lang/Object;".into(),
+            },
+            vec![bundle],
+            true,
+        )?
+        .into_iter()
+        .next()
+        .context("ResourceBundle contents missing")?;
+    let Data::Array { values: rows, .. } = &runtime.heap.get(contents)?.data else {
+        bail!("ResourceBundle contents are not an array");
+    };
+    for row in rows {
+        let row = row.first().copied().context("empty ResourceBundle entry")?;
+        let Data::Array { values: pair, .. } = &runtime.heap.get(row)?.data else {
+            bail!("ResourceBundle entry is not an array");
+        };
+        let entry_key = pair
+            .first()
+            .and_then(|words| words.first())
+            .copied()
+            .context("ResourceBundle entry key missing")?;
+        if runtime.heap.text(entry_key)? == runtime.heap.text(key)? {
+            return Ok(Some(
+                pair.get(1)
+                    .and_then(|words| words.first())
+                    .copied()
+                    .context("ResourceBundle entry value missing")?,
+            ));
+        }
+    }
+    Ok(None)
 }
 fn dimension(v: &Value) -> Result<f32> {
     let n = match v.kind {

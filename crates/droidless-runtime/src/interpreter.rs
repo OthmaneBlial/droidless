@@ -707,6 +707,10 @@ impl Runtime {
                         vec![self.class_object(primitive)?]
                     } else if self.sdk_field(&field) {
                         vec![Word::from(crate::framework::SDK_INT)]
+                    } else if self.view_outline_provider_field(&field) {
+                        vec![self.view_outline_provider_object(&field)?]
+                    } else if self.text_truncate_at_field(&field) {
+                        vec![self.text_truncate_at_object(&field)?]
                     } else if let Some(unit) = self.time_unit_field(&field) {
                         vec![self.time_unit_object(unit)?]
                     } else if field.class == "Landroid/graphics/PorterDuff$Mode;" {
@@ -728,6 +732,7 @@ impl Runtime {
                 } else {
                     if self.primitive_field(&field).is_some()
                         || self.sdk_field(&field)
+                        || self.view_outline_provider_field(&field)
                         || self.time_unit_field(&field).is_some()
                     {
                         return Err(fault(

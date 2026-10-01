@@ -4,6 +4,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use droidless_formats::dex::Method;
+use std::collections::HashSet;
 
 pub(crate) struct Screen {
     pub root: Option<Word>,
@@ -187,7 +188,63 @@ impl Runtime {
                 },
             )?;
         }
+        self.dispatch_global_layout(activity)?;
         Ok(())
+    }
+    fn dispatch_global_layout(&mut self, activity: Word) -> Result<()> {
+        let Some(root) = self.screen(activity)?.root else {
+            return Ok(());
+        };
+        let mut pending = vec![root];
+        let mut seen = HashSet::new();
+        let roots = self.native_roots.len();
+        self.native_roots.extend([activity, root]);
+        let result = (|| -> Result<()> {
+            while let Some(view) = pending.pop() {
+                if !seen.insert(view.reference()?) {
+                    continue;
+                }
+                let object = self.heap.get(view)?;
+                let observer = object
+                    .fields
+                    .get("droidless:view:tree-observer")
+                    .and_then(|values| values.first())
+                    .copied();
+                let children = object
+                    .view
+                    .as_ref()
+                    .context("expected a View")?
+                    .children
+                    .clone();
+                pending.extend(children);
+                if let Some(observer) = observer {
+                    let listeners = self
+                        .heap
+                        .get(observer)?
+                        .fields
+                        .get("droidless:global-layout-listeners")
+                        .cloned()
+                        .unwrap_or_default();
+                    self.native_roots.extend(listeners.iter().copied());
+                    for listener in listeners {
+                        self.invoke(
+                            Method {
+                                class: "Landroid/view/ViewTreeObserver$OnGlobalLayoutListener;"
+                                    .into(),
+                                name: "onGlobalLayout".into(),
+                                parameters: vec![],
+                                returns: "V".into(),
+                            },
+                            vec![listener],
+                            true,
+                        )?;
+                    }
+                }
+            }
+            Ok(())
+        })();
+        self.native_roots.truncate(roots);
+        result
     }
     pub(crate) fn queue_navigation(&mut self, navigation: Navigation) -> Result<()> {
         self.require_main_thread()?;

@@ -66,3 +66,41 @@ for name, app_apk, digest, kind, scenarios, options in apps:
     filename = "kascalc" if name == "KasCalc" else "simple-calculator"
     (root / f"artifacts/{filename}-compatibility.json").write_text(json.dumps(results, indent=2) + "\n")
     print(f"{len(results)} {name} scenarios passed; native window is verified separately.")
+
+notepad = root / "artifacts/apks/notepad-v1.0.0.apk"
+notepad_digest = "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f"
+if not notepad.exists():
+    raise SystemExit(f"Missing {notepad}; run tools/fetch-notepad.sh first")
+if hashlib.sha256(notepad.read_bytes()).hexdigest() != notepad_digest:
+    raise SystemExit("Notepad v1.0.0 checksum mismatch")
+home_process = subprocess.run([
+    str(args.binary), "run", "--headless", "--ephemeral", "--size", "390x844", str(notepad),
+], text=True, capture_output=True, check=True, timeout=120)
+home = json.loads(home_process.stdout)
+home_labels = [node["view"]["text"] for node in flatten(home)]
+if "Notes" not in home_labels or "You have no notes!" not in home_labels or "＋" not in home_labels:
+    raise SystemExit("Notepad Notes list screen was not rendered")
+print("PASS Notepad: public Notes list and empty state rendered")
+process = subprocess.run([
+    str(args.binary), "run", "--headless", "--ephemeral", "--size", "390x844",
+    "--click", "＋", "--input", "No pink", str(notepad),
+], text=True, capture_output=True, check=True, timeout=120)
+tree = json.loads(process.stdout)
+nodes = list(flatten(tree))
+editable = [node for node in nodes if node["view"]["kind"] == "EditText"]
+labels = [node["view"]["text"] for node in nodes]
+if len(editable) != 2 or editable[0]["view"]["text"] != "No pink":
+    raise SystemExit("Notepad did not expose both editor fields and the entered title")
+if "Notepad" not in labels or "Created moments ago" not in labels:
+    raise SystemExit("Notepad editor screen labels were not rendered")
+report = {
+    "screens": ["notes-list", "note-editor"],
+    "viewport": [390, 844],
+    "editable_fields": len(editable),
+    "first_field_text": editable[0]["view"]["text"],
+    "visible_labels": [label for label in labels if label],
+    "note_save_and_restart_verified": False,
+}
+(root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
+print("PASS Notepad: Notes screen → note editor → typed title visible")
+print("Note persistence/save behavior is not verified by this scenario.")

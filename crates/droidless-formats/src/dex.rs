@@ -55,6 +55,14 @@ pub struct EncodedMethod {
     pub index: usize,
     pub access: u32,
     pub code: Option<Code>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<Annotation>,
+}
+#[derive(Clone, Debug, Serialize)]
+pub struct Annotation {
+    pub visibility: u8,
+    pub class: String,
+    pub values: Vec<(String, EncodedValue)>,
 }
 #[derive(Clone, Debug, Serialize)]
 pub struct Class {
@@ -74,6 +82,10 @@ pub enum EncodedValue {
     Null,
     Array(Vec<EncodedValue>),
     Type(String),
+    Field(Field),
+    Method(Method),
+    Enum { class: String, name: String },
+    Annotation(Box<Annotation>),
 }
 #[derive(Debug, Serialize)]
 pub struct Dex {
@@ -201,9 +213,19 @@ impl Dex {
                 string_at(&strings, source_idx)?;
             }
             let annotations = b.u32(p + 20)? as usize;
-            if annotations != 0 {
-                b.slice(annotations, 16)?;
-            }
+            let mut method_annotations = if annotations == 0 {
+                BTreeMap::new()
+            } else {
+                parse_method_annotations(
+                    b,
+                    annotations,
+                    &strings,
+                    &types,
+                    &fields,
+                    &methods,
+                    &name,
+                )?
+            };
             let mut class = Class {
                 name,
                 access: b.u32(p + 4)?,
@@ -265,6 +287,7 @@ impl Dex {
                             index: idx,
                             access,
                             code,
+                            annotations: method_annotations.remove(&idx).unwrap_or_default(),
                         });
                     }
                 }
@@ -274,9 +297,9 @@ impl Dex {
                 let count = b.uleb(&mut pos)? as usize;
                 ensure!(count <= class.static_fields.len(), "too many static values");
                 for _ in 0..count {
-                    class
-                        .static_values
-                        .push(encoded_value(b, &mut pos, &strings, &types, 0)?);
+                    class.static_values.push(encoded_value(
+                        b, &mut pos, &strings, &types, &fields, &methods, 0,
+                    )?);
                 }
             }
             classes.push(class);
@@ -290,6 +313,121 @@ impl Dex {
             classes,
         })
     }
+}
+
+fn parse_method_annotations(
+    b: Bytes<'_>,
+    at: usize,
+    strings: &[String],
+    types: &[String],
+    fields: &[Field],
+    methods: &[Method],
+    owner: &str,
+) -> Result<BTreeMap<usize, Vec<Annotation>>> {
+    b.slice(at, 16)?;
+    let class_annotations = b.u32(at)? as usize;
+    let field_count = b.u32(at + 4)? as usize;
+    let method_count = b.u32(at + 8)? as usize;
+    let parameter_count = b.u32(at + 12)? as usize;
+    let entries = field_count
+        .checked_add(method_count)
+        .and_then(|count| count.checked_add(parameter_count))
+        .context("annotation directory count overflow")?;
+    ensure!(entries <= 1_000_000, "annotation directory limit reached");
+    b.table(at + 16, entries, 8)?;
+    if class_annotations != 0 {
+        let _ = annotation_set(b, class_annotations, strings, types, fields, methods)?;
+    }
+    let mut pos = at + 16 + field_count * 8;
+    let mut annotated = BTreeMap::new();
+    for _ in 0..method_count {
+        let index = b.u32(pos)? as usize;
+        let set = b.u32(pos + 4)? as usize;
+        pos += 8;
+        ensure!(
+            methods
+                .get(index)
+                .is_some_and(|method| method.class == owner),
+            "invalid annotated method index"
+        );
+        ensure!(
+            annotated
+                .insert(
+                    index,
+                    annotation_set(b, set, strings, types, fields, methods)?
+                )
+                .is_none(),
+            "duplicate method annotation entry"
+        );
+    }
+    for _ in 0..parameter_count {
+        let index = b.u32(pos)? as usize;
+        let references = b.u32(pos + 4)? as usize;
+        pos += 8;
+        ensure!(
+            methods
+                .get(index)
+                .is_some_and(|method| method.class == owner),
+            "invalid parameter annotation method index"
+        );
+        let count = b.u32(references)? as usize;
+        ensure!(count <= 1_000_000, "parameter annotation limit reached");
+        b.table(references + 4, count, 4)?;
+    }
+    Ok(annotated)
+}
+
+fn annotation_set(
+    b: Bytes<'_>,
+    at: usize,
+    strings: &[String],
+    types: &[String],
+    fields: &[Field],
+    methods: &[Method],
+) -> Result<Vec<Annotation>> {
+    let count = b.u32(at)? as usize;
+    ensure!(count <= 1_000_000, "annotation set limit reached");
+    b.table(at + 4, count, 4)?;
+    let mut annotations = Vec::with_capacity(count);
+    for index in 0..count {
+        let mut pos = b.u32(at + 4 + index * 4)? as usize;
+        let visibility = b.u8(pos)?;
+        pos += 1;
+        ensure!(visibility <= 2, "invalid annotation visibility");
+        let mut annotation = encoded_annotation(b, &mut pos, strings, types, fields, methods, 0)?;
+        annotation.visibility = visibility;
+        annotations.push(annotation);
+    }
+    Ok(annotations)
+}
+
+fn encoded_annotation(
+    b: Bytes<'_>,
+    pos: &mut usize,
+    strings: &[String],
+    types: &[String],
+    fields: &[Field],
+    methods: &[Method],
+    depth: usize,
+) -> Result<Annotation> {
+    ensure!(depth < 64, "annotation nesting limit");
+    let class = types
+        .get(b.uleb(pos)? as usize)
+        .context("invalid annotation type")?
+        .clone();
+    let elements = b.uleb(pos)? as usize;
+    ensure!(elements <= 65_536, "annotation element limit reached");
+    let mut values = Vec::with_capacity(elements);
+    for _ in 0..elements {
+        let name = string_at(strings, b.uleb(pos)?)?.to_owned();
+        let value = encoded_value(b, pos, strings, types, fields, methods, depth + 1)?;
+        values.push((name, value));
+    }
+    Ok(Annotation {
+        visibility: 1,
+        class,
+        values,
+    })
 }
 
 fn parse_code(b: Bytes<'_>, at: usize, types: &[String]) -> Result<Code> {
@@ -411,6 +549,8 @@ fn encoded_value(
     pos: &mut usize,
     strings: &[String],
     types: &[String],
+    fields: &[Field],
+    methods: &[Method],
     depth: usize,
 ) -> Result<EncodedValue> {
     ensure!(depth < 64, "encoded value nesting limit");
@@ -435,9 +575,21 @@ fn encoded_value(
         );
         return Ok(EncodedValue::Array(
             (0..n)
-                .map(|_| encoded_value(b, pos, strings, types, depth + 1))
+                .map(|_| encoded_value(b, pos, strings, types, fields, methods, depth + 1))
                 .collect::<Result<_>>()?,
         ));
+    }
+    if kind == 0x1d {
+        ensure!(arg == 0, "invalid nested annotation");
+        return Ok(EncodedValue::Annotation(Box::new(encoded_annotation(
+            b,
+            pos,
+            strings,
+            types,
+            fields,
+            methods,
+            depth + 1,
+        )?)));
     }
     let width = usize::from(arg) + 1;
     ensure!(
@@ -446,6 +598,7 @@ fn encoded_value(
             2 | 3 => width <= 2,
             4 | 0x10 | 0x17 | 0x18 => width <= 4,
             6 | 0x11 => width <= 8,
+            0x19..=0x1b => width <= 4,
             _ => false,
         },
         "unsupported/invalid encoded value 0x{tag:x}"
@@ -467,6 +620,31 @@ fn encoded_value(
                 .context("invalid encoded type")?
                 .clone(),
         ));
+    }
+    if kind == 0x19 {
+        return Ok(EncodedValue::Field(
+            fields
+                .get(value as usize)
+                .context("invalid encoded field reference")?
+                .clone(),
+        ));
+    }
+    if kind == 0x1a {
+        return Ok(EncodedValue::Method(
+            methods
+                .get(value as usize)
+                .context("invalid encoded method reference")?
+                .clone(),
+        ));
+    }
+    if kind == 0x1b {
+        let field = fields
+            .get(value as usize)
+            .context("invalid encoded enum field")?;
+        return Ok(EncodedValue::Enum {
+            class: field.class.clone(),
+            name: field.name.clone(),
+        });
     }
     if matches!(kind, 0 | 2 | 4 | 6) && width < 8 && value & (1 << (width * 8 - 1)) != 0 {
         value |= u64::MAX << (width * 8);

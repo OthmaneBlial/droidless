@@ -34,6 +34,7 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
             "Ljava/lang/IllegalArgumentException;"
         }
         "Ljava/lang/IllegalThreadStateException;" => "Ljava/lang/IllegalArgumentException;",
+        "Ljava/util/MissingResourceException;" => "Ljava/lang/RuntimeException;",
         "Ljava/lang/InterruptedException;" => "Ljava/lang/Exception;",
         "Ljava/lang/ArrayIndexOutOfBoundsException;"
         | "Ljava/lang/StringIndexOutOfBoundsException;" => "Ljava/lang/IndexOutOfBoundsException;",

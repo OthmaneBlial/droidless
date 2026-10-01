@@ -469,6 +469,29 @@ impl Runtime {
         })
     }
     pub(crate) fn resolve_field(&self, field: &Field, static_field: bool) -> Result<Field> {
+        if !static_field {
+            let owner = match (field.class.as_str(), field.name.as_str(), field.ty.as_str()) {
+                (
+                    "Landroid/widget/LinearLayout$LayoutParams;"
+                    | "Landroid/widget/FrameLayout$LayoutParams;",
+                    "width" | "height",
+                    "I",
+                ) => Some("Landroid/view/ViewGroup$LayoutParams;"),
+                (
+                    "Landroid/widget/LinearLayout$LayoutParams;"
+                    | "Landroid/widget/FrameLayout$LayoutParams;",
+                    "leftMargin" | "topMargin" | "rightMargin" | "bottomMargin",
+                    "I",
+                ) => Some("Landroid/view/ViewGroup$MarginLayoutParams;"),
+                _ => None,
+            };
+            if let Some(owner) = owner {
+                return Ok(Field {
+                    class: owner.into(),
+                    ..field.clone()
+                });
+            }
+        }
         let native_type = if field.name == "TYPE"
             && self.class_location(&field.class).is_none()
             && crate::reflection::primitive_wrapper(&field.class).is_some()
@@ -476,6 +499,10 @@ impl Runtime {
             Some("Ljava/lang/Class;")
         } else if self.sdk_field(field) {
             Some("I")
+        } else if self.view_outline_provider_field(field) {
+            Some("Landroid/view/ViewOutlineProvider;")
+        } else if self.text_truncate_at_field(field) {
+            Some("Landroid/text/TextUtils$TruncateAt;")
         } else if self.time_unit_field(field).is_some() {
             Some("Ljava/util/concurrent/TimeUnit;")
         } else {
@@ -514,6 +541,11 @@ impl Runtime {
                         "Landroid/util/DisplayMetrics;",
                         "Landroid/util/TypedValue;",
                         "Landroid/content/res/Configuration;",
+                        "Landroid/graphics/Rect;",
+                        "Landroid/view/ViewGroup$LayoutParams;",
+                        "Landroid/view/ViewGroup$MarginLayoutParams;",
+                        "Landroid/widget/LinearLayout$LayoutParams;",
+                        "Landroid/widget/FrameLayout$LayoutParams;",
                         "Landroid/os/Message;",
                         "Landroid/database/Observable;",
                         "Landroid/content/pm/ActivityInfo;",
@@ -587,6 +619,34 @@ impl Runtime {
                         .contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/content/res/Configuration;"
                         && [("keyboard", "I")].contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/graphics/Rect;"
+                        && [("left", "I"), ("top", "I"), ("right", "I"), ("bottom", "I")]
+                            .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (([
+                        "Landroid/view/ViewGroup$LayoutParams;",
+                        "Landroid/widget/LinearLayout$LayoutParams;",
+                        "Landroid/widget/FrameLayout$LayoutParams;",
+                    ]
+                    .contains(&class.as_str())
+                        && [("width", "I"), ("height", "I")]
+                            .contains(&(field.name.as_str(), field.ty.as_str())))
+                        || ([
+                            "Landroid/view/ViewGroup$MarginLayoutParams;",
+                            "Landroid/widget/LinearLayout$LayoutParams;",
+                            "Landroid/widget/FrameLayout$LayoutParams;",
+                        ]
+                        .contains(&class.as_str())
+                            && [
+                                ("leftMargin", "I"),
+                                ("topMargin", "I"),
+                                ("rightMargin", "I"),
+                                ("bottomMargin", "I"),
+                            ]
+                            .contains(&(field.name.as_str(), field.ty.as_str()))))
+                    || (class == "Landroid/widget/LinearLayout$LayoutParams;"
+                        && [("weight", "F")].contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/widget/FrameLayout$LayoutParams;"
+                        && [("gravity", "I")].contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/os/Message;"
                         && [
                             ("what", "I"),
@@ -646,6 +706,12 @@ impl Runtime {
         Err(fault("Ljava/lang/NoSuchFieldError;", field.key()))
     }
     pub(crate) fn parent(&self, class: &str) -> Option<String> {
+        if let Some(interface) = class.strip_prefix("Ldroidless/runtime/annotation/") {
+            return Some(format!("L{interface}"));
+        }
+        if class == "Ldroidless/runtime/map/Entry;" {
+            return Some("Ljava/util/Map$Entry;".into());
+        }
         if let Some((d, c)) = self.class_location(class) {
             return self.apk.dex[d].classes[c].super_class.clone();
         }
@@ -654,6 +720,9 @@ impl Runtime {
         }
         let parent = match class {
             "Ljava/lang/Enum;" => "Ljava/lang/Object;",
+            "Ljava/util/ListResourceBundle;" => "Ljava/util/ResourceBundle;",
+            "Ljava/util/ResourceBundle;" => "Ljava/lang/Object;",
+            "Landroid/text/TextUtils$TruncateAt;" => "Ljava/lang/Enum;",
             "Ljava/lang/ref/WeakReference;" => "Ljava/lang/ref/Reference;",
             "Ljava/io/FileInputStream;" => "Ljava/io/InputStream;",
             "Ljava/io/InputStream;" => "Ljava/lang/Object;",
@@ -661,11 +730,30 @@ impl Runtime {
             "Ljava/lang/Double;" => "Ljava/lang/Number;",
             "Ljava/lang/Integer;" | "Ljava/lang/Long;" => "Ljava/lang/Number;",
             "Landroid/graphics/drawable/ColorDrawable;" => "Landroid/graphics/drawable/Drawable;",
+            "Landroid/graphics/drawable/GradientDrawable;" => {
+                "Landroid/graphics/drawable/Drawable;"
+            }
+            "Landroid/graphics/drawable/LayerDrawable;"
+            | "Landroid/graphics/drawable/RippleDrawable;"
+            | "Landroid/graphics/drawable/InsetDrawable;" => "Landroid/graphics/drawable/Drawable;",
+            "Landroid/animation/ObjectAnimator;" => "Landroid/animation/Animator;",
+            "Landroid/view/ViewGroup$MarginLayoutParams;" => {
+                "Landroid/view/ViewGroup$LayoutParams;"
+            }
+            "Landroid/widget/LinearLayout$LayoutParams;" => {
+                "Landroid/view/ViewGroup$MarginLayoutParams;"
+            }
+            "Landroid/widget/FrameLayout$LayoutParams;" => {
+                "Landroid/view/ViewGroup$MarginLayoutParams;"
+            }
+            "Ljava/util/concurrent/ThreadPoolExecutor;" => "Ljava/util/concurrent/ExecutorService;",
+            "Ljava/util/concurrent/ExecutorService;" => "Ljava/util/concurrent/Executor;",
             "Ljava/util/HashSet;" => "Ljava/util/AbstractSet;",
             "Ljava/util/TreeSet;" => "Ljava/util/AbstractSet;",
             "Ljava/util/HashMap;" => "Ljava/util/AbstractMap;",
             "Ljava/util/WeakHashMap;" => "Ljava/util/AbstractMap;",
             "Ljava/util/LinkedHashMap;" => "Ljava/util/HashMap;",
+            "Ljava/util/concurrent/ConcurrentHashMap;" => "Ljava/util/HashMap;",
             "Ljava/util/ArrayList;" => "Ljava/util/AbstractList;",
             "Ldroidless/runtime/UnmodifiableRandomAccessList;" => {
                 "Ldroidless/runtime/UnmodifiableList;"
@@ -675,6 +763,11 @@ impl Runtime {
             | "Ljava/util/AbstractList;"
             | "Ljava/util/AbstractQueue;" => "Ljava/util/AbstractCollection;",
             "Landroid/widget/Button;" | "Landroid/widget/EditText;" => "Landroid/widget/TextView;",
+            "Landroid/widget/ImageButton;" => "Landroid/widget/ImageView;",
+            "Landroid/widget/RelativeLayout;"
+            | "Landroid/widget/ScrollView;"
+            | "Landroid/widget/HorizontalScrollView;" => "Landroid/view/ViewGroup;",
+            "Landroid/widget/ImageView;" | "Landroid/widget/Space;" => "Landroid/view/View;",
             "Landroid/widget/TextView;" | "Landroid/view/ViewGroup;" => "Landroid/view/View;",
             "Landroid/widget/LinearLayout;" | "Landroid/widget/FrameLayout;" => {
                 "Landroid/view/ViewGroup;"
@@ -951,7 +1044,21 @@ impl Runtime {
             "unsupported class {class}"
         );
         self.initialize(class)?;
-        self.heap.instance(class)
+        let object = self.heap.instance(class)?;
+        if self.heap.get(object)?.view.is_none() && self.is_a(class, "Landroid/view/View;") {
+            let mut ancestor = class.to_owned();
+            for _ in 0..64 {
+                let Some(parent) = self.parent(&ancestor) else {
+                    break;
+                };
+                if let Some(view) = ui::View::for_class(&parent) {
+                    self.heap.get_mut(object)?.view = Some(view);
+                    break;
+                }
+                ancestor = parent;
+            }
+        }
+        Ok(object)
     }
     pub fn invoke(
         &mut self,

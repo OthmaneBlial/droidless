@@ -30,29 +30,42 @@ our authored test APKs only; they do not participate in execution.
 > 🧭 A working slice of Android, one real APK at a time. Compatibility is narrow;
 > unsupported methods and opcodes report errors.
 
-## 🧮 A calculator, now at home on the desktop
+## 📓 A public notes APK, opened in DROIDLESS
 
-**An unmodified public APK, in a clean white and charcoal native window.**
-[Simple Calculator 1.0](https://github.com/swiftugandan/Simple-Android-Calculator/tree/3ba860b281eba34f144e4e75115f0c0a06bced31), published by swiftugandan,
-runs its original calculation and click-listener DEX bytecode through DROIDLESS.
-
-| Native clicks | Actual display |
-|---|---|
-| `7 → + → 5 → =` | **12** |
-| `8 → × → 8 → =` | **64** |
-| `9 → / → 3 → =` | **3** |
+The unmodified [Notepad 1.0.0 release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0)
+now reaches its Notes screen and opens the note editor. A headless run taps **＋**,
+enters `No pink`, and confirms the title in the real APK's editable View tree.
 
 <div align="center">
-<img src="docs/assets/simple-calculator-native.png" alt="Actual public Simple Calculator APK in a native macOS window, displaying 12 after clicking 7 plus 5 equals" width="260">
-<p><sub>Real window. Original APK callbacks. Actual screenshot at a 192 × 400 logical viewport.</sub></p>
+<img src="site/assets/notepad-preview.svg" alt="Illustrated headless View-tree preview of the public Notepad APK in DROIDLESS, with its editor open and No pink entered." width="280">
+<p><sub>Illustrated from the 390 × 844 View snapshot; this is not a native-window capture.</sub></p>
 </div>
 
-The upstream APK is pinned to a commit and SHA-256 checked. It is never rebuilt,
-patched or repackaged, and is not redistributed here. Seven headless scenarios
-check its View state. Android themes, gradients, table-column stretching and
-complete numeric behavior remain incomplete or unverified.
-[See the evidence](docs/verification.md#current-source-neutral-public-calculator).
-Build current source for this demo; the v0.1.0 archive predates its Java support.
+The original APK's SHA-256 is checked by `sh tools/fetch-notepad.sh`; DROIDLESS
+does not patch or redistribute it. The editor and typed title are verified.
+Saving a note across a restart and native-window interaction with this app remain
+unverified. [Exact evidence and limits](docs/verification.md#current-source-public-notepad-editor).
+
+```sh
+sh tools/fetch-notepad.sh
+target/release/droidless run --headless --ephemeral --size 390x844 \
+  --click "＋" --input "No pink" artifacts/apks/notepad-v1.0.0.apk
+```
+
+## 🧮 The native calculator milestone
+
+The independently published [Simple Calculator 1.0](https://github.com/swiftugandan/Simple-Android-Calculator/tree/3ba860b281eba34f144e4e75115f0c0a06bced31)
+also runs unmodified. Original APK clicks produce `7 + 5 = 12`, `8 × 8 = 64`
+and `9 / 3 = 3` in a native macOS window.
+
+<div align="center">
+<img src="docs/assets/simple-calculator-native.png" alt="Actual public Simple Calculator APK in a native macOS window, displaying 12 after clicking 7 plus 5 equals" width="230">
+<p><sub>Actual native capture · 192 × 400 logical viewport · earlier calculator proof.</sub></p>
+</div>
+
+Its upstream artifact is pinned and SHA-256 checked, never rebuilt or repackaged,
+and not redistributed. Styling, table layout and complete numeric behavior remain
+incomplete or unverified. [Calculator evidence](docs/verification.md#current-source-neutral-public-calculator).
 
 ## 🚀 Give it a spin
 
@@ -62,9 +75,10 @@ Build with **Rust 1.95.0** and Apple's **Command Line Tools** on macOS:
 git clone https://github.com/OthmaneBlial/droidless.git
 cd droidless
 cargo build --release --locked
-sh tools/fetch-simple-calculator.sh
-# Hello, desktop calculator 👋
-target/release/droidless run --size 192x400 artifacts/apks/SimpleCalculator.apk
+sh tools/fetch-notepad.sh
+# Notes → editor → typed title 👋
+target/release/droidless run --headless --ephemeral --size 390x844 --click "＋" \
+  --input "No pink" artifacts/apks/notepad-v1.0.0.apk
 ```
 
 The [v0.1.0 release](https://github.com/OthmaneBlial/droidless/releases/tag/v0.1.0)
@@ -136,7 +150,7 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🌍 API profile | Fixed read-only Build.VERSION.SDK_INT = 21 for app version checks; partial framework support — current source |
 | ⏱️ Scheduled callbacks | Main Handler/Looper/Message queue, delayed APK callbacks, cancellation and GC retention; native authored timer verified — current source |
 | 🧵 Guest workers | Deferred DEX execution on a serial shared-heap host executor; queue/monitor waits/interrupt pass headless checks; main Handler results also verified natively — current source |
-| 🛠️ Next up | Isolated file/process APIs, main waits, list widgets and images; a substantial unmodified notes/todo APK |
+| 🛠️ Next up | Verify save/restart and native-window input in the public Notepad APK; then follow the next real app failure |
 
 The published **v0.1.0 archive predates navigation, persistence, collections, scheduling and the new calculator demo**. Current source capability
 is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
@@ -155,7 +169,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, snapshot iteration across mutation/GC/worker writes, guest equality, read-only views and limits; same normal list, snapshot, map-copy and immediate queue contracts pass on desktop Java |
 | Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, primitive TYPE identities, guest faults and inherited fields; pure Java contracts pass on desktop Java. SDK profile field checks are compiled DEX evidence |
 | Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native delayed timer/cancellation/finish and worker-to-main results; headless ordering, Message overrides, worker waits/interrupt, GC, errors and limits. [Exact scheduling scope](docs/threading.md) |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | SDK checks and lifecycle-observer registration now pass; Stetho startup stops at FileInputStream. No UI or working-notes claim |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Notes screen, editor opening and typed title verified headlessly; save/restart and native-window interaction unverified |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).
@@ -164,10 +178,12 @@ compatibility. [Evidence catalog](compatibility/catalog.json).
 # CI lives on your machine. GitHub Actions stays disabled.
 sh tools/ci.sh
 sh tools/fetch-kascalc.sh # Earlier calculator regression APK
+sh tools/fetch-simple-calculator.sh
+sh tools/fetch-notepad.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 41 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 61 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>
@@ -196,8 +212,9 @@ clear compatibility boundary. [Follow the roadmap](docs/roadmap.md).
 ## 🔐 A small but important boundary
 
 This prototype is not a security sandbox. Parser/VM limits do not replace OS
-isolation. Current source grants only isolated SharedPreferences I/O; general files,
-networking, native-library and process APIs are unavailable. Use trusted APKs.
+isolation. Current source grants isolated SharedPreferences storage plus a fixed
+virtual `/proc/self/cmdline` response; general file, network, native-library and
+process APIs are unavailable. Use trusted APKs.
 [Storage behavior and limits](docs/storage.md).
 [Security boundaries](docs/security.md).
 

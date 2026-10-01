@@ -138,12 +138,14 @@ both. Primitive metadata, native map copying and read-only List construction als
 resolve. Snapshot CopyOnWriteArrayList construction now resolves too; snapshot
 stability across serial worker writes is checked in the authored Collections
 fixture. Fixed SDK metadata and Application lifecycle-observer registration now
-resolve too. The unchanged Notepad release stops at `FileInputStream` in bundled
-`com/b/a/a/e.b()` PC `0x0006`, under `e.a()` PC `0x000a` and Application.onCreate
-PC `0x0056`, while Stetho reads process information.
-This is still before Activity/UI creation; the independent worker/notes workflow
-has not executed successfully. The 50% checkpoint remains ahead. The v0.1.0 release
-archive predates scheduling and workers.
+resolve too. At the earlier 2026-09-30 scheduling checkpoint, the unchanged Notepad release
+stopped at `FileInputStream` in bundled `com/b/a/a/e.b()` PC `0x0006`, under
+`e.a()` PC `0x000a` and Application.onCreate PC `0x0056`, while Stetho read
+process information. The later public-Notepad editor checkpoint in the
+[verification record](verification.md#current-source-public-notepad-editor)
+supersedes that startup result. Save/restart and third-party worker behavior remain
+unverified; the 50% checkpoint remains ahead. The v0.1.0 archive predates the
+later runtime work.
 
 API references: [Android Handler](https://developer.android.com/reference/android/os/Handler),
 [Message](https://developer.android.com/reference/android/os/Message),

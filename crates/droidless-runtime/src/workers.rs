@@ -7,6 +7,8 @@ use anyhow::{Context, Result, ensure};
 use droidless_formats::dex::Method;
 use std::collections::{BTreeMap, VecDeque};
 
+const THREAD_LOCAL: &str = "Ljava/lang/ThreadLocal;";
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Waiting {
     Take(Word),
@@ -116,6 +118,71 @@ impl Runtime {
         match self.workers.current {
             Some(thread) => Ok(thread),
             None => self.main_thread(),
+        }
+    }
+    pub(crate) fn thread_local_native(
+        &mut self,
+        method: &Method,
+        args: &[Word],
+    ) -> Result<Option<Vec<Word>>> {
+        if method.class != THREAD_LOCAL {
+            return Ok(None);
+        }
+        let receiver = *args.first().context("ThreadLocal receiver missing")?;
+        match method.signature().as_str() {
+            "<init>()V" => {
+                self.heap.get(receiver)?;
+                Ok(Some(vec![]))
+            }
+            "initialValue()Ljava/lang/Object;" => {
+                self.heap.get(receiver)?;
+                Ok(Some(vec![Word::ZERO]))
+            }
+            "get()Ljava/lang/Object;" => {
+                let thread = self.current_thread()?;
+                let key = format!("droidless:thread-local:{}", receiver.reference()?);
+                if let Some(value) = self
+                    .heap
+                    .get(thread)?
+                    .fields
+                    .get(&key)
+                    .and_then(|values| values.first())
+                    .copied()
+                {
+                    return Ok(Some(vec![value]));
+                }
+                let value = self
+                    .invoke(
+                        Method {
+                            class: THREAD_LOCAL.into(),
+                            name: "initialValue".into(),
+                            parameters: vec![],
+                            returns: "Ljava/lang/Object;".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    )?
+                    .first()
+                    .copied()
+                    .context("ThreadLocal.initialValue returned no value")?;
+                self.heap.get_mut(thread)?.fields.insert(key, vec![value]);
+                Ok(Some(vec![value]))
+            }
+            "set(Ljava/lang/Object;)V" => {
+                let value = *args.get(1).context("ThreadLocal value missing")?;
+                value.reference()?;
+                let thread = self.current_thread()?;
+                let key = format!("droidless:thread-local:{}", receiver.reference()?);
+                self.heap.get_mut(thread)?.fields.insert(key, vec![value]);
+                Ok(Some(vec![]))
+            }
+            "remove()V" => {
+                let thread = self.current_thread()?;
+                let key = format!("droidless:thread-local:{}", receiver.reference()?);
+                self.heap.get_mut(thread)?.fields.remove(&key);
+                Ok(Some(vec![]))
+            }
+            _ => Ok(None),
         }
     }
     pub(crate) fn require_main_thread(&self) -> Result<()> {

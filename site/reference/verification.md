@@ -549,3 +549,36 @@ Full local CI passes 41 Rust tests, warning-free Clippy, release build and 4,096
 seeded parser mutations. All 17 original calculator scenarios pass. The neutral
 showcase is retained. GitHub Actions remain disabled; v0.1.0 retains its earlier
 archive scope, and the 50% everyday-app checkpoint remains ahead.
+
+## Current source: public Notepad editor
+
+Verified 2026-10-01 on macOS ARM64 using the unchanged Notepad 1.0.0 release,
+package `ir.cafebazaar.notepad`:
+[upstream release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0).
+SHA-256: `2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+`sh tools/fetch-notepad.sh` downloads that public artifact and refuses a digest
+mismatch; the APK is neither modified nor redistributed.
+
+The original APK now completes Application startup and renders its Notes list,
+including the empty state and **＋** button. Clicking **＋** runs the APK's own
+listener/navigation code and builds `NoteActivity` with two editable Views and
+the `Notepad` / `Created moments ago` labels. `--input "No pink"` updates the
+first editable View in the emitted tree. This CLI helper writes the View model
+directly; it does not synthesize Android keyboard events or prove the app's save
+listener. The note editor can be replayed with:
+
+```sh
+target/release/droidless run --headless --ephemeral --size 390x844 \
+  --click "＋" --input "No pink" artifacts/apks/notepad-v1.0.0.apk
+```
+
+The tree comes from the original APK and runs its Activity/DBFlow initialization.
+`site/assets/notepad-preview.svg` is a vector illustration of the observed state,
+not a captured native window. Save/restart, AppKit text interaction, visual
+fidelity and an independent Android reference run remain unverified. The 50%
+everyday-app checkpoint remains ahead.
+
+`sh tools/ci.sh` passes locally with 61 Rust tests, warning-free Clippy, the
+optimized release build and 4,096 seeded parser mutations. `python3 tools/compatibility.py`
+passes 17 calculator scenarios plus the Notepad Notes
+list/editor replay. No GitHub Actions run was used.

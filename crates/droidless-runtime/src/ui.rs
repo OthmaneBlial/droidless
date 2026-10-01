@@ -31,9 +31,20 @@ impl View {
             "Landroid/support/v7/widget/FitWindowsFrameLayout;"
             | "Landroid/support/v7/widget/ContentFrameLayout;"
             | "Landroid/support/v4/widget/DrawerLayout;"
+            | "Landroid/support/design/widget/CoordinatorLayout;"
+            | "Landroid/support/design/widget/AppBarLayout;"
             | "Landroid/support/design/widget/NavigationView;"
             | "Landroid/support/design/internal/NavigationMenuView;"
-            | "Landroid/support/v7/widget/RecyclerView;" => "FrameLayout",
+            | "Landroid/support/v7/widget/RecyclerView;"
+            | "Landroid/support/v7/widget/Toolbar;"
+            | "Landroid/widget/RelativeLayout;"
+            | "Landroid/widget/ScrollView;"
+            | "Landroid/widget/HorizontalScrollView;" => "FrameLayout",
+            "Landroid/support/design/widget/FloatingActionButton;"
+            | "Landroid/widget/ImageButton;" => "Button",
+            "Landroid/support/v7/widget/AppCompatTextView;" => "TextView",
+            "Landroid/support/v7/widget/AppCompatEditText;" => "EditText",
+            "Landroid/widget/ImageView;" | "Landroid/widget/Space;" => "View",
             "Landroid/support/v7/widget/ViewStubCompat;" => "View",
             _ => class
                 .strip_prefix("Landroid/widget/")
@@ -63,7 +74,11 @@ impl View {
         Some(Self {
             kind: name.to_owned(),
             id: 0,
-            text: String::new(),
+            text: if class == "Landroid/support/design/widget/FloatingActionButton;" {
+                "＋".into()
+            } else {
+                String::new()
+            },
             children: vec![],
             listener: None,
             key_listener: None,
