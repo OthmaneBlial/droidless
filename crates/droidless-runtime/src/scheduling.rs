@@ -92,10 +92,8 @@ impl Runtime {
         let mut worker_slices = 64;
         self.poll_workers(&mut worker_slices)?;
         let mut count = 0;
-        while let Some((&key, &message)) = self.queue.pending.first_key_value() {
-            if key.0 > self.uptime_ms() || self.queue.closed {
-                break;
-            }
+        let looper = self.main_looper()?;
+        while let Some((key, message)) = self.next_looper_message(looper)? {
             ensure!(
                 count < 1024,
                 "message dispatch limit reached (1024 per poll)"
@@ -145,7 +143,7 @@ impl Runtime {
         }
         Ok(())
     }
-    fn message_word(&self, message: Word, name: &str) -> Result<Word> {
+    pub(crate) fn message_word(&self, message: Word, name: &str) -> Result<Word> {
         let key = if name == "obj" {
             format!("{MESSAGE}->obj:Ljava/lang/Object;")
         } else {
@@ -160,7 +158,7 @@ impl Runtime {
             .copied()
             .unwrap_or(Word::ZERO))
     }
-    fn retire_message(&mut self, message: Word) -> Result<()> {
+    pub(crate) fn retire_message(&mut self, message: Word) -> Result<()> {
         let fields = &mut self.heap.get_mut(message)?.fields;
         fields.clear();
         fields.insert("used".into(), vec![Word::from(1)]);
@@ -202,10 +200,11 @@ impl Runtime {
         if self.queue.closed {
             return Ok(false);
         }
-        ensure!(
-            self.message_word(handler, "looper")? == self.main_looper()?,
-            "Handler has no supported Looper"
-        );
+        let looper = self.message_word(handler, "looper")?;
+        self.validate_looper(looper)?;
+        if self.message_word(looper, "quitting")?.truth() {
+            return Ok(false);
+        }
         ensure!(
             self.queue.pending.len() < LIMIT,
             "message queue limit reached ({LIMIT})"
@@ -217,13 +216,14 @@ impl Runtime {
             .context("message sequence exhausted")?;
         let fields = &mut self.heap.get_mut(message)?.fields;
         fields.insert("target".into(), vec![handler]);
+        fields.insert("looper".into(), vec![looper]);
         fields.insert("when".into(), wide(when));
         fields.insert("used".into(), vec![Word::from(1)]);
         self.queue.sequence = sequence;
         self.queue.pending.insert((when, sequence), message);
         Ok(true)
     }
-    fn main_looper(&mut self) -> Result<Word> {
+    pub(crate) fn main_looper(&mut self) -> Result<Word> {
         if let Some(word) = self
             .statics
             .get("droidless:mainLooper")
@@ -457,14 +457,7 @@ impl Runtime {
                 result.push(self.message_word(receiver, "thread")?)
             }
             (LOOPER, "quit()V" | "quitSafely()V") => {
-                ensure!(
-                    receiver == self.main_looper()?,
-                    "unsupported worker Looper quit/delivery"
-                );
-                return Err(fault(
-                    "Ljava/lang/IllegalStateException;",
-                    "the main Looper cannot quit",
-                ));
+                self.quit_worker_looper(receiver, method.name == "quitSafely")?;
             }
             (THREAD, "currentThread()Ljava/lang/Thread;") => result.push(self.current_thread()?),
             (THREAD_GROUP, "<init>(Ljava/lang/String;)V") => {
@@ -642,16 +635,24 @@ impl Runtime {
                 | "<init>(Landroid/os/Handler$Callback;)V"
                 | "<init>(Landroid/os/Looper;Landroid/os/Handler$Callback;)V",
             ) => {
-                let looper = self.main_looper()?;
-                if method.parameters.first().is_some_and(|p| p == LOOPER) {
-                    self.heap.get(arg(1)?)?;
-                    ensure!(arg(1)? == looper, "only the main Looper is supported");
+                let looper = if method.parameters.first().is_some_and(|p| p == LOOPER) {
+                    arg(1)?
                 } else {
-                    ensure!(
-                        self.workers.current.is_none(),
-                        "unsupported implicit worker Handler; use the main Looper explicitly"
-                    );
-                }
+                    match self.workers.current {
+                        Some(thread) => {
+                            let looper = self.thread_word(thread, "looper")?;
+                            if looper == Word::ZERO {
+                                return Err(fault(
+                                    "Ljava/lang/RuntimeException;",
+                                    "Can't create Handler before Looper.prepare",
+                                ));
+                            }
+                            looper
+                        }
+                        None => self.main_looper()?,
+                    }
+                };
+                self.validate_looper(looper)?;
                 let callback = if method
                     .parameters
                     .last()

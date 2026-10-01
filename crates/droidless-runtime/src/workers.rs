@@ -14,6 +14,7 @@ pub(crate) enum Waiting {
     Take(Word),
     Put(Word),
     Monitor(Word),
+    Looper(Word),
     ObjectWait { object: Word, deadline: Option<u64> },
     Completion { owner: Word, deadline: Option<u64> },
 }
@@ -396,8 +397,10 @@ impl Runtime {
         {
             return self.executor_ready(executor, worker.idle_since);
         }
-        if !matches!(worker.waiting, Some(Waiting::Monitor(_)))
-            && self.thread_word(worker.thread, "interrupted")?.truth()
+        if !matches!(
+            worker.waiting,
+            Some(Waiting::Monitor(_) | Waiting::Looper(_))
+        ) && self.thread_word(worker.thread, "interrupted")?.truth()
         {
             return Ok(true);
         }
@@ -412,6 +415,7 @@ impl Runtime {
                 .monitors
                 .get(&object.reference()?)
                 .is_none_or(|(owner, _)| *owner == worker.thread),
+            Some(Waiting::Looper(looper)) => self.looper_ready(looper)?,
             Some(Waiting::ObjectWait { object, deadline }) => {
                 self.thread_word(worker.thread, "droidless:wait:notified")?
                     .truth()
@@ -578,6 +582,11 @@ impl Runtime {
                         .get_mut(worker.thread)?
                         .fields
                         .insert("alive".into(), vec![Word::ZERO]);
+                    let looper = self.thread_word(worker.thread, "looper")?;
+                    if looper != Word::ZERO {
+                        self.finish_looper_message(looper)?;
+                        self.clear_looper_frame(looper)?;
+                    }
                     if let Some(executor) = worker.executor {
                         self.retire_executor_worker(executor, worker.thread)?;
                     }
@@ -610,6 +619,11 @@ impl Runtime {
         );
         let workers: Vec<_> = self.workers.pending.drain(..).collect();
         for worker in workers {
+            let looper = self.thread_word(worker.thread, "looper")?;
+            if looper != Word::ZERO {
+                self.finish_looper_message(looper)?;
+                self.clear_looper_frame(looper)?;
+            }
             if let Some(timer) = worker.timer {
                 self.finish_timer_task(timer, true)?;
             }

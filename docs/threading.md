@@ -1,6 +1,6 @@
-# Main-thread scheduling and bounded guest workers
+# Message scheduling and bounded guest workers
 
-Current source owns a bounded main-thread message queue. Handler callbacks execute
+Current source owns bounded main and prepared worker Looper queues. Handler callbacks execute
 the APK's DEX in the same interpreter as lifecycle and input callbacks. Posting
 does not run the callback inline. Current source also executes deferred guest
 workers with shared objects, independent managed frames and stable Thread identity.
@@ -11,8 +11,8 @@ interrupt becomes available. This remains a bounded subset, not full Java concur
 
 | Family | Exact subset |
 |---|---|
-| Looper | getMainLooper, myLooper, getThread; prepare creates one metadata-only worker Looper; main quit/quitSafely throw IllegalStateException |
-| Handler construction | (), (Looper), (Callback), (Looper, Callback); main Looper only |
+| Looper | getMainLooper, myLooper, getThread; prepare once per worker, loop delivery, quit and quitSafely; main quit/quitSafely throw IllegalStateException |
+| Handler construction | (), (Looper), (Callback), (Looper, Callback); implicit construction selects the current prepared Looper; unprepared workers throw RuntimeException |
 | Runnable posts | post(Runnable), postDelayed(Runnable, long), postAtTime(Runnable, long), postAtTime(Runnable, Object, long) |
 | Message delivery | obtainMessage(), obtainMessage(int), sendMessage(Message), sendMessageDelayed(Message, long), sendMessageAtTime(Message, long), dispatchMessage(Message), handleMessage(Message) |
 | Cancellation | hasCallbacks(Runnable), removeCallbacks(Runnable), removeCallbacks(Runnable, Object), removeCallbacksAndMessages(Object) |
@@ -36,7 +36,10 @@ scoped to the receiving Handler and matches callbacks/tokens by object identity;
 a null cancellation token matches all tokens. Pending and active Messages are
 GC roots, retaining their Handler, callback and payload graph.
 
-Messages run in deadline order, then FIFO insertion order for equal deadlines.
+Messages run in deadline order, then FIFO insertion order within each Looper.
+Queue ownership is fixed at enqueue even if Message.setTarget later changes its
+dispatch recipient. Main and worker delivery share the scheduler, not one global
+cross-thread callback order.
 Negative delays become zero; past absolute deadlines are due at the next poll.
 Each Message is one-shot: queued or consumed Messages cannot be sent again.
 Dispatch/cancellation clears payloads and marks the Message consumed. Public
@@ -51,7 +54,7 @@ with an idle wait of up to 50 ms. It redraws after callbacks mutate guest Views.
 This does not model Android device boot time, deep sleep or precise timer latency.
 Switching to the native clock disables manual advancement.
 
-There are at most 16,384 pending Messages and 1,024 callbacks per poll, sharing
+There are at most 16,384 pending Messages and 1,024 main callbacks per poll, sharing
 the existing five-million-instruction budget. Clock/deadline arithmetic is
 checked. Limits report terminal diagnostics and preserve remaining queued work.
 Uncaught callback exceptions propagate with their original guest cause and clean
@@ -88,9 +91,30 @@ exception handlers are not implemented.
 Worker View/Activity calls are explicitly rejected before mutation; results must
 be posted to a main Handler. Looper.myLooper is null on an unprepared worker;
 prepare creates one worker Looper associated with that Thread, and a second prepare
-throws RuntimeException. Worker loop()/Handler delivery, priority, sleep/join,
-timed queue waits and general worker Looper delivery remain unsupported.
-Handler construction on a worker must explicitly select the main Looper.
+throws RuntimeException. An implicit Handler uses that worker's prepared Looper;
+an explicit main Looper routes results to the main thread.
+
+Looper.loop waits without executing guest instructions when its queue is empty
+or only future deadlines remain. A due callback resumes through real managed DEX
+frames, so ordinary posted Runnable, Handler.Callback and handleMessage overrides
+can suspend on supported worker waits. APK dispatchMessage overrides are honored;
+a blocking callback invoked through a synchronous native super.dispatchMessage
+bridge retains the existing bridge restriction. Worker delivery shares the 64
+slices per poll; even native no-op callbacks yield. An idle Looper does not spin
+or throw when its Thread is interrupted.
+
+quit discards queued messages; quitSafely keeps messages already due and discards
+future deadlines. Both reject new posts, let the current callback finish, and
+return from loop once remaining work is drained. Main quit remains illegal.
+Uncaught guest callback exceptions unwind to the actual loop caller, which can
+catch the original cause and reenter loop; active message roots are retired.
+Host close cancels queued and suspended callbacks. Nested loop calls on one worker,
+MessageQueue APIs, barriers, idle handlers, Looper logging, priority, sleep/join and
+timed queue waits remain unsupported.
+
+Primary references: [API-21 Looper](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/os/Looper.java),
+[MessageQueue](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/os/MessageQueue.java)
+and [Handler](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/os/Handler.java).
 
 Blocking on main, or suspension across a synchronous native bridge/initializer,
 remains an explicit terminal diagnostic. Immediate take/put work on main. A future
@@ -220,6 +244,20 @@ retain nested call arguments, reference/wide results and caught exceptions.
 Native bridges and class initialization remain synchronous within a step.
 The worker scheduler now uses this continuation stack for queue/monitor waits.
 [Frame semantics and limits](dex-vm.md#frame-and-value-semantics).
+
+The compiled [WorkerLooperContract](../examples/scheduling/WorkerLooperContract.java)
+checks preparation faults, implicit Handler selection, two worker queue owners,
+equal-deadline order, delayed delivery, cancellation, callback precedence and APK
+dispatch overrides. Its Rust replay suspends a message callback on queue input,
+collects across the wait, delivers the result through the main Handler, and checks
+idle/interrupt behavior, bounded native no-op delivery, target changes, both quit
+modes, caught callback failure with loop reentry, and close during a blocked
+callback. These are authored headless checks; Android reference/device parity and
+independent public-APK worker Looper flows remain unverified.
+
+```sh
+cargo test -p droidless-runtime --test loopers --locked
+```
 
 The authored [Scheduling fixture](../examples/scheduling/MainActivity.java)
 checks deferred execution, equal-time ordering, callback overrides, cancellation

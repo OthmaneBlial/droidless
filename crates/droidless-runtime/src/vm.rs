@@ -25,6 +25,7 @@ pub(crate) struct Frame {
     pub result: Vec<Word>,
     pub exception: Option<Word>,
     pub return_pc: Option<usize>,
+    pub looper_return: Option<Word>,
     pub monitors: Vec<Word>,
 }
 impl Frame {
@@ -35,6 +36,7 @@ impl Frame {
             .chain(&self.monitors)
             .copied()
             .chain(self.exception)
+            .chain(self.looper_return)
     }
     pub(crate) fn location(&self) -> String {
         format!(
@@ -1447,6 +1449,7 @@ impl Runtime {
                         result: vec![],
                         exception: None,
                         return_pc: None,
+                        looper_return: None,
                         monitors: vec![],
                     });
                     return Ok(None);
@@ -1456,6 +1459,10 @@ impl Runtime {
                     class: class.clone(),
                     ..method.clone()
                 };
+                if native.class == "Landroid/os/Looper;" && native.signature() == "loop()V" {
+                    ensure!(args.is_empty(), "Looper.loop takes no arguments");
+                    return self.begin_worker_looper();
+                }
                 if let Some(result) = self.native(&native, &args)? {
                     return Ok(Some(result));
                 }

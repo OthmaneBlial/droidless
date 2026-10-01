@@ -198,6 +198,10 @@ impl Runtime {
             }
             let finished = self.frames.pop().context("frame stack underflow")?;
             self.release_frame_monitors(&finished)?;
+            if let Some(looper) = finished.looper_return {
+                self.finish_looper_message(looper)?;
+                self.clear_looper_frame(looper)?;
+            }
             error = error.context(finished.location());
             if f == base {
                 return Err(error);
@@ -817,7 +821,8 @@ impl Runtime {
                         self.frames
                             .last_mut()
                             .context("missing invoked frame")?
-                            .return_pc = Some(return_pc);
+                            .return_pc
+                            .get_or_insert(return_pc);
                         return Ok(Flow::Call);
                     }
                 }
