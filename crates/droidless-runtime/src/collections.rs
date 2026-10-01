@@ -319,6 +319,19 @@ impl Runtime {
                         Word::ZERO
                     })]
                 }
+                "indexOfKey(I)I" => {
+                    let key = arg(1)?.int()?;
+                    let Data::SparseArray(values) = &self.heap.get(receiver)?.data else {
+                        bail!("uninitialized SparseArray");
+                    };
+                    // ponytail: O(n) rank in the existing ordered map; use indexed sparse storage if large-array lookups become costly.
+                    let index = values.range(..key).count() as i32;
+                    vec![Word::from(if values.contains_key(&key) {
+                        index
+                    } else {
+                        !index
+                    })]
+                }
                 "size()I" => {
                     let Data::SparseArray(values) = &self.heap.get(receiver)?.data else {
                         bail!("uninitialized SparseArray");
@@ -625,6 +638,62 @@ impl Runtime {
             return Ok(Some(vec![]));
         }
         if method.class == "Ljava/util/Collections;" {
+            if signature == "reverse(Ljava/util/List;)V" {
+                let list = *args.first().context("reverse list missing")?;
+                ensure!(
+                    self.is_a(&self.heap.get(list)?.class, "Ljava/util/List;"),
+                    "Collections.reverse requires a List"
+                );
+                let size = self.invoke(
+                    Method {
+                        class: "Ljava/util/List;".into(),
+                        name: "size".into(),
+                        parameters: vec![],
+                        returns: "I".into(),
+                    },
+                    vec![list],
+                    true,
+                )?;
+                let size = size.first().context("List.size returned no value")?.int()?;
+                ensure!(
+                    (0..=LIMIT as i32).contains(&size),
+                    "reverse list size exceeds collection limit"
+                );
+                let roots = self.native_roots.len();
+                self.native_roots.push(list);
+                let reversed = (|| -> Result<()> {
+                    for first in 0..size / 2 {
+                        let value = self.invoke(
+                            Method {
+                                class: "Ljava/util/List;".into(),
+                                name: "get".into(),
+                                parameters: vec!["I".into()],
+                                returns: "Ljava/lang/Object;".into(),
+                            },
+                            vec![list, Word::from(first)],
+                            true,
+                        )?;
+                        let value = *value.first().context("List.get returned no value")?;
+                        let set = Method {
+                            class: "Ljava/util/List;".into(),
+                            name: "set".into(),
+                            parameters: vec!["I".into(), "Ljava/lang/Object;".into()],
+                            returns: "Ljava/lang/Object;".into(),
+                        };
+                        let previous = self.invoke(
+                            set.clone(),
+                            vec![list, Word::from(size - 1 - first), value],
+                            true,
+                        )?;
+                        let previous = *previous.first().context("List.set returned no value")?;
+                        self.invoke(set, vec![list, Word::from(first), previous], true)?;
+                    }
+                    Ok(())
+                })();
+                self.native_roots.truncate(roots);
+                reversed?;
+                return Ok(Some(vec![]));
+            }
             if signature == "sort(Ljava/util/List;Ljava/util/Comparator;)V"
                 || signature == "sort(Ljava/util/List;)V"
             {

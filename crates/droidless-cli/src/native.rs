@@ -22,7 +22,7 @@ struct NativeView {
     height: f32,
     text_size: f32,
     alpha: f32,
-    padding: f32,
+    padding: [f32; 4],
     text: *const c_char,
     description: *const c_char,
     click_target: usize,
@@ -154,6 +154,9 @@ extern "C" fn event(
 }
 fn draw(context: &mut ContextData<'_>) -> Result<()> {
     fn node(host: *mut c_void, n: &Node, ancestor_click: usize, ancestor_alpha: f32) -> Result<()> {
+        if n.view.visible != 0 {
+            return Ok(());
+        }
         let alpha = ancestor_alpha * n.view.alpha.clamp(0.0, 1.0);
         let click_target = if n.view.listener.is_some() || n.view.xml_click.is_some() {
             n.handle

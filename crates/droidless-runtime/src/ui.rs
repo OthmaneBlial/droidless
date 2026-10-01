@@ -16,7 +16,7 @@ pub struct View {
     pub width: f32,
     pub height: f32,
     pub weight: f32,
-    pub padding: f32,
+    pub padding: [f32; 4],
     pub margins: [f32; 4],
     pub visible: i32,
     pub enabled: bool,
@@ -48,11 +48,12 @@ impl View {
             | "Landroid/widget/HorizontalScrollView;" => "FrameLayout",
             "Landroid/support/design/widget/FloatingActionButton;"
             | "Landroid/widget/ImageButton;" => "Button",
-            "Landroid/support/v7/widget/AppCompatTextView;" => "TextView",
+            "Landroid/support/v7/widget/AppCompatTextView;"
+            | "Landroid/widget/CheckedTextView;" => "TextView",
             "Landroid/support/v7/widget/AppCompatEditText;" => "EditText",
             "Landroid/widget/ImageView;" => "ImageView",
             "Landroid/widget/Space;" => "View",
-            "Landroid/support/v7/widget/ViewStubCompat;" => "View",
+            "Landroid/support/v7/widget/ViewStubCompat;" | "Landroid/view/ViewStub;" => "View",
             _ => class
                 .strip_prefix("Landroid/widget/")
                 .and_then(|c| c.strip_suffix(';'))
@@ -97,7 +98,7 @@ impl View {
             width: -2.0,
             height: -2.0,
             weight: 0.0,
-            padding: 0.0,
+            padding: [0.0; 4],
             margins: [0.0; 4],
             visible: 0,
             enabled: true,
@@ -313,10 +314,10 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
     view.weight = weight(heap, word)?;
     let mut children = vec![];
     let available = Rect {
-        x: rect.x + view.padding,
-        y: rect.y + view.padding,
-        width: (rect.width - 2.0 * view.padding).max(0.0),
-        height: (rect.height - 2.0 * view.padding).max(0.0),
+        x: rect.x + view.padding[0],
+        y: rect.y + view.padding[1],
+        width: (rect.width - view.padding[0] - view.padding[2]).max(0.0),
+        height: (rect.height - view.padding[1] - view.padding[3]).max(0.0),
     };
     if let Some(grid) = &view.grid {
         let metrics = grid_metrics(&view, available.width)?;
@@ -514,7 +515,7 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
                 .transpose()?
                 .unwrap_or(grid.columns.max(1))
                 .max(1) as usize;
-            let mut height = 2.0 * v.padding;
+            let mut height = v.padding[1] + v.padding[3];
             for (index, row) in v.children.chunks(columns).enumerate() {
                 if index > 0 {
                     height += grid.vertical_spacing as f32;
@@ -548,7 +549,13 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
         } else {
             sizes.iter().copied().fold(0.0, f32::max)
         };
-        Ok((total + 2.0 * v.padding).min(parent))
+        Ok((total
+            + if horizontal {
+                v.padding[0] + v.padding[2]
+            } else {
+                v.padding[1] + v.padding[3]
+            })
+        .min(parent))
     }
     measure(heap, word, horizontal, parent, 0)
 }
@@ -562,7 +569,7 @@ mod tests {
         let root = heap.instance("Landroid/widget/FrameLayout;").unwrap();
         let child = heap.instance("Landroid/widget/Button;").unwrap();
         let frame = heap.get_mut(root).unwrap().view.as_mut().unwrap();
-        frame.padding = 20.0;
+        frame.padding = [20.0; 4];
         frame.children.push(child);
         let button = heap.get_mut(child).unwrap().view.as_mut().unwrap();
         button.width = 40.0;

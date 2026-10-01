@@ -299,41 +299,112 @@ impl Runtime {
     }
     pub fn layout_snapshot(&mut self) -> Result<Node> {
         self.bind_grids()?;
-        fn collect(node: &Node, parent: (f32, f32), out: &mut Vec<(Word, [i32; 4])>) {
-            let left = (node.rect.x - parent.0) as i32;
-            let top = (node.rect.y - parent.1) as i32;
-            let right = left + node.rect.width as i32;
-            let bottom = top + node.rect.height as i32;
-            out.push((Word::Ref(node.handle), [left, top, right, bottom]));
+        fn collect(
+            heap: &Heap,
+            node: &Node,
+            parent: (f32, f32),
+            out: &mut Vec<(Word, [i32; 4])>,
+        ) -> Result<()> {
+            let translation = |axis| -> Result<f32> {
+                let value = heap
+                    .get(Word::Ref(node.handle))?
+                    .fields
+                    .get(&format!("droidless:view:translation-{axis}"))
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO)
+                    .int()?;
+                Ok(f32::from_bits(value as u32))
+            };
+            let left = node.rect.x - parent.0 - translation("x")?;
+            let top = node.rect.y - parent.1 - translation("y")?;
+            out.push((
+                Word::Ref(node.handle),
+                [
+                    left as i32,
+                    top as i32,
+                    (left + node.rect.width) as i32,
+                    (top + node.rect.height) as i32,
+                ],
+            ));
             for child in &node.children {
-                collect(child, (node.rect.x, node.rect.y), out);
+                collect(heap, child, (node.rect.x, node.rect.y), out)?;
             }
+            Ok(())
         }
         let root = self.root.context("no content View")?;
         let before = ui::layout(&self.heap, root, self.width, self.height)?;
         let mut views = vec![];
-        collect(&before, (0.0, 0.0), &mut views);
-        let mut recycler_views = vec![];
+        collect(&self.heap, &before, (0.0, 0.0), &mut views)?;
+        let mut layout_views = vec![];
         for (view, bounds) in views {
-            let class = self.heap.get(view)?.class.clone();
-            let navigation_menu = self.is_a(
-                &class,
-                "Landroid/support/design/internal/NavigationMenuView;",
-            );
-            if !navigation_menu
-                && (self.is_a(&class, "Landroid/support/v7/widget/RecyclerView;")
-                    || self.is_a(&class, "Landroidx/recyclerview/widget/RecyclerView;"))
-            {
-                recycler_views.push((view, bounds));
+            let mut class = self.heap.get(view)?.class.clone();
+            for _ in 0..128 {
+                let Some((dex, index)) = self.class_location(&class) else {
+                    break;
+                };
+                let definition = &self.apk.dex[dex].classes[index];
+                if definition.methods.iter().any(|encoded| {
+                    encoded.code.is_some()
+                        && matches!(
+                            self.apk.dex[dex].methods[encoded.index]
+                                .signature()
+                                .as_str(),
+                            "onMeasure(II)V" | "onLayout(ZIIII)V"
+                        )
+                }) {
+                    layout_views.push((view, bounds));
+                    break;
+                }
+                let Some(parent) = &definition.super_class else {
+                    break;
+                };
+                class = parent.clone();
             }
         }
         let roots = self.native_roots.len();
         self.native_roots
-            .extend(recycler_views.iter().map(|(view, _)| *view));
+            .extend(layout_views.iter().map(|(view, _)| *view));
         let result = (|| -> Result<()> {
-            for (view, [left, top, right, bottom]) in recycler_views {
-                let width = (right - left).max(0);
-                let height = (bottom - top).max(0);
+            for (view, _) in layout_views {
+                // ponytail: rebuild per callback so parent layout/mutation is respected;
+                // use a dirty recursive traversal if this bounded snapshot path becomes costly.
+                let mut current = vec![];
+                collect(
+                    &self.heap,
+                    &ui::layout(&self.heap, root, self.width, self.height)?,
+                    (0.0, 0.0),
+                    &mut current,
+                )?;
+                let Some((_, bounds @ [left, top, right, bottom])) =
+                    current.into_iter().find(|(word, _)| *word == view)
+                else {
+                    continue;
+                };
+                let fields = &self.heap.get(view)?.fields;
+                let requested = fields
+                    .get("droidless:view:layout-requested")
+                    .and_then(|values| values.first())
+                    .is_some_and(|word| word.truth());
+                let laid_out = fields
+                    .get("droidless:view:laid-out")
+                    .and_then(|values| values.first())
+                    .is_some_and(|word| word.truth());
+                let changed = ["left", "top", "right", "bottom"]
+                    .into_iter()
+                    .zip(bounds)
+                    .any(|(edge, value)| {
+                        fields
+                            .get(&format!("droidless:view:{edge}"))
+                            .and_then(|values| values.first())
+                            .copied()
+                            != Some(Word::from(value))
+                    });
+                if laid_out && !requested && !changed {
+                    continue;
+                }
+                let width = right.saturating_sub(left).max(0);
+                let height = bottom.saturating_sub(top).max(0);
                 let width_spec = Word::from((0x4000_0000u32 | width as u32) as i32);
                 let height_spec = Word::from((0x4000_0000u32 | height as u32) as i32);
                 if self.is_a(
@@ -695,6 +766,7 @@ impl Runtime {
                         "Landroid/util/TypedValue;",
                         "Landroid/content/res/Configuration;",
                         "Landroid/graphics/Rect;",
+                        "Landroid/graphics/RectF;",
                         "Landroid/view/ViewGroup$LayoutParams;",
                         "Landroid/view/ViewGroup$MarginLayoutParams;",
                         "Landroid/widget/LinearLayout$LayoutParams;",
@@ -774,6 +846,9 @@ impl Runtime {
                         && [("keyboard", "I")].contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/graphics/Rect;"
                         && [("left", "I"), ("top", "I"), ("right", "I"), ("bottom", "I")]
+                            .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/graphics/RectF;"
+                        && [("left", "F"), ("top", "F"), ("right", "F"), ("bottom", "F")]
                             .contains(&(field.name.as_str(), field.ty.as_str())))
                     || (([
                         "Landroid/view/ViewGroup$LayoutParams;",
@@ -906,6 +981,10 @@ impl Runtime {
             "Landroid/view/ViewGroup$MarginLayoutParams;" => {
                 "Landroid/view/ViewGroup$LayoutParams;"
             }
+            "Landroid/widget/TableLayout$LayoutParams;"
+            | "Landroid/widget/TableRow$LayoutParams;" => {
+                "Landroid/widget/LinearLayout$LayoutParams;"
+            }
             "Landroid/widget/LinearLayout$LayoutParams;" => {
                 "Landroid/view/ViewGroup$MarginLayoutParams;"
             }
@@ -933,8 +1012,11 @@ impl Runtime {
             "Ljava/util/AbstractSet;"
             | "Ljava/util/AbstractList;"
             | "Ljava/util/AbstractQueue;" => "Ljava/util/AbstractCollection;",
-            "Landroid/widget/Button;" | "Landroid/widget/EditText;" => "Landroid/widget/TextView;",
+            "Landroid/widget/Button;"
+            | "Landroid/widget/EditText;"
+            | "Landroid/widget/CheckedTextView;" => "Landroid/widget/TextView;",
             "Landroid/widget/ImageButton;" => "Landroid/widget/ImageView;",
+            "Landroid/view/ViewStub;" => "Landroid/view/View;",
             "Landroid/widget/GridView;" => "Landroid/widget/AbsListView;",
             "Landroid/widget/AbsListView;" => "Landroid/widget/AdapterView;",
             "Landroid/widget/AdapterView;" => "Landroid/view/ViewGroup;",

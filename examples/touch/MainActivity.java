@@ -12,6 +12,12 @@ import android.widget.TextView;
 
 /** Guest callbacks exercise native dispatch, timers, event ownership and collection. */
 public class MainActivity extends Activity {
+    static MainActivity instance;
+    public static void installLayout() { CustomLayout.install(instance); }
+    public static void configureLayout(int value) { CustomLayout.configure(value); }
+    public static String layoutState() { return CustomLayout.state(); }
+    public static int metadataContract() { return CustomLayout.metadataContract(instance); }
+    public static void mergeWithoutParent() { CustomLayout.mergeWithoutParent(instance); }
     static int downs, shows, longs, ups, confirms, doubles, doubleEvents, scrolls, flings, clicks, touches;
     static float velocity, distance, localX, rawX;
     static boolean consume, throwing;
@@ -19,6 +25,7 @@ public class MainActivity extends Activity {
     static Button button;
     public void onCreate(Bundle state) {
         super.onCreate(state);
+        instance=this;
         detector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             public boolean onDown(MotionEvent e) { downs++; System.gc(); if(throwing) throw new IllegalStateException("touch callback failed"); return true; }
             public void onShowPress(MotionEvent e) { shows++; System.gc(); }

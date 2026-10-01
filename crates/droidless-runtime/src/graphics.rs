@@ -7,6 +7,14 @@ use droidless_formats::dex::Method;
 
 const IDENTITY: [f32; 9] = [1., 0., 0., 0., 1., 0., 0., 0., 1.];
 
+fn map_point(m: [f32; 9], x: f32, y: f32) -> [f32; 2] {
+    let denominator = m[6] * x + m[7] * y + m[8];
+    [
+        (m[0] * x + m[1] * y + m[2]) / denominator,
+        (m[3] * x + m[4] * y + m[5]) / denominator,
+    ]
+}
+
 fn multiply(left: [f32; 9], right: [f32; 9]) -> [f32; 9] {
     std::array::from_fn(|i| {
         (0..3)
@@ -163,14 +171,61 @@ impl Runtime {
                     } else {
                         [0., 0.]
                     };
-                    pair[0] = vec![Word::Bits(
-                        ((m[0] * x + m[1] * y + m[2]) / denominator - origin[0]).to_bits(),
-                    )];
-                    pair[1] = vec![Word::Bits(
-                        ((m[3] * x + m[4] * y + m[5]) / denominator - origin[1]).to_bits(),
-                    )];
+                    let point = map_point(m, x, y);
+                    pair[0] = vec![Word::Bits((point[0] - origin[0]).to_bits())];
+                    pair[1] = vec![Word::Bits((point[1] - origin[1]).to_bits())];
                 }
                 return Ok(Some(vec![]));
+            }
+            "mapRect(Landroid/graphics/RectF;)Z" => {
+                let rect = arg(1)?;
+                ensure!(
+                    self.is_a(&self.heap.get(rect)?.class, "Landroid/graphics/RectF;"),
+                    "Matrix bounds require RectF"
+                );
+                let m = self.matrix_values(receiver)?;
+                let fields = &self.heap.get(rect)?.fields;
+                let edge = |name: &str| -> Result<f32> {
+                    Ok(f32::from_bits(
+                        fields
+                            .get(&format!("Landroid/graphics/RectF;->{name}:F"))
+                            .and_then(|values| values.first())
+                            .copied()
+                            .unwrap_or(Word::ZERO)
+                            .int()? as u32,
+                    ))
+                };
+                let (left, top, right, bottom) =
+                    (edge("left")?, edge("top")?, edge("right")?, edge("bottom")?);
+                let points = [(left, top), (right, top), (right, bottom), (left, bottom)]
+                    .map(|(x, y)| map_point(m, x, y));
+                ensure!(
+                    points.iter().flatten().all(|v| v.is_finite()),
+                    "non-finite mapped rectangle unsupported"
+                );
+                let values = [
+                    points.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min),
+                    points.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min),
+                    points
+                        .iter()
+                        .map(|p| p[0])
+                        .fold(f32::NEG_INFINITY, f32::max),
+                    points
+                        .iter()
+                        .map(|p| p[1])
+                        .fold(f32::NEG_INFINITY, f32::max),
+                ];
+                for (edge, value) in ["left", "top", "right", "bottom"].into_iter().zip(values) {
+                    self.heap.get_mut(rect)?.fields.insert(
+                        format!("Landroid/graphics/RectF;->{edge}:F"),
+                        vec![Word::Bits(value.to_bits())],
+                    );
+                }
+                let stays_rect = m[6] == 0.
+                    && m[7] == 0.
+                    && m[8] == 1.
+                    && ((m[1] == 0. && m[3] == 0.) || (m[0] == 0. && m[4] == 0.));
+                return Ok(Some(vec![Word::from(i32::from(stays_rect))]));
             }
             "preConcat(Landroid/graphics/Matrix;)Z"
             | "postConcat(Landroid/graphics/Matrix;)Z"

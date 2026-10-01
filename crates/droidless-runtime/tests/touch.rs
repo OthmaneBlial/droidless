@@ -50,6 +50,58 @@ fn float(vm: &mut Runtime, name: &str) -> f32 {
 }
 
 #[test]
+fn guest_layout_metadata_geometry_root_touch_and_fault_cleanup() {
+    fn state(vm: &mut Runtime) -> Vec<i32> {
+        let word = call(vm, "layoutState", &[], "Ljava/lang/String;", vec![]).unwrap()[0];
+        vm.heap
+            .text(word)
+            .unwrap()
+            .split(':')
+            .map(|value| value.parse().unwrap())
+            .collect()
+    }
+    let mut vm = runtime();
+    assert_eq!(
+        call(&mut vm, "metadataContract", &[], "I", vec![]).unwrap(),
+        [Word::from(1)]
+    );
+    assert!(
+        format!(
+            "{:#}",
+            call(&mut vm, "mergeWithoutParent", &[], "V", vec![]).unwrap_err()
+        )
+        .contains("merge requires an attached parent")
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    call(&mut vm, "installLayout", &[], "V", vec![]).unwrap();
+    assert!(vm.touch(0, f32::NAN, 30.0).is_err());
+    assert_eq!(state(&mut vm), [2, 0, 0, 0, 0]);
+    tap(&mut vm, 40.0, 30.0);
+    assert_eq!(state(&mut vm), [2, 1, 1, 1, 0]);
+    for _ in 0..3 {
+        vm.layout_snapshot().unwrap();
+    }
+    assert_eq!(state(&mut vm), [2, 1, 1, 1, 0]);
+    call(&mut vm, "configureLayout", &["I"], "V", vec![Word::from(1)]).unwrap();
+    tap(&mut vm, 40.0, 30.0);
+    assert_eq!(state(&mut vm), [2, 2, 2, 1, 1]);
+    for _ in 0..3 {
+        let tree = vm.layout_snapshot().unwrap();
+        assert_eq!(tree.rect.x, 0.5);
+        assert_eq!(tree.children[1].rect.x, 10.5);
+    }
+    assert_eq!(state(&mut vm), [2, 2, 2, 1, 1]);
+    call(&mut vm, "configureLayout", &["I"], "V", vec![Word::from(2)]).unwrap();
+    assert!(format!("{:#}", vm.layout_snapshot().unwrap_err()).contains("custom layout failed"));
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    call(&mut vm, "configureLayout", &["I"], "V", vec![Word::from(0)]).unwrap();
+    tap(&mut vm, 40.0, 30.0);
+    assert_eq!(state(&mut vm), [2, 4, 4, 2, 1]);
+    vm.close().unwrap();
+}
+
+#[test]
 fn compiled_touch_dispatch_gestures_timing_gc_and_failure_cleanup() {
     let mut vm = runtime();
     assert!(vm.touch_input_enabled());

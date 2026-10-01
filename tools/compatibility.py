@@ -130,7 +130,7 @@ if not swpie.exists():
     raise SystemExit(f"Missing {swpie}; run tools/fetch-swpieview.sh first")
 if hashlib.sha256(swpie.read_bytes()).hexdigest() != "7c7a17ddf254e6f7adb53786ab3928937a4de499785475278df2fe5a034f50f3":
     raise SystemExit("SwpieView 1.3.2 checksum mismatch")
-document_replay = root / "target/release/examples/document-replay"
+document_replay = args.binary.parent / "examples/document-replay"
 for app, expected_label in [
     (root / "fixtures/generated/documents.apk", "3 images · document streams"),
     (swpie, None),

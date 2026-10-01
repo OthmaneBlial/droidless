@@ -411,6 +411,29 @@ impl Runtime {
             "touch input during guest execution"
         );
         ensure!((0..=3).contains(&action), "unsupported touch action");
+        if action == 0 {
+            Motion {
+                down: time,
+                time,
+                action,
+                x,
+                y,
+                raw_x: x,
+                raw_y: y,
+                meta: 0,
+                recycled: false,
+            }
+            .validate()?;
+            ensure!(
+                !self
+                    .touch
+                    .as_ref()
+                    .is_some_and(|stream| Some(stream.owner) == self.activity
+                        && Some(stream.root) == self.root),
+                "touch DOWN during active stream"
+            );
+            self.layout_snapshot()?;
+        }
         let owner = self.activity.context("touch without Activity")?;
         let root = self.root.context("touch without content View")?;
         if self

@@ -612,7 +612,10 @@ impl Runtime {
             if node.view.grid.is_some() {
                 out.push((
                     Word::Ref(node.handle),
-                    ui::grid_metrics(&node.view, node.rect.width - 2.0 * node.view.padding)?,
+                    ui::grid_metrics(
+                        &node.view,
+                        node.rect.width - node.view.padding[0] - node.view.padding[2],
+                    )?,
                 ));
             }
             for child in &node.children {

@@ -11,7 +11,7 @@ typedef struct {
     size_t handle;
     uint32_t kind, enabled, editable, visible, foreground, background, has_background, gravity, key_listener;
     int32_t image_scale;
-    float x, y, width, height, text_size, alpha, padding;
+    float x, y, width, height, text_size, alpha, padding[4];
     const char *text;
     const char *description;
     size_t click_target;
@@ -27,7 +27,7 @@ typedef struct {
 
 @interface DroidlessImage : NSImageView
 @property int32_t scaleType;
-@property CGFloat contentPadding;
+@property NSEdgeInsets contentPadding;
 @end
 @implementation DroidlessImage
 - (BOOL)isFlipped { return YES; }
@@ -35,7 +35,9 @@ typedef struct {
     (void)dirty;
     NSImage *image = self.image;
     if (!image || image.size.width <= 0 || image.size.height <= 0) return;
-    NSRect content = NSInsetRect(self.bounds, self.contentPadding, self.contentPadding);
+    NSEdgeInsets padding = self.contentPadding;
+    NSRect content = NSMakeRect(self.bounds.origin.x+padding.left, self.bounds.origin.y+padding.top,
+        self.bounds.size.width-padding.left-padding.right, self.bounds.size.height-padding.top-padding.bottom);
     if (content.size.width <= 0 || content.size.height <= 0) return;
     CGFloat scale = MIN(content.size.width / image.size.width, content.size.height / image.size.height);
     if (self.scaleType == 5) scale = 1;
@@ -222,7 +224,7 @@ void dl_view(void *opaque, const NativeView *node) {
         ((NSImageView *)view).image = image;
         DroidlessImage *nativeImage = (DroidlessImage *)view;
         nativeImage.scaleType = node->image_scale;
-        nativeImage.contentPadding = node->padding;
+        nativeImage.contentPadding = NSEdgeInsetsMake(node->padding[1],node->padding[0],node->padding[3],node->padding[2]);
         [nativeImage setNeedsDisplay:YES];
     }
     if (![view isKindOfClass:[NSButton class]]) {
@@ -276,6 +278,8 @@ void dl_run(void *opaque) {
             NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:0.05] inMode:NSDefaultRunLoopMode dequeue:YES];
             if (event) {
                 int consumed = 0;
+                if (getenv("DROIDLESS_NATIVE_TRACE") && (event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp))
+                    fprintf(stderr, "native key type=%lu code=%u modifiers=%lu\n", (unsigned long)event.type, event.keyCode, (unsigned long)event.modifierFlags);
                 if ((event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp) && event.keyCode == 53 && !(event.modifierFlags&NSEventModifierFlagCommand)) {
                     if (event.type == NSEventTypeKeyDown && !host.callback(host.context, 5, 0, NULL, NULL)) host.running = NO;
                     consumed = 1;
@@ -287,7 +291,9 @@ void dl_run(void *opaque) {
                 if (event.window == host.window && (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeLeftMouseDragged || event.type == NSEventTypeLeftMouseUp)) {
                     NSPoint point = [host.window.contentView convertPoint:event.locationInWindow fromView:nil];
                     if (event.type == NSEventTypeLeftMouseDown && host.touchEnabled && NSPointInRect(point, host.window.contentView.bounds)) {
-                        NSView *hit = [host.window.contentView hitTest:point];
+                        // NSView hitTest expects its superview coordinates; guest MotionEvent stays in flipped content coordinates.
+                        NSPoint hitPoint = [host.window.contentView.superview convertPoint:event.locationInWindow fromView:nil];
+                        NSView *hit = [host.window.contentView hitTest:hitPoint];
                         // Keep AppKit's focus and text-selection behavior for editable controls.
                         if (![hit isKindOfClass:[NSTextField class]] || !((NSTextField *)hit).editable) host.touchTracking = YES;
                     }
@@ -310,5 +316,6 @@ void dl_run(void *opaque) {
 }
 void dl_destroy(void *opaque) {
     DroidlessHost *host = (__bridge_transfer DroidlessHost *)opaque;
+    if (getenv("DROIDLESS_NATIVE_TRACE")) fprintf(stderr, "native exit running=%d visible=%d\n", host.running, host.window.visible);
     [host.window close];
 }
