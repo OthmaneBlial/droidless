@@ -144,4 +144,35 @@ fn prepared_worker_loops_route_suspend_resume_quit_and_unwind() {
     assert_eq!(vm.poll_messages().unwrap(), 0);
     assert_eq!(vm.stack_depth(), 0);
     vm.collect();
+
+    let mut vm = Runtime::new(
+        Apk::parse(include_bytes!("../../../fixtures/generated/scheduling.apk")).unwrap(),
+    )
+    .unwrap();
+    vm.launch().unwrap();
+    vm.click_text("Start Looper worker").unwrap();
+    vm.poll_messages().unwrap();
+    assert_eq!(number(&mut vm, "state"), 2);
+    vm.collect();
+    vm.click_text("Deliver Looper input").unwrap();
+    assert_eq!(vm.poll_messages().unwrap(), 1);
+    assert_eq!(
+        vm.snapshot().unwrap().children[0].view.text,
+        "Looper result: kept-payload:input"
+    );
+    assert_eq!(number(&mut vm, "alive"), 0);
+    vm.click_text("Start Looper worker").unwrap();
+    vm.poll_messages().unwrap();
+    vm.click_text("Cancel Looper worker").unwrap();
+    vm.poll_messages().unwrap();
+    assert_eq!(
+        vm.snapshot().unwrap().children[0].view.text,
+        "Looper worker cancelled"
+    );
+    assert_eq!(number(&mut vm, "alive"), 0);
+    vm.click_text("Start Looper worker").unwrap();
+    vm.poll_messages().unwrap();
+    vm.close().unwrap();
+    assert_eq!(number(&mut vm, "alive"), 0);
+    assert_eq!(vm.stack_depth(), 0);
 }

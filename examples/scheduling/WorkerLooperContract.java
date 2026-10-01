@@ -42,11 +42,12 @@ public class WorkerLooperContract {
                 try { output = kept + ":" + input.take(); }
                 catch (InterruptedException failure) { throw new IllegalStateException("callback interrupted", failure); }
                 identity(); events += "B"; stage = 3;
+                final Runnable completed = onResult;
                 mainHandler.post(new Runnable() { public void run() {
                     if (Thread.currentThread() != Looper.getMainLooper().getThread())
                         throw new IllegalStateException("worker result off main");
                     mainEvents += "R";
-                    if (onResult != null) onResult.run();
+                    if (completed != null) completed.run();
                 }});
             }
         }
@@ -56,7 +57,7 @@ public class WorkerLooperContract {
     }
     public static void prepare(final int mode, Runnable result) {
         events = mainEvents = peerEvents = output = "";
-        stage = finished = validations = caught = 0; peer = null; peerHandler = null;
+        stage = finished = validations = caught = 0; handler = null; peer = null; peerHandler = null;
         input = new LinkedBlockingQueue<String>(); onResult = result;
         mainHandler = new Handler(Looper.getMainLooper());
         worker = new Thread(new Runnable() { public void run() {
@@ -68,6 +69,7 @@ public class WorkerLooperContract {
             identity();
             if (handler.getLooper().getThread() != worker) throw new IllegalStateException("Looper owner");
             stage = 1;
+            if (mode == 3) enqueueBlocking();
             for (;;) {
                 try { Looper.loop(); break; }
                 catch (IllegalStateException failure) {
@@ -131,7 +133,7 @@ public class WorkerLooperContract {
     public static void quitPeer() { peerHandler.getLooper().quit(); }
     public static int postRejected() { return handler.post(new Append("BAD")) ? 0 : 1; }
     public static int state() { return stage; }
-    public static int alive() { return worker.isAlive() ? 1 : 0; }
+    public static int alive() { return worker != null && worker.isAlive() ? 1 : 0; }
     public static int finished() { return finished; }
     public static int validations() { return validations; }
     public static int caught() { return caught; }

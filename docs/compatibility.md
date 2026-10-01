@@ -142,6 +142,11 @@ through GC. Native timers and headless manual time are verified in an authored
 fixture. Deferred workers execute DEX on a serial shared-heap host executor;
 queue/monitor waits, interruption and worker-to-main result posting pass headless
 checks. The authored native Start worker action also delivers its main-thread result and closes cleanly. [Exact scheduling methods, clocks and limits](threading.md).
+Prepared worker Loopers now route messages through managed callbacks, retain
+supported waits and honor quit/quitSafely. Ordering, cancellation, GC, exception
+reentry and authored wait/deliver/cancel UI actions pass headless checks. Automatic
+native host finish while blocked exits cleanly; manual native Looper button
+interaction and independent public-APK Looper workflows remain unverified.
 
 ## Known ceilings
 
@@ -156,7 +161,7 @@ checks. The authored native Start worker action also delivers its main-thread re
 - Failed class initialization is sticky and retains causes; concurrent initialization
   is unsupported. Instruction/field/method checks are not a complete Java type verifier.
 - Main waits, blocking native-bridge callbacks/initializers, sleep/join, wait/notify,
-  worker Looper delivery/priority, parallel execution, Timer finalization and JVM process-liveness parity are unsupported.
+  nested Looper pumps/priority, parallel execution, Timer finalization and JVM process-liveness parity are unsupported.
 - Other bulk collections, custom Map copies/views, CopyOnWriteArrayList write revalidation,
   ListIterator/subList, custom class loaders, method/field reflection, general file I/O,
   general SQLite APIs beyond the subset documented in [storage](storage.md),

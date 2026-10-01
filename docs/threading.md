@@ -255,8 +255,23 @@ modes, caught callback failure with loop reentry, and close during a blocked
 callback. These are authored headless checks; Android reference/device parity and
 independent public-APK worker Looper flows remain unverified.
 
+The Scheduling UI exposes Start Looper worker, Deliver Looper input and Cancel
+Looper worker. Compiled headless clicks verify a callback waiting for input,
+main Handler result delivery, cancelled-result suppression and worker teardown.
+A native-host replay prequeues Start Looper worker and Finish later, opens AppKit,
+then finishes from its live clock with onPause/onStop/onDestroy and exit status 0.
+This checks host shutdown while the callback is blocked. Manual native clicks for
+these new controls remain unverified: the UI automation service could not attach
+to the reported visible AppKit window.
+
 ```sh
 cargo test -p droidless-runtime --test loopers --locked
+target/release/droidless run --headless --ephemeral fixtures/generated/scheduling.apk \
+  --click "Start Looper worker" --click "Deliver Looper input"
+# JSON View text: Looper result: kept-payload:input
+target/release/droidless run --ephemeral fixtures/generated/scheduling.apk \
+  --click "Start Looper worker" --click "Finish later" --trace-lifecycle
+# Native host closes its blocked worker through the live main Handler timer.
 ```
 
 The authored [Scheduling fixture](../examples/scheduling/MainActivity.java)

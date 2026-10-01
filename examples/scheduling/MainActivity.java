@@ -29,6 +29,8 @@ public class MainActivity extends Activity {
     ExecutorService futurePool;
     FutureTask<String> futureTask;
     LinkedBlockingQueue<String> futureInput;
+    boolean looperRunning;
+    Object looperOwner;
     final Runnable timer = new Runnable() {
         public void run() {
             if (Thread.currentThread() != Looper.getMainLooper().getThread()) throw new IllegalStateException("wrong timer thread");
@@ -109,6 +111,29 @@ public class MainActivity extends Activity {
             }});
             try { WorkerContract.feed(); } catch (InterruptedException failure) { throw new IllegalStateException("main interrupted"); }
         }}); layout.addView(worker);
+        Button startLooper = new Button(this); startLooper.setText("Start Looper worker");
+        startLooper.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            if (WorkerLooperContract.alive() != 0) return;
+            final Object owner = new Object(); looperOwner = owner;
+            looperRunning = true; label.setText("Looper waiting for input");
+            WorkerLooperContract.prepare(3, new Runnable() { public void run() {
+                if (looperOwner == owner && looperRunning) {
+                    label.setText("Looper result: " + WorkerLooperContract.readOutput());
+                    WorkerLooperContract.quit(1); looperRunning = false;
+                }
+            }});
+        }}); layout.addView(startLooper);
+        Button deliverLooper = new Button(this); deliverLooper.setText("Deliver Looper input");
+        deliverLooper.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            if (looperRunning) WorkerLooperContract.feed();
+        }}); layout.addView(deliverLooper);
+        Button cancelLooper = new Button(this); cancelLooper.setText("Cancel Looper worker");
+        cancelLooper.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            if (looperRunning) {
+                WorkerLooperContract.quit(0); WorkerLooperContract.feed(); looperRunning = false; looperOwner = null;
+            }
+            label.setText("Looper worker cancelled");
+        }}); layout.addView(cancelLooper);
         Button background = new Button(this); background.setText("Start background timer");
         background.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
             if (backgroundTimer != null) backgroundTimer.cancel();
@@ -169,6 +194,7 @@ public class MainActivity extends Activity {
         setContentView(layout);
     }
     public void onDestroy() {
+        if (looperRunning) WorkerLooperContract.quit(0);
         if (backgroundTimer != null) backgroundTimer.cancel();
         FutureTask<String> task = futureTask; futureTask = null;
         if (task != null) task.cancel(true);

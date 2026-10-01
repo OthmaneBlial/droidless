@@ -1065,3 +1065,39 @@ no achieved 50% checkpoint is claimed.
 sh tools/ci.sh
 python3 tools/compatibility.py
 ```
+
+## Current-source worker Looper delivery
+
+Prepared worker Loopers now deliver queued Messages and posted Runnables through
+managed DEX continuations. The compiled WorkerLooperContract checks two worker
+owners alongside main delivery, equal-deadline FIFO order, delayed deadlines,
+cancellation, payload GC, callback precedence, dispatch overrides and immutable
+queue ownership after Message.setTarget. A callback can wait on queue input and
+resume with the same payload; empty queues and interrupted idle Loopers execute
+no additional guest instructions. Native no-op dispatch remains slice bounded.
+quit/quitSafely, rejected new posts, caught callback failure with loop reentry,
+and close during a blocked callback are also checked.
+
+Authored Scheduling buttons now exercise waiting, input delivery and cancellation
+in headless replay. The result is `Looper result: kept-payload:input`; cancelled
+completion leaves `Looper worker cancelled` and the worker is dead. A separate
+native-host replay prequeues Start Looper worker and Finish later, opens its AppKit
+window, dispatches the live-clock finish, runs onPause/onStop/onDestroy and exits 0
+while cancelling a blocked callback. Manual native clicks on the new controls
+remain unverified because the UI service could not attach to the visible window.
+This does not establish Android reference parity or a public APK's worker Looper
+workflow. Earlier native timer/Future and public Notepad checks remain separate.
+
+Local CI passes 96 Rust tests, warning-free Clippy, optimized builds and 4,096
+seeded parser mutations. Optimized public calculator, image and Notepad replays
+remain passing. GitHub Actions are disabled; the 50% checkpoint remains ahead.
+
+```sh
+sh tools/ci.sh
+cargo test -p droidless-runtime --test loopers --locked
+target/release/droidless run --headless --ephemeral fixtures/generated/scheduling.apk \
+  --click "Start Looper worker" --click "Deliver Looper input"
+target/release/droidless run --ephemeral fixtures/generated/scheduling.apk \
+  --click "Start Looper worker" --click "Finish later" --trace-lifecycle
+```
+
