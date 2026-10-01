@@ -70,6 +70,7 @@ impl Runtime {
             "reentrant message dispatch"
         );
         self.reset_budget();
+        self.drain_navigation()?;
         let mut worker_slices = 64;
         self.poll_workers(&mut worker_slices)?;
         let mut count = 0;

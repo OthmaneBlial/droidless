@@ -31,8 +31,8 @@ BitmapFactory decodes packaged PNG/JPEG/WebP through resource, stream and byte-a
 paths; Bitmap bounds options, dimensions and ImageView resource/bitmap/drawable
 assignment reach AppKit image views. `Resources.getXml` exposes a bounded binary
 XML pull cursor and resource-ID-backed typed attributes, tested by an authored
-APK. SwpieView passes its bundled vector configuration check, then stops at
-Activity.getFragmentManager. Bitmap pixel manipulation, Android Canvas/vector
+APK. SwpieView passes its bundled vector configuration check and attaches its
+platform ReportFragment, then stops at AnimatorListenerAdapter construction. Bitmap pixel manipulation, Android Canvas/vector
 drawing and an independent image workflow remain unproven.
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does
@@ -59,6 +59,10 @@ Application lifecycle observers add bounded registration/removal, GC-rooted
 snapshot delivery from six Activity super methods and canonical getApplication
 identity. Native authored navigation/Back/close executes these observers; saved-state
 and modern pre/post callbacks remain unsupported. [Lifecycle scope](framework.md).
+Platform fragments without Views add queued tag-only transactions and guest
+callbacks across navigation, GC and teardown. Duplicate/recursive operations and
+callback failures are checked; Views, fragment back stacks and saved state remain
+unsupported. [Fragment scope](framework.md#platform-fragments-without-views).
 Build.VERSION.SDK_INT exposes a fixed read-only API-21 branch profile, independent
 of APK/host metadata. It does not imply complete API-21 support.
 [Profile and field checks](framework.md#virtual-api-profile).

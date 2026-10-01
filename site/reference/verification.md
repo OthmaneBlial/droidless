@@ -621,8 +621,9 @@ launched with `--ephemeral`. AppCompat's startup call to `Resources.getXml`,
 `Xml.asAttributeSet` and the pull parser now completes. The app then completes its
 vector-drawable configuration check successfully: Java String hashing now
 finds its delegate, resource maps provide real typed XML attributes, and the
-APK's own `VectorDrawableCompat` inflater executes in guest DEX. The run stops
-next at `Activity.getFragmentManager` during lifecycle setup. This proves
+APK's own `VectorDrawableCompat` inflater executes in guest DEX. With platform
+fragment support, it also attaches and creates its APK-local ReportFragment. The
+next failure is `AnimatorListenerAdapter.<init>` while creating the action bar. This proves
 startup progress, not vector rendering or a usable image-viewer workflow. [APK source](https://github.com/err4nt/SwpieView).
 
 ```sh
@@ -655,7 +656,17 @@ python3 tools/compatibility.py
 target/release/droidless run --headless --ephemeral fixtures/generated/images.apk
 ```
 
-Full local CI passes 76 Rust tests, warning-free Clippy, the optimized release
+The Intents APK now also checks platform fragments without Views: commit queues
+work, explicit execution returns a meaningful boolean, tag lookup compares String
+values, and Activity/argument identities survive guest GC. Its callbacks check
+creation ordering and resumed/paused state. Navigation and teardown deliver the
+expected callback sequence; destroyed managers release fragment references.
+Late additions execute at the next host poll. Six guest failure checks cover
+repeat commit, changed tags, active arguments, duplicate add, recursive execution
+and a throwing callback. Existing Activity/observer checks still pass. These are
+authored headless contracts, not a native fragment UI or Android reference run.
+
+Full local CI passes 77 Rust tests, warning-free Clippy, the optimized release
 build and 4,096 seeded APK/DEX/XML/resource mutations. The compatibility replay
 also checks packaged XML pull traversal and passes all 17 calculator scenarios
 and the unchanged Notepad list/editor, two-row save and fresh-process restart

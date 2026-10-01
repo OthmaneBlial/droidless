@@ -145,7 +145,7 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🖼️ Resources and images | Packaged XML pull events and typed XML attributes; PNG/JPEG/WebP through BitmapFactory and ImageView; four native image views confirmed in an authored fixture |
 | 📝 Rich text/XML | Android spannable text and a bounded SAX parser subset exercised by an unmodified APK |
 | 🖱️ Input | Native calculator clicks, Counter text/key callbacks, and real keyboard text in the public Notepad APK |
-| 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish and native Application lifecycle observers — current source |
+| 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish, Application observers and platform fragments without Views — current source |
 | 📓 Persistent storage | Typed SharedPreferences and bounded SQLite support; two public Notepad notes appear after Back and a fresh process — current source |
 | 🗂️ Java collections | Bounded HashSet/ArrayList/HashMap/basic LinkedHashMap, snapshot CopyOnWriteArrayList, immediate FIFO queues, indexed lists, guest equality, native map copying and live read-only Set/List views — current source |
 | 🔎 APK classes | APK-local Class lookup, no-argument construction, initialization/access faults, primitive TYPE metadata and inherited field resolution — current source |
@@ -171,7 +171,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, snapshot iteration across mutation/GC/worker writes, guest equality, read-only views and limits; same normal list, snapshot, map-copy and immediate queue contracts pass on desktop Java |
 | Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, primitive TYPE identities, guest faults and inherited fields; pure Java contracts pass on desktop Java. SDK profile field checks are compiled DEX evidence |
 | Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native delayed timer/cancellation/finish and worker-to-main results; headless ordering, Message overrides, worker waits/interrupt, GC, errors and limits. [Exact scheduling scope](docs/threading.md) |
-| Images and XML | [Authored Java/XML fixture](examples/images/MainActivity.java) | Packaged XML pull traversal, typed attributes and PNG/JPEG/WebP decoding; four native AppKit ImageViews verified. SwpieView now passes its bundled vector startup check and reaches the missing FragmentManager API; no independent image workflow is claimed |
+| Images and XML | [Authored Java/XML fixture](examples/images/MainActivity.java) | Packaged XML pull traversal, typed attributes and PNG/JPEG/WebP decoding; four native AppKit ImageViews verified. SwpieView now passes its bundled vector startup check and attaches its bundled lifecycle fragment and reaches AnimatorListenerAdapter; no independent image workflow is claimed |
 | Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Notes screen/editor, typed title save, SQLite retention and title rendering after a fresh process verified; native-window interaction unverified |
 
 Authored fixtures test implementation; they do not establish arbitrary APK

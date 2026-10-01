@@ -127,6 +127,9 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/Exception;",
             "Ljava/lang/RuntimeException;",
             "Landroid/app/Activity;",
+            "Landroid/app/Fragment;",
+            "Landroid/app/FragmentManager;",
+            "Landroid/app/FragmentTransaction;",
             "Landroid/app/Application;",
             "Landroid/app/Application$ActivityLifecycleCallbacks;",
             "Landroid/content/res/Resources;",
@@ -427,6 +430,9 @@ impl Runtime {
         Ok(object)
     }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+        if let Some(result) = self.fragment_native(method, args)? {
+            return Ok(Some(result));
+        }
         if method.class.starts_with("Landroid/view/")
             || method.class.starts_with("Landroid/widget/")
             || method.class == "Landroid/app/Activity;"

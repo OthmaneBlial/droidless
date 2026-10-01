@@ -215,7 +215,11 @@ impl Runtime {
             eprintln!("lifecycle: {class}->{name}");
         }
         self.lifecycle.push(name.to_owned());
-        let parameters = if name == "onCreate" && self.is_a(class, "Landroid/app/Activity;") {
+        let activity = self.is_a(class, "Landroid/app/Activity;");
+        if activity {
+            self.fragments_before_activity(object, name)?;
+        }
+        let parameters = if name == "onCreate" && activity {
             vec!["Landroid/os/Bundle;".into()]
         } else {
             vec![]
@@ -230,6 +234,9 @@ impl Runtime {
             std::iter::once(object).chain(args).collect(),
             true,
         )?;
+        if activity {
+            self.fragments_after_activity(object, name)?;
+        }
         Ok(())
     }
     pub fn close(&mut self) -> Result<()> {

@@ -23,6 +23,62 @@ fn call_class(vm: &mut Runtime, class: &str, name: &str, returns: &str) -> Vec<W
 }
 
 #[test]
+fn platform_fragments_queue_lifecycle_navigation_gc_and_guest_errors() {
+    let mut vm = runtime();
+    vm.launch().unwrap();
+    let fragment = call_class(
+        &mut vm,
+        "FragmentProbe",
+        "initial",
+        "Landroid/app/Fragment;",
+    )[0];
+    let initial =
+        "initial:attach;initial:create;initial:view;initial:activity;initial:start;initial:resume;";
+    let log = call_class(&mut vm, "FragmentProbe", "eventLog", "Ljava/lang/String;")[0];
+    assert_eq!(vm.heap.text(log).unwrap(), initial);
+    vm.click_text("Open detail").unwrap();
+    vm.collect();
+    assert!(vm.heap.get(fragment).is_ok());
+    vm.back().unwrap();
+    vm.close().unwrap();
+    let log = call_class(&mut vm, "FragmentProbe", "eventLog", "Ljava/lang/String;")[0];
+    assert_eq!(
+        vm.heap.text(log).unwrap(),
+        format!(
+            "{initial}initial:pause;initial:stop;initial:start;initial:resume;initial:pause;initial:stop;initial:destroyView;initial:destroy;initial:detach;"
+        )
+    );
+    vm.collect();
+    assert!(
+        vm.heap.get(fragment).is_err(),
+        "destroyed manager retained fragment"
+    );
+
+    let mut vm = runtime();
+    vm.launch().unwrap();
+    call_class(&mut vm, "FragmentProbe", "addLater", "V");
+    vm.collect();
+    let log = call_class(&mut vm, "FragmentProbe", "eventLog", "Ljava/lang/String;")[0];
+    assert_eq!(
+        vm.heap.text(log).unwrap(),
+        initial,
+        "commit executed synchronously"
+    );
+    vm.poll_messages().unwrap();
+    let log = call_class(&mut vm, "FragmentProbe", "eventLog", "Ljava/lang/String;")[0];
+    assert_eq!(
+        vm.heap.text(log).unwrap(),
+        format!("{initial}late:attach;late:create;late:view;late:activity;late:start;late:resume;")
+    );
+    assert_eq!(
+        call_class(&mut vm, "FragmentProbe", "errors", "I"),
+        [Word::from(6)]
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.close().unwrap();
+}
+
+#[test]
 fn application_observers_snapshot_navigation_gc_and_fault_cleanup() {
     let mut vm = runtime();
     vm.launch().unwrap();

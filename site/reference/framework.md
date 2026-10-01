@@ -42,6 +42,27 @@ Limits: 64 Activity instances, 128 pending transitions and 16,384 entries per Bu
 Saved-state recreation, activity results, launch modes/flags, tasks, implicit/
 external intents and launching from non-Activity contexts remain unsupported.
 
+## Platform fragments without Views
+
+Activity.getFragmentManager retains one managed manager per Activity. Tag-only
+FragmentTransaction.add queues additions until executePendingTransactions, an
+Activity transition, or the next host event boundary. Guest Fragment callbacks
+run from attach/create through activity-created/start/resume, pause/stop and
+destroy-view/destroy/detach. Activity creation completes before activity-created;
+downward fragment callbacks precede the Activity callback, following the
+[API-21 lifecycle order](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/app/Activity.java).
+Arguments, tag lookup, Activity/manager identity and added/resumed state are retained.
+Queued transactions and callback snapshots stay rooted through guest GC; dispatch
+faults release temporary roots and the execution guard. Duplicate commit/add,
+tag changes, active argument changes and recursive execution raise guest errors.
+
+Limits: 64 attached fragments, 64 additions per transaction, 128 queued transactions
+and 1,024 dispatch batches. Fragment methods run on main. Returned Views, container
+mounting, remove/replace, fragment back stacks, children, saved-state recreation
+and missing-super enforcement remain unsupported. This is a platform Fragment
+subset, not general support-library or AndroidX Fragment compatibility. SwpieView
+attaches and creates its bundled ReportFragment before its next startup blocker.
+
 ## Preferences subset
 
 Context.getSharedPreferences, Activity.getPreferences and getApplicationContext

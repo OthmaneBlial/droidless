@@ -16,11 +16,12 @@ public class MainActivity extends Activity {
     public void onCreate(Bundle state) {
         creating=true;
         super.onCreate(state);
-        creating=false;
         home = this;
         events += "home:create;";
         setTitle("Home");
         setContentView(R.layout.main);
+        FragmentProbe.install(this);
+        creating=false;
     }
     public void onStart() { super.onStart(); events += "home:start;"; }
     public void onResume() {

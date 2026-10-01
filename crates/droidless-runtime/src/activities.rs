@@ -165,6 +165,10 @@ impl Runtime {
             },
         );
         self.back_stack.push(activity);
+        self.heap
+            .get_mut(activity)?
+            .fields
+            .insert("droidless:fragment:state".into(), vec![Word::from(1)]);
         self.activate(activity)?;
         self.invoke(
             Method {
@@ -262,6 +266,7 @@ impl Runtime {
         Ok(())
     }
     pub(crate) fn drain_navigation(&mut self) -> Result<()> {
+        self.drain_fragment_transactions()?;
         while let Some(action) = self.navigation.pop_front() {
             // Guest lifecycle callbacks may collect after an action leaves the queue.
             let roots = self.native_roots.len();

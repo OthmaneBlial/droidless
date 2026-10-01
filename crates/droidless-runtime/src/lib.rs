@@ -7,6 +7,7 @@ mod collections;
 mod components;
 mod enums;
 mod file_io;
+mod fragments;
 mod framework;
 mod graphics;
 pub mod heap;

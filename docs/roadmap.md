@@ -9,7 +9,8 @@ The following are objectives, not completed capability claims.
    weighted measurement remain open. Packaged PNG/JPEG/WebP decoding, native
    ImageView rendering and a bounded `Resources.getXml` pull cursor pass authored
    fixtures. SwpieView now passes AppCompat's bundled vector resource check in
-   guest DEX, then stops at Activity.getFragmentManager. Independent-app
+   guest DEX and attaches its platform lifecycle fragment, then stops at
+   AnimatorListenerAdapter construction. Independent-app
    image workflows, vector/animated drawables, pixel operations and Canvas remain
    open. Gate: complete an image workflow in an independent app and compare it
    with expected Android behavior.
@@ -39,10 +40,10 @@ The following are objectives, not completed capability claims.
    Gate: a real APK completes its queued transactions and posts UI results.
 5. Isolated file/process APIs, broader lists/SQLite/network and independent image-app workflows: follow first failures in substantial third-party
    apps, with host capabilities explicit and tested. Current SwpieView startup
-   passes the bundled vector check and reaches fragment lifecycle setup; no image
+   passes the bundled vector check and platform fragment attachment; no image
    workflow is yet proven.
 6. Linux native backend: common VM/View model, real Linux builds/render/input.
-7. Kotlin/AndroidX, then fragments/Compose/JNI/foreign libraries: major subsequent
+7. Kotlin/AndroidX, then fragment Views/Compose/JNI/foreign libraries: major subsequent
    compatibility projects. No emulator fallback.
 8. Profile before JIT/AOT, Canvas/GLES, audio or games; interpreter stays the
    correctness reference.
