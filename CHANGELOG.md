@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- TextPaint now shares native Paint inheritance, constructor flags/color state
+  and canonical public fields. Child drawable-state aggregation invokes actual
+  guest callbacks, retains arrays through GC, propagates faults and rejects
+  cycles/deep trees. Recursive state calls use the small UI dispatcher. The
+  unchanged Notepad saved-folder row now reaches error-label text appearance.
 - Descendant Rect conversion now follows managed layout/scroll state in both
   directions, with signed Java overflow, ancestry faults and bounded chains.
   Rect dimensions and resource backgrounds use real Context/Resources/View
@@ -11,7 +16,7 @@
   fault cleanup. The cached input_method service reports software show/hide as
   unavailable in the hardware-keyboard profile. Generic editor touch focus
   invokes the original Notepad focus/Done callbacks and persists one named folder.
-  New-row layout needs TextPaint; both exact notes remain unchanged. Complete
+  New-row layout needs error-label color/theme appearance support; both exact notes remain unchanged. Complete
   creation/editing and native folder input remain unverified.
 
 - Native Notepad now selects an existing row with the mouse, accepts keyboard

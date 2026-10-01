@@ -342,6 +342,27 @@ Compiled checks cover focus/click order, cancellation, disabled Views, non-touch
 focusability and callback GC. This does not add automatic traversal or host
 first-responder synchronization.
 
+Paint and TextPaint support their default/flag constructors, exact getFlags/
+setFlags state and inherited color state. API-21 constructor flags include 0x500;
+setFlags replaces them exactly. TextPaint extends Paint, initializes density to
+1.0 and exposes its seven canonical public fields, including drawableState array
+identity through GC. Font metrics, text measurement/shaping, copy constructors
+and native Canvas text painting are outside this increment.
+[API-21 TextPaint](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/text/TextPaint.java).
+
+ViewGroup.setAddStatesFromChildren refreshes through guest callbacks; its query
+reports the retained flag. Enabled groups size and merge actual child drawable
+states, including reserved zero slots, through virtual getDrawableState calls.
+Checked-child refreshes notify the group. Groups also refresh children that
+request duplicateParentState; combining the two modes raises IllegalStateException.
+Native callback snapshots and the result array stay rooted across GC and faults.
+Cycles are rejected, with at most 16 active state queries, 32 nested synchronous
+calls and 100,000 requested state slots. Recursive state calls use the small UI
+dispatcher rather than the large framework fallback stack frame. Arrays are
+recomputed; Android state caching and complete selection/window states remain
+outside this profile.
+[API-21 ViewGroup](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
+
 Context's cached input_method service exposes a hardware-keyboard profile.
 showSoftInput(View, flags) and hideSoftInputFromWindow(token, flags) return false
 because no software input method is served. Nullable targets are accepted;

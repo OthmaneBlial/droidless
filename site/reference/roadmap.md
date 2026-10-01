@@ -72,8 +72,9 @@ The following are objectives, not completed capability claims.
    merged factories, attributes, ViewStubs, GC and callback faults. Starting folder
    creation now passes descendant coordinates, signed Rect dimensions and resource
    backgrounds. Generic touch focus opens the original editor/Done action and
-   its callback persists one named folder. New-row layout now needs TextPaint
-   through TextInputLayout. Both exact note rows remain unchanged. Complete folder
+   its callback persists one named folder. TextPaint and bounded child drawable
+   states now pass. New-row layout needs error-label text appearance color/theme
+   support through TextInputLayout.setErrorEnabled. Both exact note rows remain unchanged. Complete folder
    creation/editing, software IME and native input remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.

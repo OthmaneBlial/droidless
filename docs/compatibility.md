@@ -69,9 +69,10 @@ callback order, AttributeSet identity, ViewStubs, GC, faults and bounded chains.
 Folder input now uses generic touch focus and the cached hardware-keyboard
 service, whose software show/hide requests return false. Tapping the original
 editor opens its Done action; that listener writes exactly one named Folder row.
-Rendering the new row then rejects missing android.text.TextPaint through
-TextInputLayout. Both exact seed/copy note rows remain unchanged. Complete folder
-creation/editing and physical folder input remain unverified; software keyboards
+New-row construction now passes TextPaint and child drawable-state aggregation.
+TextInputLayout.setErrorEnabled then rejects unsupported error-label text
+appearance color/theme values. Both exact seed/copy note rows remain unchanged.
+Complete folder creation/editing and physical folder input remain unverified; software keyboards
 are not implemented.
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual

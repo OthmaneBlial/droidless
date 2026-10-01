@@ -1906,3 +1906,49 @@ rows. The rebuilt unsigned bundle matches the optimized CLI byte for byte
 (SHA-256 `fb7a2e5723fd837e959ff160e24d7a1039057b87a26eb4f8edc6e64be92cfbd4`).
 No new native folder interaction or public-release update is claimed. GitHub
 Actions remain disabled; the 50% checkpoint remains active.
+
+## Current-source TextPaint and child drawable states
+
+Verified on macOS ARM64 on 2026-10-02; this extends current source after the
+hardware-keyboard/folder-persistence checkpoint. The v0.1.0 release predates it.
+
+Paint/TextPaint default and flag constructors now retain API-21 black color,
+0x500 base flags and TextPaint density 1.0. Inherited Paint methods and canonical
+public fields retain exact state and drawableState array identity through GC.
+The compiled baseline failed at missing TextPaint. Copy constructors, text/font
+metrics, shaping and native Canvas text painting remain outside this increment.
+
+ViewGroup child-state mode now refreshes actual guest callbacks, sizes and merges
+child arrays including reserved zero slots, and propagates checked-child changes.
+Duplicate-parent children refresh with their group; combining duplication and
+aggregation raises IllegalStateException. Native snapshots and the result array
+remain rooted through callback GC and fault recovery. The compiled baseline
+failed at the missing child-state query. Hostile cycle/deep-tree checks exposed
+excessive stack use in the large framework fallback; recursive state callbacks
+now use the same small dispatch path as focus. Cycles are rejected, with 16
+active query and 32 synchronous-call ceilings. Android state caching and complete
+selection/window states remain unsupported. The existing touch fixture now
+expects the duplicate-parent child's additional refresh notification; both
+compiled touch checks pass with the corrected exact notification counts.
+
+The unchanged pinned Notepad APK now passes TextPaint and child-state setup while
+constructing its saved folder row. Its original editor focus/Done callbacks still
+write exactly one Folder row: ID 1, Runtime folder. Rendering then stops in
+TextInputLayout.setErrorEnabled at unsupported error-label text appearance
+color/theme values. Both immutable seed and copied-data notes retain exact IDs,
+titles and bodies. The permanent optimized replay and a separate fresh-data
+optimized probe confirm the row, failure location and retained notes through new
+SQLite connections. No APK patch or class alias is used. Complete folder
+creation/editing, saved-row display/restart and fresh native folder input remain
+unverified; folder creation stays false in the catalog.
+
+The full local gate passes 116 Rust tests, Clippy with warnings rejected,
+optimized workspace/document-replay builds and 4,096 seeded parser mutations.
+The complete optimized public replay also passes both calculators, SwpieView
+folder/viewer/Back/gestures and its slideshow diagnosis, plus Notepad save/restart,
+existing-note edit, Delete, timed feedback, Undo, drawer settlement/Back,
+empty-folder opening/Back, the new folder appearance diagnosis and malformed-body
+preservation. The rebuilt unsigned development bundle matches the optimized CLI
+byte for byte (SHA-256 `73da902041deb1674cdf422590e93b162cd4f62f2c73c6ba2cccee63e07b9e86`). No new native folder interaction or
+public-release update is claimed. GitHub Actions remain disabled, and the 50%
+checkpoint remains active.
