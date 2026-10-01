@@ -48,8 +48,8 @@ The following are objectives, not completed capability claims.
    child binding through onFinishInflate and delivers its queued confirmation
    callback and completes detached-child removal. Snackbar child measurement now
    creates its actual text Layout and reads its line count. Relative-padding state
-   is the next measurement blocker; complete delete/restart and
-   native menu input remain ahead.
+   now resolves and Snackbar enters onLayout. View property animation is the next
+   observed blocker; complete delete/restart and native menu input remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

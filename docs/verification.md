@@ -1384,3 +1384,28 @@ and reads Layout.getLineCount from its actual measured TextView. It reaches the
 original LinearLayout.getOrientation call and next stops at View.isPaddingRelative
 through SnackbarLayout.a(III)Z at PC 0x001e. The intended SQLite row is removed and the survivor retains its original
 ID/title/body. Complete delete/return/restart and native menu input remain open.
+
+Full local CI passes 102 Rust tests, warning-free Clippy, optimized CLI/replay
+builds and 4,096 seeded parser mutations. All existing public APK compatibility
+replays pass. GitHub Actions remain disabled.
+
+## Current-source relative padding state
+
+The same compiled text contract checks default physical padding, relative
+start/end setters and getters, invalidated text width after padding changes,
+switching back to physical padding, XML start/end values including a single
+relative edge, per-View state isolation and collection. Its Rust check rejects
+negative input before changing the retained padding or relative state.
+These checks cover the current LTR profile; RTL and legacy target-SDK padding
+precedence remain unsupported.
+
+The pinned, unmodified Notepad replay creates two rows and removes only the
+selected row through its original Delete callback. The survivor retains its
+original ID/title/body. Relative padding now resolves and Snackbar completes
+measurement. Its onLayout listener reaches Snackbar.b()V at PC 0x001b, then the
+support animation bridge stops at View.animate()Landroid/view/ViewPropertyAnimator;.
+Complete delete/return/restart and native menu input remain unverified.
+
+Full local CI passes 102 Rust tests, warning-free Clippy, optimized CLI/replay
+builds and 4,096 seeded parser mutations. All existing public APK compatibility
+replays pass. GitHub Actions remain disabled.

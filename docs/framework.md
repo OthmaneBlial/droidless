@@ -514,6 +514,13 @@ measure entry point, before ancestor callbacks can lay out the list. Its setter
 uses the bundled DEX method signature, including renamed animator classes; this
 does not implement ValueAnimator or general RecyclerView compatibility.
 
+View retains whether padding was set with relative start/end values.
+setPaddingRelative and XML paddingStart/paddingEnd set that state; setPadding
+clears it. Start/end getters resolve to left/right in the current LTR profile,
+and changing padding invalidates the text Layout and requests ancestor layout.
+Values must be non-negative. RTL resolution, legacy target-SDK padding precedence,
+background padding and scrollbar insets remain outside this profile.
+
 Inflation retains XML AttributeSet and Context, calls the actual parent's
 virtual generateLayoutParams, and attaches children incrementally. Native base,
 margin, frame, linear and table parameters retain sizes, margins, gravity and

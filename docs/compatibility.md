@@ -40,9 +40,10 @@ input. Selection never toggles a checked item automatically and a false callback
 return does not undo guest effects. Native menu presentation/input remain open.
 The public Notepad's Delete callback removes the intended SQLite row and preserves
 the other row, then reaches its original Snackbar feedback. That path currently
-gets past Snackbar float clamping and detached-child removal. Snackbar child measurement now produces a real TextView Layout and reads its
-line count; measurement next stops at View.isPaddingRelative; a complete delete/return/restart
-workflow is not yet verified. Generic `<view class="…">` layout inflation invokes the
+gets past Snackbar float clamping, detached-child removal and relative padding.
+Snackbar child measurement produces a real TextView Layout and reads its line
+count. Its onLayout feedback next stops at View.animate / ViewPropertyAnimator;
+a complete delete/return/restart workflow is not yet verified. Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree
 through callback GC. View live-region mode bits are retained; Android accessibility
