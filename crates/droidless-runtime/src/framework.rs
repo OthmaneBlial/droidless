@@ -4843,6 +4843,12 @@ impl Runtime {
                     .fields
                     .insert("droidless:accessibility-delegate".into(), vec![arg(1)?]);
             }
+            ("Landroid/view/View;", "getBackgroundTintList()Landroid/content/res/ColorStateList;" | "getBackgroundTintMode()Landroid/graphics/PorterDuff$Mode;") => {
+                self.view_mut(receiver)?;
+                let key = if method.name == "getBackgroundTintList" { "droidless:view:background-tint-list" } else { "droidless:view:background-tint-mode" };
+                // Queries expose only retained state. XML/setter tint application is not implemented.
+                result.push(self.heap.get(receiver)?.fields.get(key).and_then(|values|values.first()).copied().unwrap_or(Word::ZERO));
+            }
             ("Landroid/view/View;", "setBackgroundResource(I)V") => {
                 self.view_mut(receiver)?;
                 let id = arg(1)?.int()?;

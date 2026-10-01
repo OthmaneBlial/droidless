@@ -41,6 +41,7 @@ public final class BackgroundResourceContract {
     static void check(boolean value) { if (!value) throw new IllegalStateException("background resource contract"); }
     public static View run(Activity host) {
         ResourcesContext context = new ResourcesContext(host); Probe view = new Probe(context);
+        check(view.getBackgroundTintList()==null && view.getBackgroundTintMode()==null);
         view.setBackgroundResource(42); System.gc(); Drawable first = view.getBackground();
         check(first instanceof ColorDrawable && ((ColorDrawable)first).getColor()==42);
         view.setBackgroundResource(42);
@@ -58,6 +59,7 @@ public final class BackgroundResourceContract {
         try { view.setBackgroundResource(42); throw new IllegalStateException("callback fault missing"); }
         catch (IllegalStateException expected) { check("background callback failed".equals(expected.getMessage()) && view.getBackground()==null); }
         view.fail=false; view.setBackgroundResource(42); check(context.resources.loads==6 && view.getBackground()!=null);
+        check(view.getBackgroundTintList()==null && view.getBackgroundTintMode()==null);
         return view;
     }
 }
