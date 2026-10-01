@@ -33,16 +33,39 @@ fn label(vm: &Runtime) -> String {
 #[test]
 fn compiled_results_copy_finish_state_gc_cancellation_stopped_callers_and_faults() {
     let mut vm = runtime();
+    let has_focus = |vm: &mut Runtime, view| {
+        vm.invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: "hasWindowFocus".into(),
+                parameters: vec![],
+                returns: "Z".into(),
+            },
+            vec![view],
+            true,
+        )
+        .unwrap()[0]
+    };
+    let caller_root = vm.root.unwrap();
+    assert_eq!(has_focus(&mut vm, caller_root), Word::ZERO);
+    vm.set_host_window_focus(true);
+    assert_eq!(has_focus(&mut vm, caller_root), Word::from(1));
     call(&mut vm, "checkAttachment", "V");
     let token = call(&mut vm, "windowToken", "Landroid/os/IBinder;");
     assert_ne!(token, Word::ZERO);
     vm.click_text("Open child").unwrap();
+    let child_root = vm.root.unwrap();
+    assert_eq!(has_focus(&mut vm, caller_root), Word::ZERO);
+    assert_eq!(has_focus(&mut vm, child_root), Word::from(1));
     let child = call(
         &mut vm,
         "childObject",
         "Lorg/droidless/results/MainActivity$Child;",
     );
     vm.click_text("Return result").unwrap();
+    assert_eq!(has_focus(&mut vm, caller_root), Word::from(1));
+    vm.set_host_window_focus(false);
+    assert_eq!(has_focus(&mut vm, caller_root), Word::ZERO);
     assert_eq!(call(&mut vm, "windowToken", "Landroid/os/IBinder;"), token);
     assert_eq!(label(&vm), "Result 7:-1:at finish:image/png");
     assert_eq!(call(&mut vm, "resultCount", "I"), Word::from(1));

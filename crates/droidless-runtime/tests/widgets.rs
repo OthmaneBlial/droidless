@@ -176,6 +176,12 @@ fn compiled_widget_metadata_adapter_and_timed_scroll_contracts() {
     assert_eq!(vm.poll_messages().unwrap(), 0);
     call(&mut vm, "invalidateDetachedFrame", "V");
     assert_eq!(vm.poll_messages().unwrap(), 0);
+    assert_eq!(call(&mut vm, "attachedWindowFocus", "Z"), [Word::ZERO]);
+    vm.set_host_window_focus(true);
+    assert_eq!(call(&mut vm, "attachedWindowFocus", "Z"), [Word::from(1)]);
+    assert_eq!(call(&mut vm, "detachedWindowFocus", "Z"), [Word::ZERO]);
+    vm.set_host_window_focus(false);
+    assert_eq!(call(&mut vm, "attachedWindowFocus", "Z"), [Word::ZERO]);
     let removed = call(&mut vm, "startFrame", "Landroid/view/View;")[0];
     let root = call(&mut vm, "frameRoot", "Landroid/view/View;")[0];
     let frame_state = |vm: &mut Runtime| {

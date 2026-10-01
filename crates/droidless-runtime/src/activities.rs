@@ -166,6 +166,19 @@ impl Runtime {
             .get(&activity.reference()?)
             .context("unregistered Activity")
     }
+    /// Embedding hosts report focus before dispatching guest callbacks. Headless has no focused host window.
+    pub fn set_host_window_focus(&mut self, focused: bool) {
+        self.host_window_focused = focused;
+    }
+    pub(crate) fn view_has_window_focus(&self, view: Word) -> Result<bool> {
+        let token = self.view_window_token(view)?;
+        Ok(self.host_window_focused
+            && token != Word::ZERO
+            && self
+                .activity
+                .and_then(|activity| self.screens.get(&activity.reference().ok()?))
+                .is_some_and(|screen| screen.window_token == token))
+    }
     pub(crate) fn view_window_token(&self, mut view: Word) -> Result<Word> {
         for _ in 0..128 {
             let object = self.heap.get(view)?;

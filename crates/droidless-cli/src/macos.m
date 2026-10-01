@@ -168,6 +168,10 @@ void *dl_open(const char *title, float width, float height, void *context, Callb
     return (__bridge_retained void *)host;
 }
 
+int dl_has_window_focus(void *opaque) {
+    DroidlessHost *host = (__bridge DroidlessHost *)opaque;
+    return host.window.isKeyWindow;
+}
 void dl_begin(void *opaque, const char *title, uint32_t touchEnabled, uint32_t touchActive) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;
     host.window.title = [NSString stringWithUTF8String:title];

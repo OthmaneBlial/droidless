@@ -116,6 +116,8 @@ public final class WidgetProbe {
     public static void invalidateDetachedFrame() {
         new View(host).postInvalidateOnAnimation();
     }
+    public static boolean attachedWindowFocus() { return host.findViewById(R.id.source).hasWindowFocus(); }
+    public static boolean detachedWindowFocus() { return new View(host).hasWindowFocus(); }
     private static class ScrollFrame extends View {
         final OverScroller scroller;
         int calls;

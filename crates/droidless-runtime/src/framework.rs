@@ -4491,6 +4491,9 @@ impl Runtime {
                 let token = self.view_window_token(receiver)?;
                 result.push(if method.name == "isAttachedToWindow" { Word::from(i32::from(token != Word::ZERO)) } else { token });
             }
+            ("Landroid/view/View;", "hasWindowFocus()Z") => {
+                result.push(Word::from(i32::from(self.view_has_window_focus(receiver)?)));
+            }
             ("Landroid/view/View;", "setTag(Ljava/lang/Object;)V") => {
                 let tag = arg(1)?;
                 if tag != Word::ZERO { self.heap.get(tag)?; }

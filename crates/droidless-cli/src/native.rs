@@ -58,6 +58,7 @@ unsafe extern "C" {
         checked: u32,
     );
     fn dl_run(host: *mut c_void);
+    fn dl_has_window_focus(host: *mut c_void) -> i32;
     fn dl_destroy(host: *mut c_void);
     fn dl_choose_directory(host: *mut c_void, path: *mut *mut c_char) -> i32;
     fn dl_free_path(path: *mut c_char);
@@ -78,6 +79,10 @@ extern "C" fn event(
     let context = unsafe { &mut *context.cast::<ContextData<'_>>() };
     let mut consumed = false;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<()> {
+        // SAFETY: the main-thread event loop owns this live host for the callback's duration.
+        context
+            .runtime
+            .set_host_window_focus(unsafe { dl_has_window_focus(context.host) != 0 });
         let dispatched = if kind == 6 {
             context.runtime.poll_messages()?
         } else {
@@ -189,6 +194,10 @@ extern "C" fn event(
     if consumed { 2 } else { 1 }
 }
 fn draw(context: &mut ContextData<'_>) -> Result<()> {
+    // SAFETY: drawing runs on the owning thread with the live host returned by dl_open.
+    context
+        .runtime
+        .set_host_window_focus(unsafe { dl_has_window_focus(context.host) != 0 });
     fn node(host: *mut c_void, n: &Node, ancestor_click: usize, ancestor_alpha: f32) -> Result<()> {
         if n.view.visible != 0 {
             return Ok(());
@@ -303,6 +312,7 @@ pub fn run(runtime: &mut Runtime) -> Result<()> {
     unsafe {
         dl_destroy(context.host);
     }
+    context.runtime.set_host_window_focus(false);
     result?;
     if let Some(error) = context.error {
         return Err(error);
