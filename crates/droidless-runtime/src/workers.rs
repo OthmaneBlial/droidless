@@ -15,6 +15,7 @@ pub(crate) enum Waiting {
     Put(Word),
     Monitor(Word),
     ObjectWait { object: Word, deadline: Option<u64> },
+    Completion { owner: Word, deadline: Option<u64> },
 }
 
 #[cfg(test)]
@@ -76,6 +77,10 @@ impl std::error::Error for Waiting {}
 pub(crate) struct Worker {
     thread: Word,
     timer: Option<Word>,
+    executor: Option<Word>,
+    future: Option<Word>,
+    task: Option<Word>,
+    idle_since: u64,
     entry: Option<(Method, Word)>,
     frames: Vec<Frame>,
     waiting: Option<Waiting>,
@@ -100,6 +105,9 @@ impl Workers {
                 [w.thread]
                     .into_iter()
                     .chain(w.timer)
+                    .chain(w.executor)
+                    .chain(w.future)
+                    .chain(w.task)
                     .chain(w.entry.as_ref().map(|(_, receiver)| *receiver))
                     .chain(w.frames.iter().flat_map(Frame::roots))
             }))
@@ -344,6 +352,10 @@ impl Runtime {
         self.workers.pending.push_back(Worker {
             thread,
             timer: None,
+            executor: None,
+            future: None,
+            task: None,
+            idle_since: self.uptime_ms(),
             entry,
             frames: vec![],
             waiting: None,
@@ -359,6 +371,15 @@ impl Runtime {
             .timer = Some(timer);
         Ok(())
     }
+    pub(crate) fn start_executor_worker(&mut self, thread: Word, executor: Word) -> Result<()> {
+        self.start_worker(thread)?;
+        self.workers
+            .pending
+            .back_mut()
+            .context("executor worker missing")?
+            .executor = Some(executor);
+        Ok(())
+    }
     fn worker_ready(&self, worker: &Worker) -> Result<bool> {
         if let Some(timer) = worker.timer
             && worker.frames.is_empty()
@@ -366,6 +387,14 @@ impl Runtime {
             && worker.waiting.is_none()
         {
             return self.timer_ready(timer);
+        }
+        if let Some(executor) = worker.executor
+            && worker.task.is_none()
+            && worker.frames.is_empty()
+            && worker.entry.is_none()
+            && worker.waiting.is_none()
+        {
+            return self.executor_ready(executor, worker.idle_since);
         }
         if !matches!(worker.waiting, Some(Waiting::Monitor(_)))
             && self.thread_word(worker.thread, "interrupted")?.truth()
@@ -388,6 +417,10 @@ impl Runtime {
                     .truth()
                     || deadline.is_some_and(|deadline| self.uptime_ms() >= deadline)
                     || self.thread_word(worker.thread, "droidless:wait:object")? != object
+            }
+            Some(Waiting::Completion { owner, deadline }) => {
+                self.completion_done(owner)?
+                    || deadline.is_some_and(|deadline| self.uptime_ms() >= deadline)
             }
         })
     }
@@ -441,7 +474,7 @@ impl Runtime {
             self.workers.current = Some(worker.thread);
             self.frames = std::mem::take(&mut worker.frames);
             self.workers.waiting = None;
-            let result = (|| -> Result<bool> {
+            let mut result = (|| -> Result<Option<Vec<Word>>> {
                 if let Some(timer) = worker.timer
                     && self.frames.is_empty()
                     && worker.entry.is_none()
@@ -457,22 +490,66 @@ impl Runtime {
                         task,
                     ));
                 }
-                if let Some((method, receiver)) = worker.entry.take()
-                    && self.begin_invoke(method, vec![receiver], true)?.is_some()
+                if let Some(executor) = worker.executor
+                    && worker.task.is_none()
+                    && self.frames.is_empty()
+                    && worker.entry.is_none()
+                    && let Some(task) = self.take_executor_task(executor, worker.thread)?
                 {
-                    return Ok(true);
+                    worker.task = Some(task);
+                    worker.entry = Some((
+                        Method {
+                            class: "Ljava/lang/Runnable;".into(),
+                            name: "run".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        task,
+                    ));
+                }
+                if let Some((method, receiver)) = worker.entry.take() {
+                    let entry = if self.native_future(receiver)? {
+                        let entry = self.begin_future_task(receiver, worker.thread)?;
+                        if entry.is_some() {
+                            worker.future = Some(receiver);
+                            self.heap
+                                .get_mut(worker.thread)?
+                                .fields
+                                .insert("droidless:future:owner".into(), vec![receiver]);
+                        }
+                        entry
+                    } else {
+                        Some((method, receiver))
+                    };
+                    if let Some((method, receiver)) = entry
+                        && let Some(words) = self.begin_invoke(method, vec![receiver], true)?
+                    {
+                        return Ok(Some(words));
+                    }
                 }
                 if self.frames.is_empty() {
-                    return Ok(true);
+                    return Ok(Some(vec![]));
                 }
-                Ok(self.execute_slice(0, 1024)?.is_some())
+                self.execute_slice(0, 1024)
             })();
             count += 1;
             worker.frames = std::mem::take(&mut self.frames);
             worker.waiting = self.workers.waiting.take();
+            if !matches!(result, Ok(None))
+                && let Some(future) = worker.future.take()
+            {
+                // done() overrides run on the completing guest worker, before restoring main identity.
+                result = self
+                    .finish_future_task(future, result.map(|words| words.unwrap_or_default()))
+                    .map(|()| Some(vec![]));
+                self.heap
+                    .get_mut(worker.thread)?
+                    .fields
+                    .remove("droidless:future:owner");
+            }
             self.workers.current = None;
             match result {
-                Ok(false) => self.workers.pending.push_back(worker),
+                Ok(None) => self.workers.pending.push_back(worker),
                 done => {
                     if let Some(timer) = worker.timer
                         && self.finish_timer_task(timer, done.is_err())?
@@ -481,14 +558,36 @@ impl Runtime {
                         self.workers.pending.push_back(worker);
                         continue;
                     }
+                    if let Some(executor) = worker.executor {
+                        if worker.task.take().is_some() {
+                            worker.idle_since = self.uptime_ms();
+                        }
+                        if done.is_ok()
+                            && self.finish_executor_task(
+                                executor,
+                                worker.thread,
+                                worker.idle_since,
+                            )?
+                        {
+                            worker.waiting = None;
+                            self.workers.pending.push_back(worker);
+                            continue;
+                        }
+                    }
                     self.heap
                         .get_mut(worker.thread)?
                         .fields
                         .insert("alive".into(), vec![Word::ZERO]);
-                    self.heap
-                        .get_mut(worker.thread)?
-                        .fields
-                        .remove("droidless:timer:owner");
+                    if let Some(executor) = worker.executor {
+                        self.retire_executor_worker(executor, worker.thread)?;
+                    }
+                    for field in [
+                        "droidless:timer:owner",
+                        "droidless:executor:owner",
+                        "droidless:future:owner",
+                    ] {
+                        self.heap.get_mut(worker.thread)?.fields.remove(field);
+                    }
                     // Terminal host errors bypass guest finally; release all locks of the dead worker.
                     self.workers
                         .monitors
@@ -514,14 +613,28 @@ impl Runtime {
             if let Some(timer) = worker.timer {
                 self.finish_timer_task(timer, true)?;
             }
+            if let Some(executor) = worker.executor {
+                self.close_executor(executor)?;
+                self.retire_executor_worker(executor, worker.thread)?;
+            }
+            if let Some(future) = worker
+                .future
+                .or_else(|| worker.entry.as_ref().map(|(_, receiver)| *receiver))
+                && matches!(self.heap.get(future)?.data, crate::heap::Data::Future(_))
+            {
+                self.close_future(future)?;
+            }
             self.heap
                 .get_mut(worker.thread)?
                 .fields
                 .insert("alive".into(), vec![Word::ZERO]);
-            self.heap
-                .get_mut(worker.thread)?
-                .fields
-                .remove("droidless:timer:owner");
+            for field in [
+                "droidless:timer:owner",
+                "droidless:executor:owner",
+                "droidless:future:owner",
+            ] {
+                self.heap.get_mut(worker.thread)?.fields.remove(field);
+            }
             self.workers
                 .monitors
                 .retain(|_, (owner, _)| *owner != worker.thread);

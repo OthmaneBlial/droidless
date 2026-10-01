@@ -27,6 +27,7 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         | "Ljava/lang/IllegalStateException;"
         | "Ljava/lang/IllegalMonitorStateException;"
         | "Ljava/lang/UnsupportedOperationException;"
+        | "Ljava/util/concurrent/RejectedExecutionException;"
         | "Ljava/util/NoSuchElementException;"
         | "Ljava/util/ConcurrentModificationException;"
         | "Ljava/lang/IndexOutOfBoundsException;" => "Ljava/lang/RuntimeException;",
@@ -35,6 +36,10 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         }
         "Ljava/lang/IllegalThreadStateException;" => "Ljava/lang/IllegalArgumentException;",
         "Ljava/util/MissingResourceException;" => "Ljava/lang/RuntimeException;",
+        "Ljava/util/concurrent/CancellationException;" => "Ljava/lang/IllegalStateException;",
+        "Ljava/util/concurrent/ExecutionException;" | "Ljava/util/concurrent/TimeoutException;" => {
+            "Ljava/lang/Exception;"
+        }
         "Ljava/lang/InterruptedException;" => "Ljava/lang/Exception;",
         "Ljava/lang/ArrayIndexOutOfBoundsException;"
         | "Ljava/lang/StringIndexOutOfBoundsException;" => "Ljava/lang/IndexOutOfBoundsException;",
@@ -136,6 +141,8 @@ pub enum Data {
     Motion(crate::touch::Motion),
     Gesture(crate::touch::Gesture),
     Timer(crate::timers::Timer),
+    Executor(crate::executors::Executor),
+    Future(crate::executors::Future),
     Parcel {
         bytes: Vec<u8>,
         position: usize,
@@ -375,6 +382,12 @@ impl Heap {
             if let Data::Timer(timer) = &object.data {
                 work.extend(timer.tasks.values().copied());
                 work.extend(timer.active);
+            }
+            if let Data::Executor(executor) = &object.data {
+                work.extend(executor.roots());
+            }
+            if let Data::Future(future) = &object.data {
+                work.extend(future.roots());
             }
             if let Data::Spanned { spans, .. } = &object.data {
                 work.extend(spans.iter().map(|span| span.object));

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Executor.execute now queues guest work instead of running inline.
+  Single/fixed/cached pools reuse workers; Future values/causes, cancellation,
+  timed waits and actual shutdown/termination state pass compiled checks.
+  The authored native flow waits for input, delivers Future result: payload
+  through the main Handler and cancels cleanly. Execution remains serial and
+  bounded; no independent asynchronous APK workflow is claimed.
+
 - Java Timer/TimerTask scheduling now owns one guest worker per Timer, with
   long/Date deadlines, fixed-delay/fixed-rate tasks, cancellation/purge, catch-up,
   serial blocking, GC retention and failure cleanup. Compiled tasks post UI

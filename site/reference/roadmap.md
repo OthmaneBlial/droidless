@@ -48,6 +48,9 @@ The following are objectives, not completed capability claims.
    serial tasks, cancellation/purge, failure cleanup and main Handler posting
    pass compiled contracts. Public SwpieView's ordinary touch starts/cancels its
    timer; holding it exposes its worker UI call. Usable slideshow is not proven.
+   Single/fixed/cached pools now queue work on reusable guest workers; Future
+   values/causes, cancellation, deadline waits, shutdown and main Handler posting
+   pass compiled checks. The authored native wait/deliver/cancel flow is verified.
    Native bridges/class initialization remain synchronous; main waits, worker delivery,
    priorities and join/sleep remain ahead. Notepad passes deferred Thread.start;
    independently completed transaction execution remains unproven.

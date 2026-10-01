@@ -128,7 +128,7 @@
       "desktop_java_thread_metadata_differential_verified": true,
       "android_reference_verified": false,
       "source": "examples/scheduling",
-      "notes": "Earlier native timer/cancellation/delayed finish evidence. Current compiled headless checks also cover deferred workers, independent identities, queue/monitor waits, interrupt, main Handler result delivery, GC, bounded spinning, faults, capacity and shutdown. Same pure WorkerContract passes on desktop Java 17. Serial shared-heap host executor; no parallel CPU execution. Main/native-bridge waits, worker Looper delivery, priority and sleep/join remain unsupported. Fresh native Start worker delivers the complete result in accessibility state and closes with status 0; its long visible label clips at 360x340. No independent asynchronous workflow claim. Java Timer/TimerTask compiled checks now cover long/Date deadlines, fixed-delay/fixed-rate catch-up, one serial guest worker per Timer, blocking/cancellation, purge, GC, task failure, capacity, shutdown and main Handler UI posting. The portable validation/serial contract also passes on desktop Java; full timing/liveness parity and Timer finalization remain unsupported. Optimized native Scheduling at 420x720 delivers Background timer done: 3 through TimerTask-to-main Handler posting; restarting and canceling leaves Background timer cancelled beyond later deadlines.",
+      "notes": "Earlier native timer/cancellation/delayed finish evidence. Current compiled headless checks also cover deferred workers, independent identities, queue/monitor waits, interrupt, main Handler result delivery, GC, bounded spinning, faults, capacity and shutdown. Same pure WorkerContract passes on desktop Java 17. Serial shared-heap host executor; no parallel CPU execution. Main/native-bridge waits, worker Looper delivery, priority and sleep/join remain unsupported. Fresh native Start worker delivers the complete result in accessibility state and closes with status 0; its long visible label clips at 360x340. No independent asynchronous workflow claim. Java Timer/TimerTask compiled checks now cover long/Date deadlines, fixed-delay/fixed-rate catch-up, one serial guest worker per Timer, blocking/cancellation, purge, GC, task failure, capacity, shutdown and main Handler UI posting. The portable validation/serial contract also passes on desktop Java; full timing/liveness parity and Timer finalization remain unsupported. Optimized native Scheduling at 420x720 delivers Background timer done: 3 through TimerTask-to-main Handler posting; restarting and canceling leaves Background timer cancelled beyond later deadlines. Executor.execute now queues work instead of running inline. Single/fixed/cached pools, Callable/Runnable Future results and original causes, waits/deadlines, interrupts, cancellation, shutdown and queued-task identities pass compiled contracts; the portable FutureContract also passes on desktop Java 17. Optimized native Start future worker waits for input, Deliver future input shows Future result: payload through the main Handler, restart/cancel remains cancelled after more input, and normal close exits 0. Custom pool configuration and scheduled executors remain unsupported.",
       "headless_worker_verified": true,
       "native_worker_verified": true,
       "desktop_java_worker_differential_verified": true,
@@ -137,7 +137,12 @@
       "desktop_java_timer_contract_verified": true,
       "native_java_timer_verified": true,
       "native_java_timer_cancellation_verified": true,
-      "native_java_timer_close_exit_zero": true
+      "native_java_timer_close_exit_zero": true,
+      "headless_executor_future_verified": true,
+      "desktop_java_future_contract_verified": true,
+      "native_future_result_verified": true,
+      "native_future_cancellation_verified": true,
+      "native_future_close_exit_zero": true
     },
     {
       "package": "org.droidless.images",

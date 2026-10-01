@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Executor.execute no longer runs tasks inline or reports fabricated shutdown
+  success. Single/fixed/cached pools reuse guest workers; Callable and Runnable
+  submissions retain real Future values/causes, cancellation and deadline waits.
+  Shutdown drains accepted work; shutdownNow returns actual queued tasks.
+  Compiled contracts cover GC, interrupts, replacement, capacity and close;
+  the authored native wait/deliver/cancel flow posts UI results to main.
+
 - Java Timer/TimerTask scheduling now uses one stable guest worker per Timer,
   with long/Date deadlines, fixed-delay/fixed-rate tasks, catch-up, cancellation,
   purge, serial blocking, GC roots and failure cleanup. Compiled contracts cover

@@ -74,6 +74,10 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/util/concurrent/Executor;",
             "Ljava/util/concurrent/ExecutorService;",
             "Ljava/util/concurrent/ThreadPoolExecutor;",
+            "Ljava/util/concurrent/Callable;",
+            "Ljava/util/concurrent/Future;",
+            "Ljava/util/concurrent/RunnableFuture;",
+            "Ljava/util/concurrent/FutureTask;",
             "Ljava/util/concurrent/ConcurrentHashMap;",
             "Landroid/animation/Animator;",
             "Landroid/animation/AnimatorListenerAdapter;",
@@ -551,6 +555,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.timer_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.executor_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.system_services_native(method, args)? {
@@ -1157,23 +1164,6 @@ impl Runtime {
                 let comparison = crate::heap::bits64(&left)?.cmp(&crate::heap::bits64(&right)?);
                 result.push(Word::from(if method.name == "before" { i32::from(comparison.is_lt()) } else if method.name == "after" { i32::from(comparison.is_gt()) } else { comparison as i32 }));
             }
-            ("Ljava/util/concurrent/Executors;", "newCachedThreadPool()Ljava/util/concurrent/ExecutorService;") => {
-                result.push(self.heap.instance("Ljava/util/concurrent/ThreadPoolExecutor;")?);
-            }
-            ("Ljava/util/concurrent/Executor;", "execute(Ljava/lang/Runnable;)V") => {
-                // ponytail: cached-pool tasks run in caller order; add worker scheduling when an APK depends on concurrency.
-                self.invoke(
-                    Method { class: "Ljava/lang/Runnable;".into(), name: "run".into(), parameters: vec![], returns: "V".into() },
-                    vec![arg(1)?],
-                    true,
-                )?;
-            }
-            ("Ljava/util/concurrent/ExecutorService;", "shutdown()V") => { self.heap.get(receiver)?; }
-            ("Ljava/util/concurrent/ExecutorService;", "shutdownNow()Ljava/util/List;") => {
-                result.push(self.heap.instance("Ljava/util/ArrayList;")?);
-            }
-            ("Ljava/util/concurrent/ExecutorService;", "isShutdown()Z" | "isTerminated()Z") => { result.push(Word::ZERO); }
-            ("Ljava/util/concurrent/ExecutorService;", "awaitTermination(JLjava/util/concurrent/TimeUnit;)Z") => { result.push(Word::from(1)); }
             ("Landroid/animation/StateListAnimator;", "addState([ILandroid/animation/Animator;)V") => {
                 let state = arg(1)?;
                 let animator = arg(2)?;

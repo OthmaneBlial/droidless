@@ -368,7 +368,9 @@ interaction, screenshot or clean-close result is claimed. Earlier native timer
 captures remain historical evidence.
 
 Main waits, native-bridge/initializer suspension, sleep/join, wait/notify, worker
-Looper delivery/priority, executors and parallel execution remain unsupported.
+Looper delivery/priority and parallel execution remain unsupported.
+The later [executor milestone](#current-source-executor-pools-and-future-results)
+supersedes the executor limitation from this checkpoint.
 The v0.1.0 archive retains its older scope; the 50% checkpoint remains active.
 
 ## Current source: primitive metadata, map copying and read-only lists
@@ -941,6 +943,58 @@ target/release/droidless run --headless --ephemeral fixtures/generated/schedulin
 # JSON View text: Background timer done: 3
 target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets --click-first-image --slideshow
 target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets --click-first-image --slideshow-hold
+sh tools/ci.sh
+python3 tools/compatibility.py
+```
+
+## Current source: executor pools and Future results
+
+Verified on 2026-10-01, macOS ARM64. The former inline Executor.execute and
+fabricated shutdown stubs are removed. Single/fixed/cached factories now queue
+work on reusable guest workers with stable Thread identity and ThreadLocal state.
+FutureTask Callable/Runnable bodies use managed continuations and share the
+existing bounded serial executor; no parallel CPU execution is claimed.
+
+The compiled FutureContract checks deferred submission, FIFO single-pool work,
+fixed-pool progress while another task blocks, cached reuse/60-second retirement,
+Callable values and Runnable null/preset results, one-shot/manual FutureTask run,
+Thread-dispatched FutureTask waits, virtual done callbacks and protected setters.
+Checks also cover pending-main rejection, completed/zero-time main reads, worker
+get/awaitTermination deadlines and interrupts, sub-millisecond rounding, null
+TimeUnit, cancel before/during execution with and without interruption, original
+ExecutionException cause identity, GC, shutdown rejection/draining, shutdownNow
+queued-object identity without automatic cancellation, uncaught execute-worker
+replacement, unsupported-task diagnostics, queue capacity, and runtime close
+before/after body dispatch. Closing drops continuations without guest callbacks.
+The portable FutureContract entry point passes on desktop Java 17 with Java 8
+source/target; this is not an Android reference differential run.
+
+The optimized native Scheduling APK at 420×720 verifies Start future worker →
+Future waiting for input, then Deliver future input → Future result: payload.
+The actual Callable blocks on its input queue and its done override posts through
+the main Handler. Restarting, canceling the blocked Future, and delivering input
+again leaves Future worker cancelled. Normal window close tears down the pool
+and exits 0. A separate compiled unsafe-UI check rejects worker View mutation
+before changing the label and leaves clean managed frames.
+
+Local CI passes 88 Rust tests, warning-free Clippy, optimized builds and 4,096
+seeded parser mutations. The unchanged public calculator, Notepad and SwpieView
+compatibility replays still pass; GitHub Actions remain disabled. Pool queues
+are capped at 16,384 entries and the runtime at 64 workers. Custom pool/ThreadFactory
+configuration, scheduled executors, invokeAll/invokeAny, runAndReset, main waits,
+synchronous native-bridge suspension and JVM finalization/liveness remain open.
+The v0.1.0 archive predates this source milestone. No independently completed
+asynchronous APK workflow or achieved 50% checkpoint is claimed.
+
+```sh
+python3 tools/build-fixtures.py --app scheduling
+java -cp examples/scheduling/build/classes org.droidless.scheduling.FutureContract
+cargo test -p droidless-runtime --test executors --locked
+target/release/droidless run --headless --ephemeral fixtures/generated/scheduling.apk \
+  --click "Start future worker" --click "Deliver future input"
+# JSON View text: Future result: payload
+target/release/droidless run --ephemeral fixtures/generated/scheduling.apk
+# Native: Start future worker, Deliver future input; restart, cancel, deliver; close.
 sh tools/ci.sh
 python3 tools/compatibility.py
 ```

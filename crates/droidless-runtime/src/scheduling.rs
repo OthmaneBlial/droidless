@@ -26,6 +26,7 @@ pub(crate) struct MainQueue {
     pub closed: bool,
     thread_id: u64,
     pub(crate) timer_id: u64,
+    pub(crate) executor_id: u64,
     pub(crate) wall_start: Option<i64>,
 }
 impl Runtime {

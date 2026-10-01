@@ -22,6 +22,9 @@ interrupt becomes available. This remains a bounded subset, not full Java concur
 | Thread | currentThread; constructors (String) and (Runnable, String); getName/setName/getId/isAlive/isDaemon; setDaemon before start; start once, interrupt/isInterrupted/interrupted, holdsLock; explicit run() calls the stored Runnable |
 | Timer | constructors (), (boolean), (String), (String, boolean); schedule(TimerTask, long/Date) and repeating long/Date + period overloads; scheduleAtFixedRate repeating long/Date + period overloads; cancel(), purge() |
 | TimerTask | constructor(), cancel(), scheduledExecutionTime(); actual APK run() executes on the Timer's guest worker |
+| Executors | newSingleThreadExecutor(), newFixedThreadPool(int), newCachedThreadPool(); deferred execute and Callable/Runnable submit overloads |
+| ExecutorService | shutdown, shutdownNow, isShutdown, isTerminated, awaitTermination(long, TimeUnit) |
+| Future/FutureTask | Callable and (Runnable, result) constructors; run once, get and timed get, cancel, isDone/isCancelled; virtual done and protected set/setException |
 | Worker queue waits | LinkedBlockingQueue take()/put(Object); immediate results on main, suspend/resume on a worker |
 | Monitors | DEX monitor-enter/exit, reentrant ownership, contention and IllegalMonitorStateException |
 | Collection | System.gc invokes the runtime's managed collector |
@@ -86,7 +89,7 @@ Worker View/Activity calls are explicitly rejected before mutation; results must
 be posted to a main Handler. Looper.myLooper is null on an unprepared worker;
 prepare creates one worker Looper associated with that Thread, and a second prepare
 throws RuntimeException. Worker loop()/Handler delivery, priority, sleep/join,
-timed queue waits, executors and general worker Looper delivery remain unsupported.
+timed queue waits and general worker Looper delivery remain unsupported.
 Handler construction on a worker must explicitly select the main Looper.
 
 Blocking on main, or suspension across a synchronous native bridge/initializer,
@@ -95,6 +98,64 @@ main continuation/native bridge expansion must preserve these waits, not turn
 blocking into inline execution. Host close/root finish cancels worker continuations
 and releases their roots/locks without claiming guest finally execution at process
 shutdown. Main callbacks and widgets retain their host main-thread requirement.
+
+## Executors and Future results
+
+The earlier Executor.execute shortcut ran the Runnable inline and reported fake
+shutdown results. Current source removes that shortcut. Single/fixed pools queue
+tasks in FIFO order and reuse stable guest Threads, including ThreadLocal values.
+Cached pools reuse idle workers, add workers when none are available, and retire
+idle workers after 60 seconds on the runtime clock. Factory construction creates
+no worker until work is submitted. Guest workers share the serial execution model
+and global 64-worker ceiling described above; they do not run in parallel.
+
+Callable submissions retain their actual returned object or original thrown
+Throwable. Runnable submissions return null or the supplied result object.
+FutureTask runs at most once; its native run path is unwrapped into managed DEX
+frames when dispatched by a pool or Thread. Queue, monitor and Future waits retain
+those frames and their GC roots. APK run() overrides still execute their bytecode;
+suspending through an override's synchronous super.run bridge remains unsupported.
+Explicit synchronous FutureTask.run handles nonblocking bodies.
+
+get returns a completed value, throws ExecutionException with the original cause,
+or throws CancellationException. Pending worker get suspends; timed get throws
+TimeoutException at its preserved deadline. Interrupting a wait throws
+InterruptedException and clears the interrupt flag. Null TimeUnit is rejected
+even for a completed Future. Waits use monotonic milliseconds; positive
+sub-millisecond waits round up. A pending main-thread get remains unsupported;
+zero-duration polls and completed gets work on main.
+
+cancel marks the Future done immediately and calls its virtual done override on
+the canceling Thread. cancel(false) lets an already running body finish; cancel(true)
+also interrupts its runner. Later results do not replace cancellation, and done
+is called only once. Normal completion invokes done on the completing worker.
+Its UI callbacks must post through the main Handler. Guest task exceptions from
+submit are captured as Future failures and the worker remains reusable; uncaught
+execute exceptions remain visible and a replacement worker drains remaining work.
+Unsupported backend operations remain terminal diagnostics, with an aborted
+Future; they are not converted into successful results.
+
+shutdown rejects new submissions and drains accepted work. shutdownNow interrupts
+active workers and returns the actual queued Runnable objects; it does not
+automatically cancel those returned Futures. isTerminated becomes true only after
+shutdown and all queued work/workers end. awaitTermination uses that state, a real
+timeout and interruptible worker waiting. Root close drops continuations, cancels
+retained pool Futures and removes workers without running guest done/finally.
+
+The profile caps fixed pools at 64 workers and each queue at 16,384 entries;
+capacity faults preserve accepted work. Factory results use the native
+ThreadPoolExecutor profile, without Java's single-pool wrapper/finalizer.
+ThreadFactory overloads, custom pool configuration/rejection handlers,
+invokeAll/invokeAny, scheduled executors and runAndReset remain unsupported.
+JVM process-liveness/finalization parity is not claimed.
+
+Compiled FutureContract checks worker reuse, fixed-pool progress across blocked
+tasks, cached-worker expiry, result/cause retention, wait deadlines/interrupts,
+cancellation, shutdown, queued-object identities, failure replacement, GC and
+limits. Its portable entry point also passes on desktop Java; this is not an
+Android-device differential run. The authored native flow waits for queue input,
+delivers Future result: payload through a main Handler, then verifies cancellation
+and clean close. No independently completed asynchronous APK workflow is claimed.
 
 ## Java timers
 
@@ -213,6 +274,9 @@ API references: [Android Handler](https://developer.android.com/reference/androi
 [Looper](https://developer.android.com/reference/android/os/Looper),
 [Java Thread](https://docs.oracle.com/javase/8/docs/api/java/lang/Thread.html),
 [LinkedBlockingQueue](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/LinkedBlockingQueue.html),
+[Executors](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/Executors.html),
+[ExecutorService](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ExecutorService.html),
+[FutureTask](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/FutureTask.html),
 [Java synchronization](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.1).
 
 ```sh

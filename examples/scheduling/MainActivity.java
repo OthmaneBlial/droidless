@@ -12,6 +12,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.*;
 
 /** Authored timer/conformance UI. Its callbacks run as DEX, not host timer logic. */
 public class MainActivity extends Activity {
@@ -25,6 +26,9 @@ public class MainActivity extends Activity {
     TextView label;
     int ticks;
     Timer backgroundTimer;
+    ExecutorService futurePool;
+    FutureTask<String> futureTask;
+    LinkedBlockingQueue<String> futureInput;
     final Runnable timer = new Runnable() {
         public void run() {
             if (Thread.currentThread() != Looper.getMainLooper().getThread()) throw new IllegalStateException("wrong timer thread");
@@ -61,6 +65,10 @@ public class MainActivity extends Activity {
     }
     public void startUnsafeWorker() {
         WorkerContract.prepare(4, new Runnable() { public void run() { label.setText("Wrong worker UI"); } });
+    }
+    public void startUnsafeFuture() {
+        futurePool = Executors.newSingleThreadExecutor();
+        futurePool.submit(new Callable<String>() { public String call() { label.setText("Wrong Future UI"); return "wrong"; } });
     }
     public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -125,9 +133,48 @@ public class MainActivity extends Activity {
             if (backgroundTimer != null) backgroundTimer.cancel(); backgroundTimer = null;
             label.setText("Background timer cancelled");
         }}); layout.addView(stopBackground);
+        Button startFuture = new Button(this); startFuture.setText("Start future worker");
+        startFuture.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            if (futureTask != null) futureTask.cancel(true);
+            if (futurePool != null) futurePool.shutdownNow();
+            final ExecutorService owner = Executors.newSingleThreadExecutor(); futurePool = owner;
+            final LinkedBlockingQueue<String> input = new LinkedBlockingQueue<String>(); futureInput = input;
+            futureTask = new FutureTask<String>(new Callable<String>() { public String call() throws Exception {
+                if (Looper.myLooper() != null || Thread.currentThread() == Looper.getMainLooper().getThread()) throw new IllegalStateException("Future ran on main");
+                System.gc(); return input.take();
+            }}) { protected void done() {
+                final FutureTask<String> completed = this;
+                String value;
+                try { value = "Future result: " + get(); }
+                catch (CancellationException expected) { value = "Future worker cancelled"; }
+                catch (Exception failure) { value = "Future worker failed"; }
+                final String message = value;
+                owner.shutdown();
+                timerHandler.post(new Runnable() { public void run() {
+                    if (Thread.currentThread() != Looper.getMainLooper().getThread()) throw new IllegalStateException("Future result off main");
+                    if (futureTask == completed) label.setText(message);
+                }});
+            }};
+            label.setText("Future waiting for input"); owner.execute(futureTask);
+        }}); layout.addView(startFuture);
+        Button deliverFuture = new Button(this); deliverFuture.setText("Deliver future input");
+        deliverFuture.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            if (futureInput != null) try { futureInput.put("payload"); } catch (InterruptedException failure) { throw new IllegalStateException("main interrupted", failure); }
+        }}); layout.addView(deliverFuture);
+        Button cancelFuture = new Button(this); cancelFuture.setText("Cancel future worker");
+        cancelFuture.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            if (futureTask != null) futureTask.cancel(true);
+            if (futurePool != null) futurePool.shutdownNow();
+        }}); layout.addView(cancelFuture);
         setContentView(layout);
     }
-    public void onDestroy() { if (backgroundTimer != null) backgroundTimer.cancel(); timerHandler.removeCallbacksAndMessages(null); super.onDestroy(); }
+    public void onDestroy() {
+        if (backgroundTimer != null) backgroundTimer.cancel();
+        FutureTask<String> task = futureTask; futureTask = null;
+        if (task != null) task.cancel(true);
+        if (futurePool != null) futurePool.shutdownNow();
+        timerHandler.removeCallbacksAndMessages(null); super.onDestroy();
+    }
     public static void prepare() {
         events = ""; dispatches = 0; messageCallbacks = 0; handled = 0;
         handler = new RecordingHandler();

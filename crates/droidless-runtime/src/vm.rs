@@ -898,6 +898,8 @@ impl Runtime {
             "Landroid/widget/AbsListView$LayoutParams;" => "Landroid/view/ViewGroup$LayoutParams;",
             "Ljava/util/concurrent/ThreadPoolExecutor;" => "Ljava/util/concurrent/ExecutorService;",
             "Ljava/util/concurrent/ExecutorService;" => "Ljava/util/concurrent/Executor;",
+            "Ljava/util/concurrent/FutureTask;" => "Ljava/util/concurrent/RunnableFuture;",
+            "Ljava/util/concurrent/RunnableFuture;" => "Ljava/util/concurrent/Future;",
             "Ljava/util/HashSet;" => "Ljava/util/AbstractSet;",
             "Ljava/util/TreeSet;" => "Ljava/util/AbstractSet;",
             "Ljava/util/HashMap;" => "Ljava/util/AbstractMap;",
@@ -1027,7 +1029,10 @@ impl Runtime {
             if current == "Ldroidless/runtime/GridClick;" {
                 work.push("Landroid/view/View$OnClickListener;".into());
             }
-            if current == "Ldroidless/runtime/GestureTimer;" || current == "Ljava/util/TimerTask;" {
+            if current == "Ldroidless/runtime/GestureTimer;"
+                || current == "Ljava/util/TimerTask;"
+                || current == "Ljava/util/concurrent/RunnableFuture;"
+            {
                 work.push("Ljava/lang/Runnable;".into());
             }
             if current == "Landroid/view/GestureDetector$SimpleOnGestureListener;" {

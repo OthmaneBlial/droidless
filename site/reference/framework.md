@@ -323,6 +323,10 @@ cancellation, virtual dispatch and GC retention. Native callbacks update Views;
 headless `--advance-ms` provides deterministic replay. Minimal Thread metadata
 and explicit manual run are supported. Deferred Thread.start executes DEX workers,
 with bounded queue/monitor waits, interruption and main Handler result delivery.
+Single/fixed/cached executor factories queue work on reusable guest workers.
+Callable/Runnable submissions and FutureTask retain actual values/causes, support
+cancellation and worker get/deadline waits, and report real shutdown/termination
+state. [Executor methods and limits](threading.md#executors-and-future-results).
 Main waits, native bridge/initializer suspension and parallel CPU execution remain
 unsupported. [Exact methods, clocks, limits and native evidence](threading.md).
 

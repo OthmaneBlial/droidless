@@ -52,6 +52,10 @@ Bounded Java Timer/TimerTask schedules, Date deadlines, fixed-delay/fixed-rate,
 cancellation/purge and worker-to-main Handler posting pass compiled contracts.
 [Timer scope and ceilings](threading.md#java-timers). Usable public slideshow,
 Timer finalization and independent JVM process-liveness semantics remain open.
+Single/fixed/cached executors now queue real guest work, with Future results,
+cancellation, timed worker waits and actual shutdown state. Compiled contracts
+and an authored native wait/deliver/cancel flow pass; independent asynchronous
+APK workflows remain unproven. [Exact executor profile](threading.md#executors-and-future-results).
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does
 not establish general RecyclerView or AndroidX compatibility.
