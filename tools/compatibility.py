@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import tempfile
@@ -19,6 +20,14 @@ def flatten(node):
     yield node
     for child in node["children"]:
         yield from flatten(child)
+
+def visible_nodes(node, alpha=1):
+    if node["view"]["visible"] != 0:
+        return
+    alpha *= max(0, min(1, node["view"]["alpha"]))
+    yield node, alpha
+    for child in node["children"]:
+        yield from visible_nodes(child, alpha)
 
 cases = [
     (["7", "+", "5", "="], "12.0"),
@@ -292,6 +301,29 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
 
     survivor = next(row for row in rows if row[0] != original_id)
     command = [str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", app_data]
+    feedback_text = "Deleted Note " + revised_title
+    for label, advances in [("shown", [250]), ("dismissed", [250, 3000, 250])]:
+        with tempfile.TemporaryDirectory(prefix="droidless-notepad-feedback-") as feedback_root:
+            feedback_data = Path(feedback_root) / "apps"
+            shutil.copytree(app_data, feedback_data)
+            clock_actions = [arg for milliseconds in advances for arg in ["--advance-ms", str(milliseconds)]]
+            process = subprocess.run([
+                str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(feedback_data),
+                "--click", revised_title, "--menu-item", "Delete", *clock_actions, str(notepad),
+            ], text=True, capture_output=True, check=True, timeout=120)
+            tree = json.loads(process.stdout)
+            nodes = list(flatten(tree))
+            feedback = [node for node in nodes if node["view"]["text"] in [feedback_text, "UNDO"]]
+            if label == "shown":
+                frames = [(node, alpha) for node, alpha in visible_nodes(tree) if node["view"]["text"] in [feedback_text, "UNDO"]]
+                if len(frames) != 2 or any(alpha != 1 or not 0 <= node["rect"]["y"] < 844 for node, alpha in frames):
+                    raise SystemExit("Notepad timed feedback did not show its original message and UNDO action")
+            elif feedback:
+                raise SystemExit("Notepad timed dismissal did not remove its original Snackbar")
+            with sqlite3.connect(feedback_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
+                remaining = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+            if remaining != [survivor]:
+                raise SystemExit(f"Notepad feedback {label} did not retain the exact surviving row")
     for label, actions in [
         ("delete", ["--click", revised_title, "--menu-item", "Delete"]),
         ("restart", []),
@@ -324,11 +356,15 @@ report["reopened_body"] = body
 report["headless_note_delete_workflow_verified"] = True
 report["delete_survivor_id_title_body_retained"] = True
 report["delete_return_restart_reopen_verified"] = True
+report["timed_delete_feedback_shown"] = True
+report["timed_delete_feedback_dismissed"] = True
+report["delete_feedback_clock_steps_ms"] = [250, 3000, 250]
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
 print("PASS Notepad: existing row reopened, title/body edited, list refreshed and both fields retained after restart")
 print("PASS Notepad: original Delete menu returns to Notes; survivor ID/title/body survive restart and reopen")
+print("PASS Notepad: original Snackbar message/UNDO show at 250ms and are removed after timed dismissal; exact survivor retained")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.
