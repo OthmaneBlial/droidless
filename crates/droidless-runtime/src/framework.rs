@@ -4698,6 +4698,17 @@ impl Runtime {
                     .fields
                     .insert("droidless:important-for-accessibility".into(), vec![arg(1)?]);
             }
+            ("Landroid/view/View;", "onFinishInflate()V") => { self.view_mut(receiver)?; }
+            ("Landroid/view/View;", "setAccessibilityLiveRegion(I)V") => {
+                self.view_mut(receiver)?;
+                // API-21 stores two mode bits. Accessibility-service event delivery is outside this profile.
+                self.heap.get_mut(receiver)?.fields.insert("droidless:accessibility-live-region".into(), vec![Word::from(arg(1)?.int()? & 3)]);
+            }
+            ("Landroid/view/View;", "getAccessibilityLiveRegion()I") => {
+                self.view_mut(receiver)?;
+                result.push(self.heap.get(receiver)?.fields.get("droidless:accessibility-live-region")
+                    .and_then(|values| values.first()).copied().unwrap_or(Word::ZERO));
+            }
             ("Landroid/view/View;", "getImportantForAccessibility()I") => {
                 result.push(
                     self.heap
@@ -5742,6 +5753,16 @@ impl Runtime {
         for child in &element.children {
             self.inflate_child(word, child, depth + 1, context)?;
         }
+        self.invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: "onFinishInflate".into(),
+                parameters: vec![],
+                returns: "V".into(),
+            },
+            vec![word],
+            true,
+        )?;
         Ok(word)
     }
     fn drawable_color(&self, raw: &Value, depth: usize) -> Result<Option<u32>> {

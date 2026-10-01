@@ -1233,7 +1233,7 @@ opens one and selects its original Delete item. The actual callback executes
 SQLite DELETE; the resulting table contains only the other note with its original
 ID, title and body. EventBus description/posting and generic Snackbar-layout
 construction now execute. Returning to Notes then fails at the original
-SnackbarLayout's View.setAccessibilityLiveRegion call. This is partial deletion
+Snackbar Handler.obtainMessage(int, Object) call. This is partial deletion
 evidence, not a passing delete/return/restart workflow or native menu interaction.
 The regression catalog keeps the complete deletion capability false.
 
@@ -1249,3 +1249,21 @@ java -cp examples/reflection/build/classes org.droidless.reflection.PrimitiveCon
 sh tools/ci.sh
 python3 tools/compatibility.py
 ```
+
+## Current-source XML inflation completion and live-region state
+
+The shared inflater invokes virtual View.onFinishInflate after applying XML
+attributes and attaching all children. The base View callback is empty, following
+the [API-21 inflater](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/LayoutInflater.java).
+A compiled custom LinearLayout checks that its constructor sees no children,
+its completion callback runs once, and its child lookup/text survive callback GC.
+The existing merge-parent path does not issue a completion callback to that parent.
+
+View.setAccessibilityLiveRegion/getAccessibilityLiveRegion retain the two mode
+bits used by the [API-21 View](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/View.java).
+The compiled contract checks default state, all mode bits, out-of-range values
+and GC. Android accessibility-service event delivery is not implemented.
+
+The pinned Notepad delete probe now completes its original SnackbarLayout child
+binding; it reaches Handler.obtainMessage(int, Object). The complete workflow
+remains unverified, and the catalog keeps that capability false.

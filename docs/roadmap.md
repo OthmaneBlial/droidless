@@ -44,8 +44,9 @@ The following are objectives, not completed capability claims.
    behavior and visual fidelity remain open.
    Foreground options now run actual create/prepare/listener/selection callbacks
    through headless menu replay, with invalidation, stale input and GC checks.
-   Notepad's original Delete removes the intended row, then hits its Snackbar
-   accessibility API; complete delete/restart and native menu input remain ahead.
+   Notepad's original Delete removes the intended row. Its Snackbar now completes
+   child binding through onFinishInflate and reaches Handler.obtainMessage(int,
+   Object); complete delete/restart and native menu input remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

@@ -11,12 +11,23 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.TextView;
+import android.widget.LinearLayout;
 
 /** Authored API checks compiled by javac and D8, not public APK evidence. */
 public final class MenuContract {
     static Menu saved;
-    public static class Label extends TextView {
-        public Label(Context context, AttributeSet attrs) { super(context, attrs); System.gc(); setText("Constructed"); }
+    public static class Label extends LinearLayout {
+        int finishes;
+        TextView child;
+        public Label(Context context, AttributeSet attrs) {
+            super(context, attrs); System.gc();
+            check(findViewById(R.id.tag_child) == null, "children attached before constructor");
+        }
+        @Override protected void onFinishInflate() {
+            super.onFinishInflate(); finishes++; System.gc();
+            child = (TextView) findViewById(R.id.tag_child);
+            check(child != null && child.getText().toString().equals("From class tag"), "finish before inflated children/attributes");
+        }
     }
     static class Tint extends ColorDrawable {
         ColorStateList colors;
@@ -35,8 +46,14 @@ public final class MenuContract {
     public static int verify(Menu menu, Activity activity) {
         saved = menu;
         View inflated = LayoutInflater.from(activity).inflate(R.layout.view_tag, null);
-        check(inflated instanceof Label && ((TextView) inflated).getText().toString().equals("From class tag")
+        check(inflated instanceof Label && ((Label) inflated).finishes == 1
+                && ((Label) inflated).child == inflated.findViewById(R.id.tag_child)
                 && inflated.getContext() == activity, "generic view class tag constructor and attributes");
+        check(inflated.getAccessibilityLiveRegion() == View.ACCESSIBILITY_LIVE_REGION_NONE, "default live region");
+        for (int mode : new int[]{0, 1, 2, 3, 4, -1}) {
+            inflated.setAccessibilityLiveRegion(mode); System.gc();
+            check(inflated.getAccessibilityLiveRegion() == (mode & 3), "live region mode bits and GC");
+        }
         check(menu.size() == 0 && !menu.hasVisibleItems(), "empty menu");
         MenuItem late = menu.add(4, 10, 8, "Late");
         MenuItem early = menu.add(4, 11, 2, "Early");
