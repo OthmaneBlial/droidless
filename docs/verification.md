@@ -1792,3 +1792,20 @@ reaches RecyclerView.requestChildFocus and rejects the missing inherited
 ViewGroup.offsetDescendantRectToMyCoords(View, Rect) bridge. That failed run also
 preserves both exact rows. Creation/editing and fresh native folder input remain
 unverified.
+
+The final full local gate passes 109 Rust tests, Clippy with warnings rejected,
+optimized workspace and document-replay builds, and 4,096 seeded parser mutations
+without panics. A fresh optimized folder-opening replay returns exit zero and
+preserves both exact note rows. The rebuilt unsigned development bundle matches
+the optimized CLI byte for byte (SHA-256 `eaf53c3de5af2748495e2c5d87e37435bff12bfd712f214dfb9afb892f243082`). No fresh native
+folder interaction or public-release update is claimed. GitHub Actions remain
+disabled, and the 50% checkpoint remains active.
+
+The full optimized compatibility replay passes unchanged public calculators,
+SwpieView folder thumbnails/full-screen viewing/Back/gestures and the existing
+slideshow diagnosis. Notepad save/restart, existing-note edit, Delete, timed
+feedback/dismissal, Undo/restart, drawer frame/settlement/Back and malformed-body
+preservation still pass. The new original Edit Folders editor/listener binding
+and Back checks pass with both exact note rows retained on copied data. The
+optimized creation probe confirms the same missing coordinate bridge and exact
+row retention; creation/editing remain unverified.

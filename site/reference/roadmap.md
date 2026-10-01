@@ -65,12 +65,13 @@ The following are objectives, not completed capability claims.
    computeScroll callbacks and attached animation redraw requests reach host
    polling. Generic focus ownership and callbacks now complete the 1000 ms drawer
    settlement callback. Back closes it while retaining Notes and both exact rows.
-   Native drawer input remains ahead. Create or edit folders reaches its Activity, then stops
-   in the original NewFolderViewHolder binder with a wrong-type error for
-   left_button/leftButton. Resource lookup and message/cause exception construction
-   execute. Compiled XML uses ImageButton; the tagged field expects
-   AppCompatImageButton. Shared inflater factory dispatch and folder editing
-   remain ahead.
+   Native drawer input remains ahead. Create or edit folders now opens Edit Folders
+   and binds its original editor/button listener. Shared inflater callbacks run the
+   APK's AppCompat Factory2 and construct its actual AppCompatImageButton; no APK
+   patch or class alias is used. Compiled checks cover service routing, cloned and
+   merged factories, attributes, ViewStubs, GC and callback faults. Starting folder
+   creation reaches a missing offsetDescendantRectToMyCoords bridge during
+   RecyclerView child focus. Folder creation/editing and native input remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
