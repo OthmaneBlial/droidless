@@ -53,11 +53,11 @@ to the list. A fresh native process reopens the exact revised title and body.
 
 🗂️ Current source also opens the original Edit Folders screen in headless replay.
 Installed AppCompat inflater callbacks construct its own widgets and bind its
-editor/listener. Starting creation now passes child coordinates, Rect dimensions
-and resource backgrounds. It next stops in the original keyboard-error logging
-callback; both exact note rows remain unchanged and no folder is written. Folder
-editing and native folder input remain unverified.
-[Coordinate and background evidence](docs/verification.md#current-source-descendant-coordinates-and-resource-backgrounds).
+editor/listener. Tapping the editor now runs its focus callback, and the original
+Done action persists one named folder in SQLite. Rendering that new row stops at
+unsupported TextPaint; both exact note rows remain unchanged. Complete folder
+creation/editing and native folder input remain unverified.
+[Keyboard and folder-persistence evidence](docs/verification.md#current-source-hardware-keyboard-requests-and-folder-persistence).
 
 ```sh
 sh tools/fetch-notepad.sh

@@ -60,17 +60,19 @@ polling. Advancing to 1000 ms now completes the original settlement callback and
 its View.requestFocus call. Back closes the drawer while retaining Notes and both
 exact rows. Native drawer input remains unverified. Selecting Create or edit
 folders now opens Edit Folders and binds the original editor and button listener.
-Back returns to Notes with both exact rows retained.
+Back returns to Notes with both exact rows retained. This opening/Back proof
+uses an empty Folder table; the nonempty list has the row-layout limit below.
 Shared binary XML inflation invokes the APK's installed AppCompat Factory2, so
 its ImageButton becomes the actual guest AppCompatImageButton without patching the
 APK or aliasing the class. The compiled inflater contract checks cloning, merged
 callback order, AttributeSet identity, ViewStubs, GC, faults and bounded chains.
-Starting folder creation now passes descendant Rect conversion, signed Rect
-dimensions, resource backgrounds and untinted background queries. The next gap is
-Log.e(String, String, Throwable) while the original left-button callback logs a
-keyboard-service error. Both exact seed/copy note rows remain unchanged and no
-folder is written. Folder creation/editing and physical folder input remain
-unverified; no software-keyboard support is claimed.
+Folder input now uses generic touch focus and the cached hardware-keyboard
+service, whose software show/hide requests return false. Tapping the original
+editor opens its Done action; that listener writes exactly one named Folder row.
+Rendering the new row then rejects missing android.text.TextPaint through
+TextInputLayout. Both exact seed/copy note rows remain unchanged. Complete folder
+creation/editing and physical folder input remain unverified; software keyboards
+are not implemented.
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree

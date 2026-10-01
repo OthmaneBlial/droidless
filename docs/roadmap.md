@@ -71,9 +71,10 @@ The following are objectives, not completed capability claims.
    patch or class alias is used. Compiled checks cover service routing, cloned and
    merged factories, attributes, ViewStubs, GC and callback faults. Starting folder
    creation now passes descendant coordinates, signed Rect dimensions and resource
-   backgrounds. The next gap is the throwable Log.e overload used to report a
-   keyboard-service error; both exact note rows remain unchanged and no folder is
-   written. Folder creation/editing, IME and native input remain ahead.
+   backgrounds. Generic touch focus opens the original editor/Done action and
+   its callback persists one named folder. New-row layout now needs TextPaint
+   through TextInputLayout. Both exact note rows remain unchanged. Complete folder
+   creation/editing, software IME and native input remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

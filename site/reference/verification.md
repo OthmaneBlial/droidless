@@ -1857,3 +1857,52 @@ The rebuilt unsigned development bundle matches the optimized CLI byte for byte
 (SHA-256 `15a69674f8f78b72ac5402b83a1270745f0e0da8275199fb4b6c427121856c73`). No fresh
 native folder interaction or public-release update is claimed. GitHub Actions
 remain disabled, and the 50% checkpoint remains active.
+
+## Current-source hardware keyboard requests and folder persistence
+
+Date: 2026-10-02. Log.d/i/w/e message/Throwable overloads now use the existing
+bounded retained-DEX renderer. Guest description/cause callbacks retain roots
+through GC; their faults propagate and clean up. Compiled checks cover all four
+levels, null arguments, circular causes, GC and fault recovery. The baseline
+failed at the missing three-argument logging overload. Host stderr returns zero;
+Android log-buffer byte counts and full stack-formatting parity are not claimed.
+
+Context's canonical input_method service now models a hardware-keyboard runtime
+with no served software IME. The two-argument show/hide methods return false,
+validate non-null targets/flags and preserve text and focus. The compiled contract
+checks cached identity across Contexts and GC, detached/attached Views, nulls,
+window tokens and focus/text retention. It previously received a null service.
+Software keyboards, InputConnection and ResultReceiver overloads remain unsupported.
+
+Base touch release now invokes virtual requestFocus for enabled, clickable Views
+that are focusable in touch mode and do not already own focus. Successful focus
+suppresses that first tap's click; a later tap dispatches the real click. EditText
+has the clickable default, with explicit overrides retained. The compiled touch
+contract checks cancellation, focus/click ordering, disabled/non-touch-focusable
+Views and callback GC. The baseline failed its default-clickability check.
+Automatic traversal and AppKit first-responder synchronization remain ahead.
+
+The unchanged pinned Notepad APK now accepts an editor tap through its original
+focus listener. Input followed by the original Done-button callback persists
+exactly one Folder row named Runtime folder with ID 1. Both immutable seed and
+copied-data note rows retain their exact IDs, titles and bodies. Rendering that
+new row then fails at android.text.TextPaint through TextInputLayout. The permanent
+compatibility replay diagnoses this dependency and checks the exact folder/notes
+using new SQLite connections after the process exits. It keeps complete folder
+creation false and records persistence before layout failure separately.
+A plus-button replay exits cleanly but writes no folder; it is not evidence of
+successful creation. Complete folder creation/editing, row display/restart and
+fresh native folder input remain unverified. No APK patch or class alias is used.
+
+The full local gate passes 114 Rust tests, Clippy with warnings rejected,
+optimized workspace/document-replay builds and 4,096 seeded parser mutations.
+The full optimized public replay still passes both calculators, SwpieView
+folder/viewer/Back/gestures and its slideshow diagnosis, plus Notepad save/restart,
+existing-note edit, Delete, timed feedback, Undo, drawer settlement/Back,
+empty-folder opening/Back and malformed-body preservation. The new folder-row
+persistence diagnosis passes. A separate optimized original-APK probe confirms
+ID 1/Runtime folder, the same TextPaint fault and both exact immutable/copied note
+rows. The rebuilt unsigned bundle matches the optimized CLI byte for byte
+(SHA-256 `fb7a2e5723fd837e959ff160e24d7a1039057b87a26eb4f8edc6e64be92cfbd4`).
+No new native folder interaction or public-release update is claimed. GitHub
+Actions remain disabled; the 50% checkpoint remains active.

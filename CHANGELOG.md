@@ -7,10 +7,12 @@
   Rect dimensions and resource backgrounds use real Context/Resources/View
   callbacks, managed identity, cache invalidation and GC/fault recovery. Untinted
   background queries are supported; tint application remains ahead.
-- Original Notepad folder creation now reaches keyboard-error logging after
-  child focus and background setup. Its missing throwable Log.e overload is
-  diagnosed on copied data: both exact notes remain unchanged and no folder is
-  written. Creation/editing and native folder input remain unverified.
+- Throwable logging now retains actual DEX diagnostics, guest callbacks, GC and
+  fault cleanup. The cached input_method service reports software show/hide as
+  unavailable in the hardware-keyboard profile. Generic editor touch focus
+  invokes the original Notepad focus/Done callbacks and persists one named folder.
+  New-row layout needs TextPaint; both exact notes remain unchanged. Complete
+  creation/editing and native folder input remain unverified.
 
 - Native Notepad now selects an existing row with the mouse, accepts keyboard
   title/body edits, saves through Back and reopens both exact fields after a
