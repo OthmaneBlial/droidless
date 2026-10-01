@@ -208,6 +208,9 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/view/LayoutInflater$Factory2;",
             "Landroid/os/Bundle;",
             "Landroid/content/Intent;",
+            "Landroid/net/Uri;",
+            "Landroid/os/Binder;",
+            "Landroid/os/IBinder;",
             "Landroid/content/ComponentName;",
             "Landroid/content/pm/PackageManager;",
             "Landroid/content/pm/ActivityInfo;",
@@ -446,6 +449,9 @@ impl Runtime {
         Ok(object)
     }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+        if let Some(result) = self.document_native(method, args)? {
+            return Ok(Some(result));
+        }
         if let Some(result) = self.fragment_native(method, args)? {
             return Ok(Some(result));
         }
@@ -2128,6 +2134,7 @@ impl Runtime {
                 self.dispatch_activity_callback(callback, args)?;
             }
             ("Landroid/app/Activity;", "onRestart()V")
+            | ("Landroid/app/Activity;", "onActivityResult(IILandroid/content/Intent;)V")
             | ("Landroid/app/Application;", "onCreate()V") => {
                 self.heap.get(receiver)?;
             }
@@ -3972,6 +3979,10 @@ impl Runtime {
             ("Landroid/view/View;", "getParent()Landroid/view/ViewParent;") => {
                 let parent = self.heap.get(receiver)?.fields.get("droidless:view:parent").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO);
                 result.push(parent);
+            }
+            ("Landroid/view/View;", "getWindowToken()Landroid/os/IBinder;" | "isAttachedToWindow()Z") => {
+                let token = self.view_window_token(receiver)?;
+                result.push(if method.name == "isAttachedToWindow" { Word::from(i32::from(token != Word::ZERO)) } else { token });
             }
             ("Landroid/view/View;", "setTag(Ljava/lang/Object;)V") => {
                 let tag = arg(1)?;

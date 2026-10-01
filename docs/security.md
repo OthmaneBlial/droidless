@@ -14,11 +14,18 @@ references are checked during execution. Unknown opcodes/classes/framework/nativ
 calls fail explicitly. Frame/instruction/string/array/object limits exist but
 are not a complete process memory or CPU-time sandbox.
 
-SharedPreferences is the only guest filesystem API: a host-selected apps root
-grants directory capabilities per validated package. No-follow directory/file
+Private preferences and SQLite use a host-selected apps root with directory
+capabilities per validated package. No-follow directory/file
 access, package identity checks, case-distinct preference filenames, Unix hard-link
 rejection, bounded JSON and atomic writes have regressions. Damaged files fail
 without reset. See [storage behavior and limits](storage.md).
+ACTION_OPEN_DOCUMENT_TREE is a separate explicit host choice: the native folder
+chooser retains a directory descriptor for the selected tree and returns an
+opaque content URI. Grants last only for the current runtime session, with a
+64-grant ceiling. URI parsing grants no access. Document queries/streams/writes
+and persistent permissions are not implemented yet; no guest path can select a
+host directory without this choice.
+
 General file, network, clipboard, camera, microphone, location, process and
 native-library APIs are unavailable. Inspected manifest permissions grant no host
 capabilities. Native controls handle explicit user input/paste, while the AppKit bridge consumes

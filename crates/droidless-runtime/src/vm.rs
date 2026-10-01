@@ -72,6 +72,8 @@ pub struct Runtime {
     pub(crate) screens: BTreeMap<usize, crate::activities::Screen>,
     pub(crate) back_stack: Vec<Word>,
     pub(crate) navigation: std::collections::VecDeque<crate::activities::Navigation>,
+    pub(crate) directory_request: Option<(Word, i32)>,
+    pub(crate) document_trees: BTreeMap<String, cap_std::fs::Dir>,
     pub(crate) storage: Option<crate::storage::Storage>,
     pub(crate) virtual_directories: BTreeSet<Vec<String>>,
     pub(crate) databases: BTreeMap<String, std::sync::Arc<std::sync::Mutex<rusqlite::Connection>>>,
@@ -141,6 +143,8 @@ impl Runtime {
             screens: BTreeMap::new(),
             back_stack: vec![],
             navigation: std::collections::VecDeque::new(),
+            directory_request: None,
+            document_trees: BTreeMap::new(),
             storage: None,
             virtual_directories: [
                 vec![],
@@ -196,7 +200,17 @@ impl Runtime {
             .context("APK has no MAIN/LAUNCHER Activity")?;
         let intent = self.heap.instance("Landroid/content/Intent;")?;
         let class = descriptor(&name);
-        self.create_screen(&class, intent)?;
+        let action = self.intern("android.intent.action.MAIN".into())?;
+        let component = self.intern(class.clone())?;
+        self.heap
+            .get_mut(intent)?
+            .fields
+            .insert("action".into(), vec![action]);
+        self.heap
+            .get_mut(intent)?
+            .fields
+            .insert("component".into(), vec![component]);
+        self.create_screen(&class, intent, None)?;
         self.drain_navigation()?;
         ensure!(
             self.activity.is_none() || self.root.is_some(),
@@ -236,6 +250,12 @@ impl Runtime {
         )?;
         if activity {
             self.fragments_after_activity(object, name)?;
+            if name == "onResume" || name == "onPause" {
+                self.screens
+                    .get_mut(&object.reference()?)
+                    .context("Activity missing")?
+                    .resumed = name == "onResume";
+            }
         }
         Ok(())
     }
@@ -247,9 +267,10 @@ impl Runtime {
         }
         if let Some(activity) = self.activity {
             let class = self.heap.get(activity)?.class.clone();
-            for name in ["onPause", "onStop"] {
-                self.lifecycle_call(activity, &class, name, vec![])?;
+            if self.screen(activity)?.resumed {
+                self.lifecycle_call(activity, &class, "onPause", vec![])?;
             }
+            self.lifecycle_call(activity, &class, "onStop", vec![])?;
         }
         while let Some(activity) = self.back_stack.pop() {
             let class = self.heap.get(activity)?.class.clone();
@@ -259,6 +280,8 @@ impl Runtime {
         self.activity = None;
         self.root = None;
         self.navigation.clear();
+        self.directory_request = None;
+        self.document_trees.clear();
         Ok(())
     }
     pub fn snapshot(&self) -> Result<Node> {
@@ -516,15 +539,17 @@ impl Runtime {
             .into_iter()
             .chain(self.root)
             .chain(self.back_stack.iter().copied())
-            .chain(self.screens.iter().flat_map(|(handle, s)| {
-                std::iter::once(Word::Ref(*handle))
-                    .chain(s.root)
-                    .chain([s.intent])
-            }))
-            .chain(self.navigation.iter().map(|n| match n {
-                crate::activities::Navigation::Start(intent)
-                | crate::activities::Navigation::Finish(intent) => *intent,
-            }))
+            .chain(
+                self.screens
+                    .iter()
+                    .flat_map(|(handle, s)| std::iter::once(Word::Ref(*handle)).chain(s.roots())),
+            )
+            .chain(
+                self.navigation
+                    .iter()
+                    .flat_map(crate::activities::Navigation::roots),
+            )
+            .chain(self.directory_request.map(|(caller, _)| caller))
             .chain(self.statics.values().flatten().copied())
             .chain(self.preferences.values().copied())
             .chain(self.queue.pending.values().copied())
@@ -1003,6 +1028,9 @@ impl Runtime {
             }
             if current == "Ldroidless/runtime/GridClick;" {
                 work.push("Landroid/view/View$OnClickListener;".into());
+            }
+            if current == "Landroid/os/Binder;" {
+                work.push("Landroid/os/IBinder;".into());
             }
             if current == "Landroid/app/Activity;" {
                 work.push("Landroid/view/Window$Callback;".into());

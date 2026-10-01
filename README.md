@@ -171,7 +171,8 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, snapshot iteration across mutation/GC/worker writes, guest equality, read-only views and limits; same normal list, snapshot, map-copy and immediate queue contracts pass on desktop Java |
 | Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, primitive TYPE identities, guest faults and inherited fields; pure Java contracts pass on desktop Java. SDK profile field checks are compiled DEX evidence |
 | Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native delayed timer/cancellation/finish and worker-to-main results; headless ordering, Message overrides, worker waits/interrupt, GC, errors and limits. [Exact scheduling scope](docs/threading.md) |
-| Images and XML | [Authored Java/XML fixture](examples/images/MainActivity.java) | XML pull traversal, typed attributes, PNG/JPEG/WebP decoding and four native AppKit ImageViews. SwpieView passes its vector check, platform fragment and grid construction, then stops at Intent.getType; no independent image workflow is claimed |
+| Images and XML | [Authored Java/XML fixture](examples/images/MainActivity.java) | XML pull traversal, typed attributes, PNG/JPEG/WebP decoding and four native AppKit ImageViews. SwpieView opens a native folder chooser and cancels cleanly; its independent image workflow remains open |
+| Activity results and folders | [Authored Java fixture](examples/results/MainActivity.java) | Actual request codes, copied return data, Back cancellation and native folder selection; stopped callers, GC and failure cleanup pass compiled checks. Document queries and streams remain unsupported |
 | Photo grid | [Authored Java/XML fixture](examples/grids/MainActivity.java) | Guest BaseAdapter cells, auto-fit and four stretch modes, observer updates and native photo clicks with 64-bit IDs; disabled items ignore clicks and Refresh replaces seven photos with four |
 | Widgets | [Authored Java contracts](examples/images/WidgetProbe.java) | Timed scrolling, manifest application metadata, listener overrides, virtual background dispatch and content-description retention; image accessibility labels verified in native AppKit |
 | Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Headless Notes list/editor, two-row SQLite save and fresh-process title retention; native AppKit typing and saving also verified |
@@ -188,7 +189,7 @@ sh tools/fetch-notepad.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 79 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 81 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

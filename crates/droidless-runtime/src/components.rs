@@ -9,6 +9,82 @@ use droidless_formats::dex::Method;
 use std::collections::BTreeMap;
 
 impl Runtime {
+    pub(crate) fn copy_intent(&mut self, source: Word) -> Result<Word> {
+        ensure!(
+            self.is_a(&self.heap.get(source)?.class, "Landroid/content/Intent;"),
+            "expected Intent"
+        );
+        let fields = self.heap.get(source)?.fields.clone();
+        let copy = self.heap.instance("Landroid/content/Intent;")?;
+        self.heap.get_mut(copy)?.fields = fields;
+        let extras = self.intent_extras(source, false)?;
+        if extras != Word::ZERO {
+            let extras = self.clone_bundle(extras)?;
+            self.heap
+                .get_mut(copy)?
+                .fields
+                .insert("extras".into(), vec![extras]);
+        }
+        Ok(copy)
+    }
+    fn start_activity(&mut self, activity: Word, source: Word, request: i32) -> Result<()> {
+        ensure!(
+            self.is_a(&self.heap.get(activity)?.class, "Landroid/app/Activity;"),
+            "startActivity outside Activity requires unsupported NEW_TASK behavior"
+        );
+        self.screen(activity)?;
+        let copy = self.copy_intent(source)?;
+        let fields = &self.heap.get(copy)?.fields;
+        if let Some(target) = fields
+            .get("component")
+            .and_then(|v| v.first())
+            .filter(|target| **target != Word::ZERO)
+        {
+            let class = self.heap.text(*target)?;
+            ensure!(
+                self.apk
+                    .manifest
+                    .activities
+                    .iter()
+                    .any(|name| descriptor(name) == class),
+                "Intent target is not a declared APK Activity: {class}"
+            );
+            self.queue_navigation(Navigation::Start {
+                intent: copy,
+                caller: (request >= 0).then_some((activity, request)),
+            })
+        } else {
+            let action = fields
+                .get("action")
+                .and_then(|v| v.first())
+                .copied()
+                .unwrap_or(Word::ZERO);
+            ensure!(
+                action != Word::ZERO
+                    && self.heap.text(action)? == "android.intent.action.OPEN_DOCUMENT_TREE",
+                "implicit/external Intent unsupported"
+            );
+            ensure!(
+                request >= 0,
+                "OPEN_DOCUMENT_TREE requires an Activity result request"
+            );
+            for key in ["data", "type"] {
+                ensure!(
+                    fields
+                        .get(key)
+                        .and_then(|v| v.first())
+                        .copied()
+                        .unwrap_or(Word::ZERO)
+                        == Word::ZERO,
+                    "OPEN_DOCUMENT_TREE with data/type is unsupported"
+                );
+            }
+            self.queue_navigation(Navigation::PickDirectory {
+                caller: activity,
+                request,
+            })
+        }
+    }
     fn apk_application_info(&mut self) -> Result<Word> {
         let application = self
             .apk
@@ -414,22 +490,110 @@ impl Runtime {
             ("Landroid/content/Intent;", "<init>()V") => {
                 self.heap.get(receiver)?;
             }
-            ("Landroid/content/Intent;", "getData()Landroid/net/Uri;") => {
+            ("Landroid/content/Intent;", "<init>(Landroid/content/Intent;)V") => {
+                let copy = self.copy_intent(arg(1)?)?;
+                self.heap.get_mut(receiver)?.fields = self.heap.get(copy)?.fields.clone();
+            }
+            ("Landroid/content/Intent;", "<init>(Ljava/lang/String;)V")
+            | ("Landroid/content/Intent;", "<init>(Ljava/lang/String;Landroid/net/Uri;)V") => {
+                let roots = self.native_roots.len();
+                self.native_roots.extend_from_slice(args);
+                let action = self.invoke(
+                    Method {
+                        class: "Landroid/content/Intent;".into(),
+                        name: "setAction".into(),
+                        parameters: vec!["Ljava/lang/String;".into()],
+                        returns: "Landroid/content/Intent;".into(),
+                    },
+                    vec![receiver, arg(1)?],
+                    true,
+                );
+                self.native_roots.truncate(roots);
+                action?;
+                if method.parameters.len() == 2 {
+                    if arg(2)? != Word::ZERO {
+                        ensure!(
+                            self.is_a(&self.heap.get(arg(2)?)?.class, "Landroid/net/Uri;"),
+                            "expected Uri"
+                        );
+                    }
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert("data".into(), vec![arg(2)?]);
+                }
+            }
+            (
+                "Landroid/content/Intent;",
+                "getData()Landroid/net/Uri;"
+                | "getType()Ljava/lang/String;"
+                | "getAction()Ljava/lang/String;",
+            ) => {
                 result.push(
                     self.heap
                         .get(receiver)?
                         .fields
-                        .get("data")
+                        .get(match method.name.as_str() {
+                            "getData" => "data",
+                            "getType" => "type",
+                            _ => "action",
+                        })
                         .and_then(|values| values.first())
                         .copied()
                         .unwrap_or(Word::ZERO),
                 );
             }
-            ("Landroid/content/Intent;", "setData(Landroid/net/Uri;)Landroid/content/Intent;") => {
+            (
+                "Landroid/content/Intent;",
+                "setData(Landroid/net/Uri;)Landroid/content/Intent;"
+                | "setType(Ljava/lang/String;)Landroid/content/Intent;"
+                | "setAction(Ljava/lang/String;)Landroid/content/Intent;",
+            ) => {
+                let mut value = arg(1)?;
+                if value != Word::ZERO {
+                    ensure!(
+                        self.is_a(&self.heap.get(value)?.class, &method.parameters[0]),
+                        "wrong Intent attribute type"
+                    );
+                }
+                let key = match method.name.as_str() {
+                    "setData" => "data",
+                    "setType" => "type",
+                    _ => "action",
+                };
+                if key == "action" && value != Word::ZERO {
+                    value = self.intern(self.heap.text(value)?.to_owned())?;
+                }
+                let fields = &mut self.heap.get_mut(receiver)?.fields;
+                fields.insert(key.into(), vec![value]);
+                if key == "data" || key == "type" {
+                    fields.insert(
+                        if key == "data" { "type" } else { "data" }.into(),
+                        vec![Word::ZERO],
+                    );
+                }
+                result.push(receiver);
+            }
+            (
+                "Landroid/content/Intent;",
+                "setDataAndType(Landroid/net/Uri;Ljava/lang/String;)Landroid/content/Intent;",
+            ) => {
+                for (index, ty) in [(1, "Landroid/net/Uri;"), (2, "Ljava/lang/String;")] {
+                    if arg(index)? != Word::ZERO {
+                        ensure!(
+                            self.is_a(&self.heap.get(arg(index)?)?.class, ty),
+                            "wrong Intent data/type"
+                        );
+                    }
+                }
                 self.heap
                     .get_mut(receiver)?
                     .fields
                     .insert("data".into(), vec![arg(1)?]);
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("type".into(), vec![arg(2)?]);
                 result.push(receiver);
             }
             ("Landroid/content/Intent;", "getComponent()Landroid/content/ComponentName;") => {
@@ -619,63 +783,49 @@ impl Runtime {
                 });
             }
             ("Landroid/content/Context;", "startActivity(Landroid/content/Intent;)V") => {
-                ensure!(
-                    self.is_a(&self.heap.get(receiver)?.class, "Landroid/app/Activity;"),
-                    "startActivity outside Activity requires unsupported NEW_TASK behavior"
-                );
-                let source = arg(1)?;
-                let fields = self.heap.get(source)?.fields.clone();
-                ensure!(
-                    self.heap.get(source)?.class == "Landroid/content/Intent;",
-                    "startActivity expects Intent"
-                );
-                let target = *fields
-                    .get("component")
-                    .and_then(|v| v.first())
-                    .context("implicit/external Intent unsupported")?;
-                let class = self.heap.text(target)?;
-                ensure!(
-                    self.apk
-                        .manifest
-                        .activities
-                        .iter()
-                        .any(|name| descriptor(name) == class),
-                    "Intent target is not a declared APK Activity: {class}"
-                );
-                let copy = self.heap.instance("Landroid/content/Intent;")?;
-                self.heap.get_mut(copy)?.fields = fields;
-                let extras = self.intent_extras(source, false)?;
-                if extras != Word::ZERO {
-                    let extras = self.clone_bundle(extras)?;
-                    self.heap
-                        .get_mut(copy)?
-                        .fields
-                        .insert("extras".into(), vec![extras]);
-                }
-                self.queue_navigation(Navigation::Start(copy))?;
+                self.start_activity(receiver, arg(1)?, -1)?;
             }
             ("Landroid/app/Activity;", "startActivityForResult(Landroid/content/Intent;I)V")
             | (
                 "Landroid/app/Activity;",
                 "startActivityForResult(Landroid/content/Intent;ILandroid/os/Bundle;)V",
             ) => {
-                self.invoke(
-                    Method {
-                        class: "Landroid/content/Context;".into(),
-                        name: "startActivity".into(),
-                        parameters: vec!["Landroid/content/Intent;".into()],
-                        returns: "V".into(),
-                    },
-                    vec![receiver, arg(1)?],
-                    false,
-                )?;
+                if method.parameters.len() == 3 && arg(3)? != Word::ZERO {
+                    let Data::Bundle(options) = &self.heap.get(arg(3)?)?.data else {
+                        bail!("expected Activity options Bundle");
+                    };
+                    ensure!(
+                        options.is_empty(),
+                        "Activity launch options are unsupported"
+                    );
+                }
+                self.start_activity(receiver, arg(1)?, arg(2)?.int()?)?;
+            }
+            (
+                "Landroid/app/Activity;",
+                "setResult(I)V" | "setResult(ILandroid/content/Intent;)V",
+            ) => {
+                self.require_main_thread()?;
+                let data = if args.len() == 3 { arg(2)? } else { Word::ZERO };
+                if data != Word::ZERO {
+                    ensure!(
+                        self.is_a(&self.heap.get(data)?.class, "Landroid/content/Intent;"),
+                        "setResult expects Intent"
+                    );
+                }
+                let screen = self
+                    .screens
+                    .get_mut(&receiver.reference()?)
+                    .context("unregistered Activity")?;
+                screen.result_code = arg(1)?.int()?;
+                screen.result_data = data;
             }
             ("Landroid/app/Activity;", "getIntent()Landroid/content/Intent;") => {
                 result.push(self.screen(receiver)?.intent);
             }
             ("Landroid/app/Activity;", "finish()V")
             | ("Landroid/app/Activity;", "onBackPressed()V") => {
-                self.queue_navigation(Navigation::Finish(receiver))?;
+                self.finish_activity(receiver)?;
             }
             ("Landroid/app/Activity;", "isFinishing()Z") => {
                 result.push(Word::from(i32::from(self.screen(receiver)?.finishing)));

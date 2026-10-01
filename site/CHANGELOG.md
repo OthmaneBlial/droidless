@@ -2,12 +2,20 @@
 
 ## Unreleased
 
+- Activity results now preserve actual callers/request codes, snapshot return data
+  at finish and deliver through guest callbacks before resume. Native folder
+  selection returns a real session-local URI; window attachment tokens are stable.
+  The authored native fixture and cancellation pass; SwpieView opens the chooser
+  and cancels cleanly. Host-API selection reaches getContentResolver; document
+  queries and streams remain ahead. Local CI passes 81 Rust tests and 4,096 seeded
+  parser mutations, with no GitHub Actions.
+
 - Adapter-backed GridView now creates real guest cells and delivers item clicks,
   long row IDs, disabled-item checks and data-set updates. The authored native
   photo grid verifies seven images, four-cell refresh and clean close; headless
   checks cover auto-fit/stretch modes, GC and failure recovery. Local CI passes
-  79 Rust tests. SwpieView passes grid/adapter construction and now stops at
-  Intent.getType; its independent image workflow remains open.
+  79 Rust tests at this milestone. SwpieView passed grid/adapter construction;
+  its independent image workflow remains open.
 - Packaged PNG/JPEG/WebP now flow through BitmapFactory resource, stream and
   byte-array paths into AppKit ImageViews. An authored fixture verifies bounds,
   sampling, XML src, drawable assignment and four native images. Independent

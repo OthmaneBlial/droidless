@@ -112,6 +112,19 @@ for clicks, count, label in [
         raise SystemExit("Grid fixture callback or refresh did not run in guest DEX")
 print("PASS Grid fixture: seven image cells, accessible item click, long row ID and four-cell refresh")
 
+results_apk = root / "fixtures/generated/results.apk"
+for options, label in [
+    (["--click", "Open child", "--click", "Return result"], "Result 7:-1:at finish:image/png"),
+    (["--click", "Open child", "--back"], "Result 7:0:none"),
+]:
+    process = subprocess.run([
+        str(args.binary), "run", "--headless", "--ephemeral", str(results_apk), *options,
+    ], text=True, capture_output=True, check=True, timeout=120)
+    labels = [node["view"]["text"] for node in flatten(json.loads(process.stdout))]
+    if label not in labels:
+        raise SystemExit("Activity result callback did not receive the expected guest payload")
+print("PASS Results fixture: child return snapshot and Back cancellation")
+
 notepad = root / "artifacts/apks/notepad-v1.0.0.apk"
 notepad_digest = "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f"
 if not notepad.exists():

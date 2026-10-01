@@ -10,14 +10,19 @@ The following are objectives, not completed capability claims.
    ImageView rendering and a bounded `Resources.getXml` pull cursor pass authored
    fixtures. SwpieView now passes AppCompat's bundled vector resource check in
    guest DEX, attaches its platform lifecycle fragment and constructs its toolbar,
-   builds its GridView and BaseAdapter, then stops at `Intent.getType()`.
+   builds its GridView and BaseAdapter and opens a native folder chooser.
+   Cancellation exits cleanly; host-API folder selection now stops at
+   `getContentResolver()` in its result callback. Document queries and streams
+   are the next image-workflow work.
    Authored grids now verify native image clicks, disabled items, observer updates
    and auto-fit/stretch geometry; viewport recycling and scrolling remain open. Independent-app
    image workflows, vector/animated drawables, pixel operations and Canvas remain
    open. Gate: complete an image workflow in an independent app and compare it
    with expected Android behavior.
 3. Multi-screen/persistence: explicit Intents/Bundle/back stack are proven in an
-   authored native fixture. Isolated SharedPreferences save/restart/clear are also
+   authored native fixture. Activity result snapshots, request codes, cancellation
+   and deferred caller delivery now pass compiled checks; native folder selection
+   returns an actual granted URI to an authored APK. Isolated SharedPreferences save/restart/clear are also
    proven in an authored native fixture. Basic HashSet/ArrayList/HashMap/LinkedHashMap
    and live read-only Set/List views pass compiled conformance. Native map bulk
    copying and primitive Class metadata now complete more DBFlow setup in the

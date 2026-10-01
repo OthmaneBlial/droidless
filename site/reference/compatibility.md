@@ -32,8 +32,10 @@ paths; Bitmap bounds options, dimensions and ImageView resource/bitmap/drawable
 assignment reach AppKit image views. `Resources.getXml` exposes a bounded binary
 XML pull cursor and resource-ID-backed typed attributes, tested by an authored
 APK. SwpieView passes its bundled vector configuration check and attaches its
-platform ReportFragment, then constructs its toolbar, GridView and BaseAdapter and
-stops at unsupported `Intent.getType()`. Bitmap pixel manipulation, Android Canvas/vector
+platform ReportFragment, constructs its toolbar/GridView/BaseAdapter and opens a
+native folder chooser. Cancellation closes cleanly; host-API folder selection
+reaches the unsupported `getContentResolver()` call in its result callback.
+Bitmap pixel manipulation, Android Canvas/vector
 drawing and an independent image workflow remain unproven.
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does
@@ -58,9 +60,12 @@ APK save/restart probe confirms two note rows persist and the reopened list
 renders both titles. These narrow paths do not imply general text/XML/database
 compatibility.
 Current source adds explicit same-APK Intent constructors/setClass/setClassName,
-startActivity, getIntent, finish/isFinishing/onBackPressed, Bundle typed extras and
-back-stack lifecycle. This is authored-fixture evidence, not a third-party notes
-app claim; the v0.1.0 release predates navigation, persistence, collections, scheduling and the new calculator demo.
+startActivity/startActivityForResult, getIntent, action/type/data metadata,
+setResult, finish/isFinishing/onBackPressed, Bundle typed extras and back-stack
+lifecycle. Authored checks cover result snapshots, cancellation, stopped callers,
+GC and callback failures. Native ACTION_OPEN_DOCUMENT_TREE returns the actual
+folder choice as a session-local URI; document queries and streams remain open.
+The v0.1.0 release predates these additions. [Result and picker scope](framework.md#activity-results-and-native-folder-selection).
 Application lifecycle observers add bounded registration/removal, GC-rooted
 snapshot delivery from six Activity super methods and canonical getApplication
 identity. Native authored navigation/Back/close executes these observers; saved-state
@@ -108,7 +113,8 @@ checks. The authored native Start worker action also delivers its main-thread re
 
 - One foreground Activity with a bounded preserved back stack; serial shared-heap VM with bounded guest workers
   and approximate layout/style/configuration. No saved-state recreation/tasks/
-  launch modes/activity results/implicit or external Intents.
+  launch modes/general implicit or external Intents. Activity results and native
+  ACTION_OPEN_DOCUMENT_TREE are bounded subsets.
 - Explicit and common implicit Java exceptions are catchable; unsupported APIs,
   malformed instructions and host resource ceilings remain terminal diagnostics.
 - UTF-16 lengths/substrings are honored; isolated surrogates are rejected by Rust.

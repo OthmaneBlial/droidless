@@ -39,8 +39,38 @@ and [Activity super-call reference](https://github.com/aosp-mirror/platform_fram
 `--back` and native Escape dispatch virtual onBackPressed, including APK overrides.
 Finishing the last Activity ends the native loop normally; headless output is null.
 Limits: 64 Activity instances, 128 pending transitions and 16,384 entries per Bundle.
-Saved-state recreation, activity results, launch modes/flags, tasks, implicit/
-external intents and launching from non-Activity contexts remain unsupported.
+Saved-state recreation, launch modes/flags, tasks, general implicit/external
+intents and launching from non-Activity contexts remain unsupported.
+
+## Activity results and native folder selection
+
+startActivityForResult preserves request codes and the actual calling Activity;
+negative request codes launch without a result. setResult retains its code and
+optional Intent, and finish snapshots that Intent and its Bundle extras. Later
+mutations cannot change the queued result. Back defaults to RESULT_CANCELED.
+Results arrive in virtual guest onActivityResult before the caller resumes;
+stopped callers retain pending results until they return. Finished callers are
+ignored. Payloads and callers stay rooted across GC; callback failures release
+temporary roots and still destroy the outgoing Activity.
+
+Launcher Intents carry MAIN and the explicit component. Intent action/type/data
+constructors, getters and setters support null clearing, action interning and
+the mutual exclusion of setData/setType. Copy construction isolates Bundle extras.
+View.getWindowToken returns a stable managed IBinder identity for attached Views;
+isAttachedToWindow follows the same hierarchy. Detached Views return null/false.
+The token models window attachment only; Binder IPC remains unsupported.
+
+The one supported implicit action is ACTION_OPEN_DOCUMENT_TREE from an Activity
+with a nonnegative request code. macOS opens a real NSOpenPanel folder chooser,
+pauses the caller, and returns cancellation or an opaque content URI through the
+same result path. A host-selected directory is retained as a session-local
+directory capability; URI.parse alone grants nothing. At most 64 tree grants and
+one pending chooser are supported. Headless execution reports the need for native
+selection explicitly. Document queries, streams, writes and persistent grants
+remain unsupported. [Security boundaries](security.md).
+
+References: [API-21 Intent](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/Intent.java),
+[ActivityThread result delivery](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/app/ActivityThread.java).
 
 ## Platform fragments without Views
 

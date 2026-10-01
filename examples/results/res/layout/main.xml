@@ -1,0 +1,6 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="18dp">
+  <TextView android:id="@+id/status" android:layout_width="match_parent" android:layout_height="96dp" android:textSize="18sp" android:text="Ready for a result" />
+  <Button android:layout_width="match_parent" android:layout_height="52dp" android:text="Open child" android:onClick="open" />
+  <Button android:layout_width="match_parent" android:layout_height="52dp" android:text="Open without result" android:onClick="withoutResult" />
+  <Button android:layout_width="match_parent" android:layout_height="52dp" android:text="Pick folder" android:onClick="pick" />
+</LinearLayout>

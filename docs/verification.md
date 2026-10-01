@@ -626,14 +626,15 @@ fragment support, it also attaches and creates its APK-local ReportFragment. The
 startup now also passes AnimatorListenerAdapter, manifest ApplicationInfo, timed
 OverScroller construction, virtual background setting and toolbar content
 descriptions. GridView inflation, BaseAdapter construction and item-listener
-registration now complete. The next failure is the unsupported
-`Intent.getType()Ljava/lang/String;` call. This proves
-startup progress, not vector rendering or a usable image-viewer workflow. [APK source](https://github.com/err4nt/SwpieView).
+registration now complete. Native startup opens a real folder chooser, and
+cancellation reaches the app finish path with exit 0. Host-API selection reaches
+`getContentResolver()Landroid/content/ContentResolver;` in its result callback.
+This proves startup progress, not vector rendering or a usable image-viewer workflow. [APK source](https://github.com/err4nt/SwpieView).
 
 ```sh
 sh tools/fetch-swpieview.sh
 target/debug/droidless run --headless --ephemeral --stats fixtures/generated/images.apk
-target/debug/droidless run --headless --ephemeral --size 390x844 --trace-framework artifacts/apks/swpieview-1.3.2.apk
+target/release/droidless run --ephemeral --size 390x844 --trace-framework artifacts/apks/swpieview-1.3.2.apk
 ```
 
 ## Current source: packaged raster images
@@ -704,12 +705,49 @@ Full local CI passes 79 Rust tests, Clippy, the optimized build and 4,096 seeded
 parser mutations. The optimized compatibility replay adds grid click/refresh
 checks alongside all 17 calculator scenarios, images and Notepad two-row
 save/restart checks. GitHub Actions remain disabled; the 50% checkpoint remains ahead.
-The checksum-pinned SwpieView APK reaches `Intent.getType()` in its own onCreate;
-directory picking and its image-viewer workflow are still unsupported.
+The subsequent activity-result increment opens SwpieView's native directory
+chooser; document access and its image-viewer workflow remain unsupported.
 
 ```sh
 cargo test -p droidless-runtime --test grids
 sh tools/ci.sh
 python3 tools/compatibility.py
 target/release/droidless run --ephemeral fixtures/generated/grids.apk
+```
+
+## Activity results and host-selected folders
+
+Verified 2026-10-01 with the compiled `org.droidless.results` APK and current
+optimized binary. Native Open child → Return result displays
+`Result 7:-1:at finish:image/png`; Pick folder opens NSOpenPanel and selecting
+`examples/results` displays `Result 404:-1:content://droidless.documents/tree/0`.
+Closing the window exits 0. The optimized compatibility replay also checks child
+return and Back cancellation, alongside all 17 calculator scenarios, images,
+grids and Notepad two-note save/restart.
+
+Two compiled Rust checks exercise request codes, negative requests, result
+snapshots at finish, ignored finished callers, deferred stopped-caller delivery,
+result-before-resume order, callback-failure teardown and GC root release.
+They also check canonical launcher metadata, virtual Intent constructor setters,
+action interning, data/type clearing, Bundle copies, stable attached window
+tokens and null detached tokens. Folder checks cover cancellation, an invalid
+file choice preserving the request, actual directory grants and the 64-grant
+ceiling. No Android reference device run is claimed.
+
+The unchanged SwpieView APK opens the native chooser; cancellation executes its
+finish path and exits 0. Positive native selection for this public APK was not
+completed because the UI tool lost access to the dialog. A direct host-API probe
+selects `examples/images/assets` through the same completion method and reaches
+the app's real `onActivityResult` in classes.dex at PC 0x000e, where it stops at
+`getContentResolver()Landroid/content/ContentResolver;`. This evidence does not
+establish document enumeration, stream access or a usable image-viewer workflow.
+
+Full local CI passes 81 Rust tests, Clippy, the release build and 4,096 seeded
+parser mutations. GitHub Actions remain disabled.
+
+```sh
+cargo test -p droidless-runtime --test results
+sh tools/ci.sh
+python3 tools/compatibility.py
+target/release/droidless run --ephemeral fixtures/generated/results.apk
 ```

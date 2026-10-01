@@ -2,6 +2,8 @@
 #import <AppKit/AppKit.h>
 #import <QuartzCore/QuartzCore.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 typedef int (*Callback)(void *, uint32_t, size_t, const char *);
 typedef struct {
@@ -197,6 +199,23 @@ void dl_end(void *opaque) {
         if (![host.touched containsObject:key]) {[host.views[key] removeFromSuperview];[host.views removeObjectForKey:key];}
     }
 }
+int dl_choose_directory(void *opaque, char **path) {
+    DroidlessHost *host = (__bridge DroidlessHost *)opaque;
+    *path = NULL;
+    [host.window makeKeyAndOrderFront:nil];
+    NSOpenPanel *panel = [NSOpenPanel openPanel];
+    panel.title = @"Choose a folder";
+    panel.message = @"Choose a folder to open in this app.";
+    panel.canChooseDirectories = YES;
+    panel.canChooseFiles = NO;
+    panel.allowsMultipleSelection = NO;
+    if ([panel runModal] != NSModalResponseOK) return 0;
+    const char *selected = panel.URL.fileSystemRepresentation;
+    if (!selected) return -1;
+    *path = strdup(selected);
+    return *path ? 1 : -1;
+}
+void dl_free_path(char *path) { free(path); }
 void dl_run(void *opaque) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;
     while (host.running && host.window.visible) {

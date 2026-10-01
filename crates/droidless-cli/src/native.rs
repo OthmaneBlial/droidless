@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use droidless_runtime::{Runtime, ui::Node};
 use std::ffi::{CStr, CString, c_char, c_void};
+use std::os::unix::ffi::OsStringExt;
 
 #[repr(C)]
 struct NativeView {
@@ -39,6 +40,8 @@ unsafe extern "C" {
     fn dl_end(host: *mut c_void);
     fn dl_run(host: *mut c_void);
     fn dl_destroy(host: *mut c_void);
+    fn dl_choose_directory(host: *mut c_void, path: *mut *mut c_char) -> i32;
+    fn dl_free_path(path: *mut c_char);
 }
 struct ContextData<'a> {
     runtime: &'a mut Runtime,
@@ -85,6 +88,30 @@ extern "C" fn event(context: *mut c_void, kind: u32, handle: usize, text: *const
         }
         if context.runtime.activity.is_some() && (kind != 6 || dispatched > 0) {
             draw(context)?;
+        }
+        if context.runtime.directory_picker_pending() {
+            let mut path = std::ptr::null_mut();
+            // SAFETY: host is live on the main thread; C returns an owned string or null on cancel.
+            let selected = unsafe { dl_choose_directory(context.host, &mut path) };
+            anyhow::ensure!(selected >= 0, "native directory picker failed");
+            let path = if selected == 0 {
+                None
+            } else {
+                anyhow::ensure!(!path.is_null(), "native directory picker returned no path");
+                // SAFETY: selected paths are NUL-terminated and allocated by dl_choose_directory.
+                let bytes = unsafe { CStr::from_ptr(path) }.to_bytes().to_vec();
+                // SAFETY: release this C allocation exactly once, after copying its bytes.
+                unsafe {
+                    dl_free_path(path);
+                }
+                Some(std::path::PathBuf::from(std::ffi::OsString::from_vec(
+                    bytes,
+                )))
+            };
+            context.runtime.complete_directory_picker(path.as_deref())?;
+            if context.runtime.activity.is_some() {
+                draw(context)?;
+            }
         }
         Ok(())
     }))

@@ -183,14 +183,32 @@
       "notes": "Authored compiled fixture: seven PNG cells, native item clicks with long IDs, disabled item and four-cell refresh. Headless checks cover observer self-removal, auto-fit and all stretch modes, replacement/invalidation, GC, limits and failure recovery. At most 1024 materialized cells; viewport recycling, selection and touch scrolling remain unsupported. Not independent image-app evidence."
     },
     {
+      "package": "org.droidless.results",
+      "origin": "droidless-fixture",
+      "status": "interactive-fixture",
+      "source": "examples/results",
+      "native_ui": true,
+      "native_mouse": true,
+      "native_activity_results_verified": true,
+      "native_folder_picker_verified": true,
+      "native_close_exit_zero": true,
+      "headless_conformance_verified": true,
+      "android_reference_verified": false,
+      "notes": "Authored compiled fixture: child result data is copied at finish, Back cancels, and a real native folder choice returns an opaque URI. Compiled checks cover Intent action/type/data/copy semantics, stopped and finished callers, lifecycle order, window attachment tokens, GC, callback failure cleanup and the 64-grant ceiling. Document queries, streams, writes and persistent grants remain unsupported."
+    },
+    {
       "package": "org.voidptr.swpieview",
       "version": "1.3.2",
       "origin": "third-party",
       "artifact_url": "https://f-droid.org/repo/org.voidptr.swpieview_15.apk",
       "sha256": "7c7a17ddf254e6f7adb53786ab3928937a4de499785475278df2fe5a034f50f3",
-      "status": "startup-blocked",
-      "native_ui": false,
-      "notes": "Original F-Droid APK unmodified and not redistributed. Its guest vector configuration check, platform ReportFragment, toolbar, GridView and BaseAdapter construction complete. Startup stops at unsupported Intent.getType()Ljava/lang/String;. Directory picking and an independent image-viewer workflow remain unproven."
+      "status": "folder-selection-blocked",
+      "native_ui": true,
+      "notes": "Original F-Droid APK unmodified and not redistributed. Startup opens a real native folder chooser; cancellation reaches the APK finish path and exits 0. Host-API selection of the owned image fixture folder reaches ImageListView.onActivityResult, then fails at getContentResolver()Landroid/content/ContentResolver;. Native positive selection was not verified for this public APK because the UI automation tool lost dialog access. No document query, stream or independent image-viewer workflow is claimed.",
+      "native_folder_picker_verified": true,
+      "native_picker_cancel_exit_zero": true,
+      "host_selection_callback_verified": true,
+      "independent_image_workflow_verified": false
     }
   ]
 }

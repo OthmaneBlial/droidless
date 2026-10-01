@@ -163,6 +163,10 @@ fn run() -> Result<()> {
             runtime.poll_messages()?;
         }
         if headless {
+            anyhow::ensure!(
+                !runtime.directory_picker_pending(),
+                "APK requested a native directory picker; run without --headless"
+            );
             let tree = runtime
                 .activity
                 .map(|_| runtime.layout_snapshot())
