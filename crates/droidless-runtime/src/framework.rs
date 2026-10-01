@@ -1503,20 +1503,34 @@ impl Runtime {
                     .insert("droidless:drawable:color-filter".into(), vec![filter]);
             }
             ("Landroid/content/res/ColorStateList;", "getDefaultColor()I") => {
-                let colors=self.color_states(receiver)?;
-                let default=colors.iter().rev().find(|(states,_)|states.is_empty()).or_else(||colors.first()).context("empty color selector")?;
-                result.push(Word::from(default.1));
+                let cached = self.heap.get(receiver)?.fields.get("droidless:color-state-list:default").and_then(|values|values.first()).copied();
+                result.push(if let Some(color) = cached { color } else {
+                    let colors=self.color_states(receiver)?;
+                    let default=colors.iter().rev().find(|(states,_)|states.is_empty()).or_else(||colors.first()).context("empty color selector")?;
+                    Word::from(default.1)
+                });
+            }
+            ("Landroid/content/res/ColorStateList;", "<init>([[I[I)V") => {
+                self.heap.get_mut(receiver)?.fields.insert("droidless:color-state-list:arrays".into(), vec![arg(1)?,arg(2)?]);
+                let colors = self.color_states(receiver)?;
+                let default = colors.iter().rev().find(|(states,_)|states.is_empty()).or_else(||colors.first()).map_or(0xffff0000u32 as i32,|(_,color)|*color);
+                self.heap.get_mut(receiver)?.fields.insert("droidless:color-state-list:default".into(), vec![Word::from(default)]);
             }
             ("Landroid/content/res/ColorStateList;", "getColorForState([II)I") => {
-                let Data::Array{element,values}=&self.heap.get(arg(1)?)?.data else {bail!("color states require int array");};
-                ensure!(element=="I", "color states require int array");
-                let states=values.iter().map(|words|words.first().copied().context("empty color state")?.int()).collect::<Result<Vec<_>>>()?;
+                let states = if arg(1)? == Word::ZERO {None} else {Some(self.color_int_array(arg(1)?)?)};
                 let colors=self.color_states(receiver)?;
-                let matched=colors.iter().find(|(required,_)|required.iter().all(|state|if *state>0 {states.contains(state)} else {!states.contains(&-*state)}));
+                let matched=colors.iter().find(|(required,_)| {
+                    let Some(states) = &states else {return required.is_empty() || required[0]==0};
+                    required.iter().take_while(|state| **state!=0).all(|state| {
+                        let wanted=if *state>0 {*state} else {state.wrapping_neg()};
+                        let present=states.iter().take_while(|value|**value!=0).any(|value|*value==wanted);
+                        present == (*state>0)
+                    })
+                });
                 result.push(Word::from(matched.map_or(arg(2)?.int()?,|(_,color)|*color)));
             }
             ("Landroid/content/res/ColorStateList;", "isStateful()Z") => {
-                result.push(Word::from(i32::from(self.color_states(receiver)?.iter().any(|(states,_)|!states.is_empty()))));
+                result.push(Word::from(i32::from(self.color_states(receiver)?.len()>1)));
             }
             ("Landroid/content/res/Resources;", "getColorStateList(I)Landroid/content/res/ColorStateList;") => {
                 result.push(self.color_state_list(&Value {kind:1,data:arg(1)?.int()? as u32,text:None})?);
@@ -1531,6 +1545,9 @@ impl Runtime {
                 for (value, component) in values.iter_mut().zip(hsv) {
                     *value = vec![Word::Bits(component.to_bits())];
                 }
+            }
+            ("Landroid/graphics/Color;", "alpha(I)I") => {
+                result.push(Word::from(((arg(0)?.int()? as u32) >> 24) as i32));
             }
             ("Landroid/content/res/ColorStateList;", "valueOf(I)Landroid/content/res/ColorStateList;") => {
                 let color_list = self.heap.instance("Landroid/content/res/ColorStateList;")?;
@@ -2632,19 +2649,45 @@ impl Runtime {
                 } else {
                     let configuration = self.heap.instance("Landroid/content/res/Configuration;")?;
                     let fields = &mut self.heap.get_mut(configuration)?.fields;
-                    fields.insert("orientation".into(), vec![Word::from(1)]);
-                    fields.insert("keyboard".into(), vec![Word::from(2)]);
-                    fields.insert("screenWidthDp".into(), vec![Word::from(self.width as i32)]);
-                    fields.insert("screenHeightDp".into(), vec![Word::from(self.height as i32)]);
-                    fields.insert("smallestScreenWidthDp".into(), vec![Word::from(self.width as i32)]);
-                    fields.insert("densityDpi".into(), vec![Word::from(160)]);
-                    fields.insert("fontScale".into(), vec![Word::Bits(1.0f32.to_bits())]);
+                    fields.insert("Landroid/content/res/Configuration;->orientation:I".into(), vec![Word::from(1)]);
+                    fields.insert("Landroid/content/res/Configuration;->keyboard:I".into(), vec![Word::from(2)]);
+                    fields.insert("Landroid/content/res/Configuration;->screenWidthDp:I".into(), vec![Word::from(self.width as i32)]);
+                    fields.insert("Landroid/content/res/Configuration;->screenHeightDp:I".into(), vec![Word::from(self.height as i32)]);
+                    fields.insert("Landroid/content/res/Configuration;->smallestScreenWidthDp:I".into(), vec![Word::from(self.width as i32)]);
+                    fields.insert("Landroid/content/res/Configuration;->densityDpi:I".into(), vec![Word::from(160)]);
+                    fields.insert("Landroid/content/res/Configuration;->fontScale:F".into(), vec![Word::Bits(1.0f32.to_bits())]);
                     self.heap
                         .get_mut(receiver)?
                         .fields
                         .insert("droidless:configuration".into(), vec![configuration]);
                     configuration
                 });
+            }
+            ("Landroid/content/res/Configuration;", "<init>()V") => {
+                self.heap.get_mut(receiver)?.fields.insert("Landroid/content/res/Configuration;->fontScale:F".into(), vec![Word::Bits(1.0f32.to_bits())]);
+            }
+            ("Landroid/content/res/Configuration;", "<init>(Landroid/content/res/Configuration;)V") => {
+                ensure!(self.is_a(&self.heap.get(arg(1)?)?.class,"Landroid/content/res/Configuration;"),"invalid Configuration source");
+                self.heap.get_mut(receiver)?.fields=self.heap.get(arg(1)?)?.fields.clone();
+            }
+            ("Landroid/content/res/Configuration;", "equals(Landroid/content/res/Configuration;)Z" | "equals(Ljava/lang/Object;)Z") => {
+                let other=arg(1)?;
+                let equal = if other==Word::ZERO || !self.is_a(&self.heap.get(other)?.class,"Landroid/content/res/Configuration;") {false} else {
+                    let values = |object: Word| -> Result<Vec<i32>> {
+                        let fields=&self.heap.get(object)?.fields;
+                        [("orientation","I"),("keyboard","I"),("screenWidthDp","I"),("screenHeightDp","I"),("smallestScreenWidthDp","I"),("densityDpi","I"),("fontScale","F")].iter().map(|(name,ty)| {
+                            let key=format!("Landroid/content/res/Configuration;->{name}:{ty}");
+                            fields.get(&key).and_then(|values|values.first()).copied().unwrap_or(Word::ZERO).int()
+                        }).collect()
+                    };
+                    let a=values(receiver)?;
+                    let b=values(other)?;
+                    let fa=f32::from_bits(a[6] as u32);
+                    let fb=f32::from_bits(b[6] as u32);
+                    a[..6]==b[..6] && !(fa<fb || fa>fb)
+                };
+                // ponytail: compare the seven profile fields; locale and full qualifier configuration remain unsupported.
+                result.push(Word::from(i32::from(equal)));
             }
             ("Landroid/content/res/Resources;", "getBoolean(I)Z") => {
                 let value = self.apk.resources.resolve(arg(1)?.int()? as u32)?;
@@ -3860,6 +3903,11 @@ impl Runtime {
                 if value != Word::ZERO { self.heap.get(value)?; }
                 self.heap.get_mut(receiver)?.fields.insert("droidless:text:ellipsize".into(), vec![value]);
             }
+            ("Landroid/widget/TextView;", "getTransformationMethod()Landroid/text/method/TransformationMethod;") => {
+                self.view_mut(receiver)?;
+                // ponytail: the text profile is untransformed; implement guest transformations when a setter is required.
+                result.push(Word::ZERO);
+            }
             ("Landroid/widget/TextView;", "setSingleLine()V") => {
                 self.heap.get_mut(receiver)?.fields.insert("droidless:text:single-line".into(), vec![Word::from(1)]);
                 self.invalidate_text_layout(receiver)?;
@@ -4060,6 +4108,16 @@ impl Runtime {
                 self.view_mut(receiver)?.text_color = color[0].int()? as u32;
                 self.heap.get_mut(receiver)?.fields.insert("droidless:view:text-colors".into(),vec![colors]);
             }
+            ("Landroid/widget/TextView;", "setHintTextColor(Landroid/content/res/ColorStateList;)V" | "setLinkTextColor(Landroid/content/res/ColorStateList;)V") => {
+                let value = arg(1)?;
+                ensure!(value == Word::ZERO || self.is_a(&self.heap.get(value)?.class,"Landroid/content/res/ColorStateList;"),"invalid text ColorStateList");
+                let key = if method.name=="setHintTextColor" {"droidless:text:hint-colors"} else {"droidless:text:link-colors"};
+                self.heap.get_mut(receiver)?.fields.insert(key.into(),vec![value]);
+            }
+            ("Landroid/widget/TextView;", "getHintTextColors()Landroid/content/res/ColorStateList;" | "getLinkTextColors()Landroid/content/res/ColorStateList;") => {
+                let key = if method.name=="getHintTextColors" {"droidless:text:hint-colors"} else {"droidless:text:link-colors"};
+                result.push(self.heap.get(receiver)?.fields.get(key).and_then(|values|values.first()).copied().unwrap_or(Word::ZERO));
+            }
             ("Landroid/view/View;", "getBaseline()I") => {
                 self.view_mut(receiver)?;
                 result.push(Word::from(-1));
@@ -4115,6 +4173,28 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .insert("droidless:view:focus-change-listener".into(), vec![listener]);
+            }
+            ("Landroid/widget/TextView;", "setOnEditorActionListener(Landroid/widget/TextView$OnEditorActionListener;)V") => {
+                let listener = arg(1)?;
+                ensure!(listener == Word::ZERO || self.is_a(&self.heap.get(listener)?.class, "Landroid/widget/TextView$OnEditorActionListener;"), "invalid editor action listener");
+                self.heap.get_mut(receiver)?.fields.insert("droidless:text:editor-action-listener".into(), vec![listener]);
+            }
+            ("Landroid/widget/TextView;", "onEditorAction(I)V") => {
+                let action = arg(1)?.int()?;
+                let listener = self.heap.get(receiver)?.fields.get("droidless:text:editor-action-listener").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO);
+                if listener != Word::ZERO {
+                    let roots = self.native_roots.len();
+                    self.native_roots.extend([receiver, listener]);
+                    let callback = self.invoke(Method {
+                        class: "Landroid/widget/TextView$OnEditorActionListener;".into(),
+                        name: "onEditorAction".into(),
+                        parameters: vec!["Landroid/widget/TextView;".into(), "I".into(), "Landroid/view/KeyEvent;".into()],
+                        returns: "Z".into(),
+                    }, vec![listener, receiver, Word::from(action), Word::ZERO], true);
+                    self.native_roots.truncate(roots);
+                    callback?;
+                }
+                // ponytail: guest action callbacks only; IME focus navigation and host Return delivery remain ahead.
             }
             ("Landroid/view/View;", "setOnTouchListener(Landroid/view/View$OnTouchListener;)V") => {
                 let listener = arg(1)?;
@@ -4763,6 +4843,15 @@ impl Runtime {
                 } else {
                     result.push(self.heap.get(receiver)?.fields.get("droidless:view:checked").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO));
                 }
+            }
+            ("Landroid/widget/CheckedTextView;", "setCheckMarkDrawable(Landroid/graphics/drawable/Drawable;)V") => {
+                let value = arg(1)?;
+                ensure!(value == Word::ZERO || self.is_a(&self.heap.get(value)?.class, "Landroid/graphics/drawable/Drawable;"), "invalid checkmark Drawable");
+                self.heap.get_mut(receiver)?.fields.insert("droidless:checkmark:drawable".into(), vec![value]);
+                self.request_view_layout(receiver)?;
+            }
+            ("Landroid/widget/CheckedTextView;", "getCheckMarkDrawable()Landroid/graphics/drawable/Drawable;") => {
+                result.push(self.heap.get(receiver)?.fields.get("droidless:checkmark:drawable").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO));
             }
             ("Landroid/view/View;", "setSaveFromParentEnabled(Z)V") => {
                 self.heap.get_mut(receiver)?.fields.insert("droidless:view:save-from-parent".into(), vec![arg(1)?]);
@@ -5487,6 +5576,27 @@ impl Runtime {
     }
     fn color_states(&self, list: Word) -> Result<Vec<(Vec<i32>, i32)>> {
         let fields = &self.heap.get(list)?.fields;
+        if let Some(arrays) = fields.get("droidless:color-state-list:arrays") {
+            ensure!(arrays.len() == 2, "invalid ColorStateList arrays");
+            let colors = self.color_int_array(arrays[1])?;
+            let Data::Array { element, values } = &self.heap.get(arrays[0])?.data else {
+                bail!("color specs require int[][]")
+            };
+            ensure!(
+                element == "[I" && values.len() == colors.len() && values.len() <= 1024,
+                "invalid or oversized ColorStateList arrays"
+            );
+            return values
+                .iter()
+                .zip(colors)
+                .map(|(words, color)| {
+                    let states =
+                        self.color_int_array(*words.first().context("missing color spec")?)?;
+                    ensure!(states.len() <= 128, "color state spec limit reached (128)");
+                    Ok((states, color))
+                })
+                .collect();
+        }
         if let Some(color) = fields
             .get("droidless:color-state-list:default")
             .and_then(|values| values.first())
@@ -5503,6 +5613,19 @@ impl Runtime {
             data: resource,
             text: None,
         })
+    }
+    fn color_int_array(&self, array: Word) -> Result<Vec<i32>> {
+        let Data::Array { element, values } = &self.heap.get(array)?.data else {
+            bail!("color states require int[]")
+        };
+        ensure!(
+            element == "I" && values.len() <= 4096,
+            "invalid or oversized color state array"
+        );
+        values
+            .iter()
+            .map(|words| words.first().context("missing color state")?.int())
+            .collect()
     }
     fn color_entries(&self, raw: &Value) -> Result<Vec<(Vec<i32>, i32)>> {
         let value = self.attribute(raw)?;

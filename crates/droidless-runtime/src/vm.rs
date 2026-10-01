@@ -896,7 +896,16 @@ impl Runtime {
                         ]
                         .contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/content/res/Configuration;"
-                        && [("keyboard", "I")].contains(&(field.name.as_str(), field.ty.as_str())))
+                        && [
+                            ("orientation", "I"),
+                            ("keyboard", "I"),
+                            ("screenWidthDp", "I"),
+                            ("screenHeightDp", "I"),
+                            ("smallestScreenWidthDp", "I"),
+                            ("densityDpi", "I"),
+                            ("fontScale", "F"),
+                        ]
+                        .contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/graphics/Rect;"
                         && [("left", "I"), ("top", "I"), ("right", "I"), ("bottom", "I")]
                             .contains(&(field.name.as_str(), field.ty.as_str())))

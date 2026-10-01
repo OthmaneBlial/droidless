@@ -19,6 +19,74 @@ public final class WidgetProbe {
     private static ScrollFrame frame, hidden;
     public static void verify(Activity activity) {
         host = activity;
+        android.content.res.Configuration config = activity.getResources().getConfiguration();
+        android.content.res.Configuration copied = new android.content.res.Configuration(config);
+        System.gc();
+        if (config==copied || !config.equals(copied) || !copied.equals((Object)config)
+            || config.equals((android.content.res.Configuration)null) || config.equals(new Object()))
+            throw new IllegalStateException("profile configuration equality");
+        copied.keyboard=config.keyboard+1;
+        if (config.equals(copied) || copied.equals(config)) throw new IllegalStateException("configuration mutation");
+        copied.keyboard=config.keyboard;
+        if (!config.equals(copied)) throw new IllegalStateException("configuration field aliases");
+        android.content.res.Configuration fresh = new android.content.res.Configuration();
+        if (fresh.fontScale!=1 || fresh.keyboard!=0 || config.fontScale!=1 || config.densityDpi!=160)
+            throw new IllegalStateException("configuration defaults and readable profile fields");
+        copied.fontScale=2;
+        if (config.equals(copied)) throw new IllegalStateException("configuration float change");
+        copied.fontScale=config.fontScale;
+        fresh.fontScale=-0.0f; copied=new android.content.res.Configuration(fresh); copied.fontScale=0.0f;
+        if (!fresh.equals(copied)) throw new IllegalStateException("configuration signed zero");
+        fresh.fontScale=Float.NaN;
+        if (!fresh.equals(copied)) throw new IllegalStateException("configuration API21 NaN comparison");
+        int enabled=16842910, pressed=16842919;
+        int[][] specs={{pressed,0,enabled},{-enabled},{}};
+        int[] colors={0xff112233,0x80112233,0xff778899};
+        android.content.res.ColorStateList palette = new android.content.res.ColorStateList(specs,colors);
+        System.gc();
+        if (!palette.isStateful() || palette.getDefaultColor()!=colors[2]
+            || palette.getColorForState(new int[]{pressed},7)!=colors[0]
+            || palette.getColorForState(new int[]{},7)!=colors[1]
+            || palette.getColorForState(new int[]{enabled},7)!=colors[2]
+            || palette.getColorForState(null,7)!=colors[2]) throw new IllegalStateException("state color matching");
+        colors[0]=0xffabcdef; colors[2]=0xff998877; System.gc();
+        if (palette.getColorForState(new int[]{pressed},7)!=colors[0]
+            || palette.getDefaultColor()!=0xff778899) throw new IllegalStateException("live colors and cached default");
+        android.content.res.ColorStateList empty = new android.content.res.ColorStateList(new int[][]{},new int[]{});
+        android.content.res.ColorStateList single = new android.content.res.ColorStateList(new int[][]{{pressed}},new int[]{42});
+        if (empty.isStateful() || empty.getDefaultColor()!=0xffff0000 || empty.getColorForState(new int[]{enabled},7)!=7
+            || single.isStateful() || single.getColorForState(null,7)!=7) throw new IllegalStateException("empty/single palette");
+        final int[] actions = {0};
+        android.widget.TextView editor = new android.widget.TextView(activity);
+        editor.setHintTextColor(palette); editor.setLinkTextColor(palette); System.gc();
+        if (editor.getHintTextColors()!=palette || editor.getLinkTextColors()!=palette)
+            throw new IllegalStateException("hint/link color identity");
+        editor.setHintTextColor((android.content.res.ColorStateList)null);
+        editor.setLinkTextColor((android.content.res.ColorStateList)null);
+        if (editor.getHintTextColors()!=null || editor.getLinkTextColors()!=null)
+            throw new IllegalStateException("clear hint/link colors");
+        editor.setOnEditorActionListener(new android.widget.TextView.OnEditorActionListener() {
+            public boolean onEditorAction(android.widget.TextView view, int id, android.view.KeyEvent event) {
+                System.gc();
+                if (event != null) throw new IllegalStateException("editor action key should be null");
+                actions[0] += id;
+                return id == 6;
+            }
+        });
+        System.gc(); editor.onEditorAction(6); editor.onEditorAction(3);
+        editor.setOnEditorActionListener(null); System.gc(); editor.onEditorAction(6);
+        if (actions[0] != 9) throw new IllegalStateException("editor action delivery and clearing");
+        if (android.graphics.Color.alpha(0x80ff0088) != 128 || android.graphics.Color.alpha(0) != 0
+            || android.graphics.Color.alpha(-1) != 255) throw new IllegalStateException("ARGB alpha extraction");
+        android.widget.CheckedTextView checked = new android.widget.CheckedTextView(activity);
+        Drawable mark = new ColorDrawable(0xff224466);
+        if (checked.getCheckMarkDrawable() != null) throw new IllegalStateException("default checkmark");
+        checked.setCheckMarkDrawable(mark); System.gc();
+        if (checked.getCheckMarkDrawable() != mark) throw new IllegalStateException("checkmark identity");
+        checked.setChecked(true);
+        if (!checked.isChecked() || checked.getCheckMarkDrawable() != mark) throw new IllegalStateException("checked state and mark");
+        checked.setCheckMarkDrawable(null); System.gc();
+        if (checked.getCheckMarkDrawable() != null || !checked.isChecked()) throw new IllegalStateException("clear checkmark");
         int[] states = {16842910, -16842919, 0, 0};
         int[] trimmed = android.util.StateSet.trimStateSet(states, 2);
         System.gc();
