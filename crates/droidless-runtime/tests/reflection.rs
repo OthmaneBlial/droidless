@@ -5,6 +5,36 @@ use droidless_runtime::{
 };
 
 #[test]
+fn reflected_reference_constructors_preserve_access_arguments_gc_and_causes() {
+    let mut vm = Runtime::new(
+        Apk::parse(include_bytes!("../../../fixtures/generated/reflection.apk")).unwrap(),
+    )
+    .unwrap();
+    for (name, returns) in [("contract", "I"), ("unsupportedPrimitive", "V")] {
+        let result = vm.invoke(
+            Method {
+                class: "Lorg/droidless/reflection/ConstructorContract;".into(),
+                name: name.into(),
+                parameters: vec![],
+                returns: returns.into(),
+            },
+            vec![],
+            false,
+        );
+        if name == "contract" {
+            assert_eq!(result.unwrap(), [Word::from(1)]);
+        } else {
+            assert!(
+                format!("{:#}", result.unwrap_err())
+                    .contains("primitive reflective constructor arguments unsupported")
+            );
+        }
+        assert_eq!(vm.stack_depth(), 0);
+        vm.collect();
+    }
+}
+
+#[test]
 fn apk_class_lookup_construction_initialization_and_inherited_fields() {
     let mut vm = Runtime::new(
         Apk::parse(include_bytes!("../../../fixtures/generated/reflection.apk")).unwrap(),

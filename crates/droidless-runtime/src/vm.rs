@@ -902,6 +902,7 @@ impl Runtime {
             | "Landroid/graphics/drawable/RippleDrawable;"
             | "Landroid/graphics/drawable/InsetDrawable;" => "Landroid/graphics/drawable/Drawable;",
             "Landroid/animation/ObjectAnimator;" => "Landroid/animation/Animator;",
+            "Ljava/lang/reflect/Constructor;" => "Ljava/lang/reflect/AccessibleObject;",
             "Landroid/view/ViewGroup$MarginLayoutParams;" => {
                 "Landroid/view/ViewGroup$LayoutParams;"
             }

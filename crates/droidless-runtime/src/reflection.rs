@@ -342,13 +342,30 @@ impl Runtime {
         let arg = |n| args.get(n).copied().context("reflection argument missing");
         let mut result = vec![];
         match (method.class.as_str(), method.signature().as_str()) {
-            ("Ljava/lang/Class;", "forName(Ljava/lang/String;)Ljava/lang/Class;") => {
+            (
+                "Ljava/lang/Class;",
+                "forName(Ljava/lang/String;)Ljava/lang/Class;"
+                | "forName(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;",
+            ) => {
+                let explicit = method.parameters.len() == 3;
+                let initialize = if explicit { arg(1)?.int()? != 0 } else { true };
+                let loader = if explicit {
+                    arg(2)?
+                } else {
+                    self.apk_class_loader()?
+                };
+                if loader != Word::ZERO {
+                    ensure!(
+                        loader == self.apk_class_loader()?,
+                        "foreign ClassLoader unsupported"
+                    );
+                }
                 let name = self.heap.text(arg(0)?)?.to_owned();
                 let descriptor = binary_descriptor(&name);
                 let exists = descriptor.as_ref().is_some_and(|class| {
                     let element = class.trim_start_matches('[');
                     (class.starts_with('[') && element.len() == 1)
-                        || self.class_location(element).is_some()
+                        || (loader != Word::ZERO && self.class_location(element).is_some())
                         || crate::framework::known_class(element)
                         || primitive_wrapper(element).is_some()
                 });
@@ -357,7 +374,7 @@ impl Runtime {
                 }
                 let class = descriptor.context("missing class descriptor")?;
                 // Array class loading does not initialize its component class.
-                if !class.starts_with('[') {
+                if initialize && !class.starts_with('[') {
                     self.initialize(&class)?;
                 }
                 result.push(self.class_object(&class)?);
@@ -515,6 +532,200 @@ impl Runtime {
                     self.reflected_method_access(&reflected).unwrap_or_default();
                 let object = self.reflected_method_object(reflected, access, &annotations)?;
                 result.push(object);
+            }
+            (
+                "Ljava/lang/Class;",
+                "getAnnotation(Ljava/lang/Class;)Ljava/lang/annotation/Annotation;",
+            ) => {
+                let requested = self.reflected_class(arg(1)?)?;
+                let inherited = self.class_location(&requested).is_some_and(|(dex, index)| {
+                    self.apk.dex[dex].classes[index]
+                        .annotations
+                        .iter()
+                        .any(|annotation| {
+                            annotation.visibility == 1
+                                && annotation.class == "Ljava/lang/annotation/Inherited;"
+                        })
+                });
+                let mut class = self.reflected_class(arg(0)?)?;
+                let mut found = None;
+                for _ in 0..128 {
+                    let Some((dex, index)) = self.class_location(&class) else {
+                        break;
+                    };
+                    let definition = &self.apk.dex[dex].classes[index];
+                    if let Some(annotation) = definition.annotations.iter().find(|annotation| {
+                        annotation.visibility == 1 && annotation.class == requested
+                    }) {
+                        found = Some(annotation.clone());
+                        break;
+                    }
+                    if !inherited {
+                        break;
+                    }
+                    let Some(parent) = &definition.super_class else {
+                        break;
+                    };
+                    class = parent.clone();
+                }
+                result.push(if let Some(annotation) = found {
+                    self.reflected_annotation(&annotation)?
+                } else {
+                    Word::ZERO
+                });
+            }
+            (
+                "Ljava/lang/Class;",
+                "getConstructor([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;"
+                | "getDeclaredConstructor([Ljava/lang/Class;)Ljava/lang/reflect/Constructor;",
+            ) => {
+                let class = self.reflected_class(arg(0)?)?;
+                let parameters = self.reflected_parameters(arg(1)?)?;
+                let reflected = self
+                    .reflected_method(&class, "<init>", &parameters, false)
+                    .ok_or_else(|| {
+                        fault("Ljava/lang/NoSuchMethodException;", class_name(&class))
+                    })?;
+                let (access, annotations) = self
+                    .reflected_method_access(&reflected)
+                    .context("constructor metadata missing")?;
+                if method.name == "getConstructor" && access & 1 == 0 {
+                    return Err(fault(
+                        "Ljava/lang/NoSuchMethodException;",
+                        class_name(&class),
+                    ));
+                }
+                let object = self.reflected_method_object(reflected, access, &annotations)?;
+                self.heap.get_mut(object)?.class = "Ljava/lang/reflect/Constructor;".into();
+                result.push(object);
+            }
+            (
+                "Ljava/lang/reflect/Constructor;",
+                "newInstance([Ljava/lang/Object;)Ljava/lang/Object;",
+            ) => {
+                let receiver = arg(0)?;
+                let Data::ReflectedMethod(constructor) = &self.heap.get(receiver)?.data else {
+                    bail!("uninitialized reflected Constructor");
+                };
+                let constructor = constructor.clone();
+                ensure!(constructor.name == "<init>", "invalid Constructor metadata");
+                // ponytail: APK-local reference arguments only; add primitive unboxing/widening with a compiled differential contract.
+                ensure!(
+                    constructor
+                        .parameters
+                        .iter()
+                        .all(|ty| ty.starts_with(['L', '['])),
+                    "primitive reflective constructor arguments unsupported"
+                );
+                let values = if arg(1)? == Word::ZERO {
+                    vec![]
+                } else {
+                    let Data::Array { element, values } = &self.heap.get(arg(1)?)?.data else {
+                        bail!("Constructor.newInstance requires Object[]");
+                    };
+                    ensure!(
+                        element.starts_with(['L', '[']),
+                        "Constructor.newInstance requires reference array"
+                    );
+                    values
+                        .iter()
+                        .map(|words| {
+                            ensure!(words.len() == 1, "invalid constructor argument width");
+                            words[0].reference()?;
+                            Ok(words[0])
+                        })
+                        .collect::<Result<Vec<_>>>()?
+                };
+                if values.len() != constructor.parameters.len()
+                    || values
+                        .iter()
+                        .zip(&constructor.parameters)
+                        .any(|(value, ty)| {
+                            *value != Word::ZERO
+                                && !self
+                                    .heap
+                                    .get(*value)
+                                    .is_ok_and(|object| self.is_a(&object.class, ty))
+                        })
+                {
+                    return Err(fault(
+                        "Ljava/lang/IllegalArgumentException;",
+                        "reflective constructor argument mismatch",
+                    ));
+                }
+                let (dex, index) = self
+                    .class_location(&constructor.class)
+                    .context("constructor class is not APK-local")?;
+                let definition = &self.apk.dex[dex].classes[index];
+                if definition.access & 0x600 != 0 {
+                    return Err(fault(
+                        "Ljava/lang/InstantiationException;",
+                        class_name(&constructor.class),
+                    ));
+                }
+                let accessible = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:accessible")
+                    .and_then(|words| words.first())
+                    .is_some_and(|word| word.truth());
+                let access = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:reflect:modifiers")
+                    .and_then(|words| words.first())
+                    .copied()
+                    .context("constructor modifiers missing")?
+                    .int()? as u32;
+                let caller = self.frames.last().map(|frame| frame.method.class.as_str());
+                let same_package = caller.is_some_and(|caller| {
+                    caller.rsplit_once('/').map(|p| p.0)
+                        == constructor.class.rsplit_once('/').map(|p| p.0)
+                });
+                if !accessible
+                    && ((definition.access & 1 == 0 && !same_package)
+                        || (access & 1 == 0
+                            && (if access & 2 != 0 {
+                                caller != Some(constructor.class.as_str())
+                            } else {
+                                !same_package
+                            })))
+                {
+                    return Err(fault(
+                        "Ljava/lang/IllegalAccessException;",
+                        class_name(&constructor.class),
+                    ));
+                }
+                let roots = self.native_roots.len();
+                self.native_roots.extend(args.iter().copied());
+                self.native_roots.extend(values.iter().copied());
+                let constructed = (|| -> Result<Word> {
+                    let object = self.new_instance(&constructor.class)?;
+                    self.native_roots.push(object);
+                    let call = self.invoke(
+                        constructor,
+                        std::iter::once(object).chain(values).collect(),
+                        false,
+                    );
+                    if let Err(error) = call {
+                        if let Some(cause) = error
+                            .downcast_ref::<crate::interpreter::Thrown>()
+                            .map(|thrown| thrown.0)
+                        {
+                            return Err(self.guest_exception(
+                                "Ljava/lang/reflect/InvocationTargetException;",
+                                "constructor threw".into(),
+                                Some(cause),
+                            )?);
+                        }
+                        return Err(error);
+                    }
+                    Ok(object)
+                })();
+                self.native_roots.truncate(roots);
+                result.push(constructed?);
             }
             ("Ljava/lang/reflect/Method;", "getName()Ljava/lang/String;") => {
                 let Data::ReflectedMethod(reflected) = &self.heap.get(arg(0)?)?.data else {
@@ -685,14 +896,16 @@ impl Runtime {
                     .context("uninitialized Package")?,
             ),
             ("Ljava/lang/reflect/AccessibleObject;", "setAccessible(Z)V")
-            | ("Ljava/lang/reflect/Method;", "setAccessible(Z)V") => {
+            | ("Ljava/lang/reflect/Method;", "setAccessible(Z)V")
+            | ("Ljava/lang/reflect/Constructor;", "setAccessible(Z)V") => {
                 self.heap
                     .get_mut(arg(0)?)?
                     .fields
                     .insert("droidless:accessible".into(), vec![arg(1)?]);
             }
             ("Ljava/lang/reflect/AccessibleObject;", "isAccessible()Z")
-            | ("Ljava/lang/reflect/Method;", "isAccessible()Z") => {
+            | ("Ljava/lang/reflect/Method;", "isAccessible()Z")
+            | ("Ljava/lang/reflect/Constructor;", "isAccessible()Z") => {
                 let accessible = self
                     .heap
                     .get(arg(0)?)?

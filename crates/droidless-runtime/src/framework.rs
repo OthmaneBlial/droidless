@@ -54,6 +54,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/ref/Reference;",
             "Ljava/lang/ref/WeakReference;",
             "Ljava/lang/reflect/Method;",
+            "Ljava/lang/reflect/Constructor;",
             "Ljava/lang/reflect/AccessibleObject;",
             "Ljava/lang/Boolean;",
             "Ljava/lang/Double;",
@@ -1660,8 +1661,9 @@ impl Runtime {
                     self.heap.text(receiver)?.ends_with(self.heap.text(arg(1)?)?),
                 )))
             }
-            ("Ljava/lang/String;", "lastIndexOf(I)I" | "lastIndexOf(II)I"
-                | "lastIndexOf(Ljava/lang/String;)I" | "lastIndexOf(Ljava/lang/String;I)I") => {
+            ("Ljava/lang/String;", "lastIndexOf(I)I" | "lastIndexOf(II)I" | "indexOf(I)I" | "indexOf(II)I"
+                | "lastIndexOf(Ljava/lang/String;)I" | "lastIndexOf(Ljava/lang/String;I)I"
+                | "indexOf(Ljava/lang/String;)I" | "indexOf(Ljava/lang/String;I)I") => {
                 let source = self.heap.text(receiver)?.encode_utf16().collect::<Vec<_>>();
                 let needle = if method.parameters[0] == "I" {
                     let code = arg(1)?.int()?;
@@ -1675,11 +1677,13 @@ impl Runtime {
                     character.encode_utf16(&mut buffer).to_vec()
                     }
                 } else { self.heap.text(arg(1)?)?.encode_utf16().collect::<Vec<_>>() };
-                let from = if method.parameters.len() == 2 { arg(2)?.int()? } else { i32::MAX };
-                let found = (0..=source.len()).rev().find(|index| {
-                    *index as i64 <= i64::from(from)
+                let forward = method.name == "indexOf";
+                let from = if method.parameters.len() == 2 { arg(2)?.int()? } else if forward { 0 } else { i32::MAX };
+                let matches = |index: &usize| {
+                    (if forward { *index >= (from.max(0) as usize).min(source.len()) } else { *index as i64 <= i64::from(from) })
                         && source.get(*index..index.saturating_add(needle.len())) == Some(needle.as_slice())
-                });
+                };
+                let found = if forward { (0..=source.len()).find(matches) } else { (0..=source.len()).rev().find(matches) };
                 result.push(Word::from(found.map_or(-1, |index| index as i32)));
             }
             ("Ljava/lang/String;", "contains(Ljava/lang/CharSequence;)Z") => {

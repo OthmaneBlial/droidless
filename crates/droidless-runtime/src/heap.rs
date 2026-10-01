@@ -52,6 +52,7 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         "Landroid/database/sqlite/SQLiteException;" => "Ljava/lang/RuntimeException;",
         "Ljava/lang/ClassNotFoundException;"
         | "Ljava/lang/NoSuchMethodException;"
+        | "Ljava/lang/reflect/InvocationTargetException;"
         | "Ljava/lang/InstantiationException;"
         | "Ljava/lang/IllegalAccessException;" => "Ljava/lang/ReflectiveOperationException;",
         "Ljava/lang/ReflectiveOperationException;" => "Ljava/lang/Exception;",
