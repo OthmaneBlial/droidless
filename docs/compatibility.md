@@ -37,7 +37,10 @@ Headless `--menu-item TEXT` now prepares the foreground Activity's options and
 dispatches visible/enabled items to guest listeners, then onOptionsItemSelected.
 Compiled checks cover cache/invalidation, rejection, navigation, errors and stale
 input. Selection never toggles a checked item automatically and a false callback
-return does not undo guest effects. Native menu presentation/input remain open.
+return does not undo guest effects. AppKit's Options menu now requests foreground
+entries and routes item actions through these same checks. A standalone native
+component check verifies title ownership, enabled/checked state and dispatch;
+physical menu input remains unverified.
 The public Notepad's Delete callback removes the intended SQLite row and preserves
 the other row, then reaches its original Snackbar feedback. Measurement and the
 original translation/alpha start callbacks now execute. Headless Delete returns

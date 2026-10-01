@@ -1449,3 +1449,39 @@ Full local CI passes 103 Rust tests, warning-free Clippy, optimized CLI/replay
 builds and 4,096 seeded parser mutations. All public APK compatibility replays,
 including the new Delete regression, pass. GitHub Actions remain disabled; the
 50% everyday-app checkpoint remains ahead.
+
+## Current-source native Options menu bridge
+
+The native host now requests the foreground Activity's prepared options through
+the existing runtime API and sends native item actions through its checked guest
+selection path. The shared compiled menu contracts continue to cover guest
+create/prepare/listener/fallback behavior, stale input, invalidation, navigation,
+GC and callback faults.
+
+The separate AppKit component contract creates a real native host, invokes its
+registered menu delegate, then sends a native NSMenu item action. It checks
+copied UTF-8 after the borrowed title buffer changes, enabled/checked flags,
+handle delivery, repeated preparation, entry clearing and delegate/window cleanup.
+It also checks that preparation is not installed before initial drawing has a
+valid Rust host pointer. This is programmatic component evidence, not physical
+mouse input or an original APK workflow. Run it in a macOS GUI session:
+
+```sh
+xcrun clang -fobjc-arc -Wall -Wextra -Werror -framework AppKit \
+  -framework QuartzCore tools/native-menu-check.m -o /tmp/droidless-menu-check
+/tmp/droidless-menu-check
+```
+
+The current unsigned development bundle opened the pinned Notepad editor against
+two disposable test rows. Its trace reported a visible native window at both
+390×844 and an entirely on-screen 390×720 viewport. UI control by app path, bundle
+ID and display name failed with cgWindowNotFound. No mouse menu selection,
+public native Delete or fresh normal-close result is claimed. The diagnostic
+processes were stopped explicitly; both original test rows remained unchanged.
+Physical menu input and complete public timed feedback/dismissal remain pending.
+
+Full local CI passes 103 Rust tests, warning-free Clippy, optimized CLI/replay
+builds and 4,096 seeded parser mutations. The native component check compiles with
+warnings treated as errors and passes. All public APK compatibility replays,
+including original Notepad Delete/return/restart/reopen, pass. GitHub Actions
+remain disabled and the 50% checkpoint remains active.

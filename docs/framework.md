@@ -456,6 +456,28 @@ The real screenshot visibly reflects this subset.
 
 ## Input/native boundary
 
+### Native Options menu
+
+AppKit's Options menu asks Runtime.options_menu for the current Activity's
+create/prepare result through NSMenuDelegate.menuNeedsUpdate. It displays the
+visible entries in guest order, with copied UTF-8 titles and retained enabled and
+checked state. Native item actions return only a guest handle; select_menu_item
+checks foreground ownership, readiness, membership, visibility and enabled state
+again before invoking guest listeners and Activity fallback. Selection does not
+toggle checked state automatically. An empty result displays disabled No options.
+The ordinary macOS Edit menu keeps its system responder behavior.
+
+Menu titles are validated for embedded NUL before changing the native entries.
+The delegate is installed after initial drawing, once Rust owns the returned
+host pointer, and detached on close. Guest faults follow the existing native
+event error path. A standalone AppKit contract checks delegate preparation,
+borrowed-title copying, enabled/checked state, native action dispatch and cleanup.
+Physical input into an original APK's Options menu remains unverified: the UI
+controller could not attach to the traced visible test window. Icons, action
+views, submenus and Android shortcut/toolbar-overflow presentation remain outside
+this bridge. [AppKit menu delegate](https://developer.apple.com/documentation/appkit/nsmenudelegate)
+and [manual item enabling](https://developer.apple.com/documentation/appkit/nsmenu/autoenablesitems) describe the host APIs used here.
+
 ### Timed View property animations
 
 View.animate retains one ViewPropertyAnimator per View. Alpha and translationX/Y

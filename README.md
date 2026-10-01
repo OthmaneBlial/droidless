@@ -121,7 +121,8 @@ counters and timings. `--click`, `--key`, `--back`, `--headless` and `inspect-ui
 support repeatable experiments. `--size WIDTHxHEIGHT` selects a 128–4096 logical viewport on each axis (default 420×720). **Escape delivers Back** in the native window.
 `--menu-item TEXT` prepares the current Activity's options and invokes its own
 enabled menu callback. Headless Notepad Delete returns to Notes and preserves the
-survivor's ID/title/body after restart. Native menu input remains ahead. [Menu scope](docs/compatibility.md).
+survivor's ID/title/body after restart. AppKit now offers an Options menu bridge;
+physical menu input remains unverified. [Menu scope](docs/compatibility.md).
 Current source adds `--input TEXT` for the first visible EditText, per-package
 preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only runs.
 `--advance-ms MILLISECONDS` advances the deterministic clock for queued APK callbacks.
