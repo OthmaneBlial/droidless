@@ -30,6 +30,7 @@ mod storage;
 mod string_format;
 mod system;
 mod system_services;
+mod text_layout;
 mod throwables;
 mod time_units;
 mod timers;

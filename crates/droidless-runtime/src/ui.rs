@@ -472,6 +472,42 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
         children,
     })
 }
+fn text_advance(size: f32) -> f32 {
+    // ponytail: retain the existing scalar-character font approximation;
+    // replace with shared shaping/font metrics when native text fidelity is required.
+    size * 0.6
+}
+
+pub(crate) fn text_line_count(text: &str, size: f32, width: f32, single: bool) -> i32 {
+    if single {
+        return 1;
+    }
+    let capacity = if size == 0.0 {
+        usize::MAX
+    } else {
+        (width / text_advance(size)).floor().max(1.0) as usize
+    };
+    let mut lines = 0;
+    for paragraph in text.split('\n') {
+        lines += 1;
+        let (mut start, mut last_break) = (0, 0);
+        for (index, character) in paragraph.chars().enumerate() {
+            if index - start >= capacity {
+                start = if last_break > start {
+                    last_break
+                } else {
+                    index
+                };
+                lines += 1;
+            }
+            if matches!(character, ' ' | '\t' | '-') {
+                last_break = index + 1;
+            }
+        }
+    }
+    lines
+}
+
 pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Result<f32> {
     fn measure(
         heap: &Heap,
@@ -529,12 +565,62 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
             return Ok(height.min(parent));
         }
         if v.children.is_empty() {
+            let object = heap.get(word)?;
+            let single = object
+                .fields
+                .get("droidless:text:single-line")
+                .and_then(|v| v.first())
+                .is_some_and(|v| v.truth());
             return Ok(if horizontal {
-                (v.text.chars().count() as f32 * v.text_size * 0.6 + 24.0)
+                let characters = if single {
+                    v.text.chars().count()
+                } else {
+                    v.text
+                        .split('\n')
+                        .map(|line| line.chars().count())
+                        .max()
+                        .unwrap_or(0)
+                };
+                (characters as f32 * text_advance(v.text_size) + 24.0 + v.padding[0] + v.padding[2])
                     .max(48.0)
                     .min(parent)
             } else {
-                (v.text_size + 24.0).max(44.0).min(parent)
+                let layout = object
+                    .fields
+                    .get(crate::text_layout::LAYOUT)
+                    .and_then(|v| v.first())
+                    .copied();
+                let lines = if let Some(layout) = layout {
+                    heap.get(layout)?
+                        .fields
+                        .get(crate::text_layout::LINES)
+                        .and_then(|v| v.first())
+                        .copied()
+                        .context("Layout line count missing")?
+                        .int()?
+                } else {
+                    text_line_count(&v.text, v.text_size, f32::INFINITY, single)
+                };
+                let limit = |key: &str, default| -> Result<i32> {
+                    object
+                        .fields
+                        .get(key)
+                        .and_then(|v| v.first())
+                        .copied()
+                        .unwrap_or(Word::from(default))
+                        .int()
+                };
+                let lines = lines
+                    .min(if single {
+                        1
+                    } else {
+                        limit("droidless:text:setMaxLines", i32::MAX)?
+                    })
+                    .max(limit("droidless:text:setMinLines", 0)?)
+                    .max(0);
+                (v.text_size * lines as f32 + 24.0 + v.padding[1] + v.padding[3])
+                    .max(44.0)
+                    .min(parent)
             });
         }
         let sizes = v

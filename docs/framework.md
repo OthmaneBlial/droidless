@@ -482,6 +482,19 @@ callback failures unwind temporary roots. This bounded pass rebuilds the View
 tree between callbacks; it is not a full Android ViewRoot or incremental layout
 engine. Native viewport resizing and property animation remain incomplete.
 
+TextView measurement now retains an owned Layout with text, available text width
+and calculated line count. getLayout is null before measurement and after text,
+size, padding or line-policy changes; an unchanged measurement retains identity.
+Explicit newlines, narrow widths, word breaks and empty text contribute real
+lines, using the existing approximate advance of 0.6 times text size per Unicode
+scalar. The same line count drives intrinsic height; max/min lines constrain the
+View height without changing the underlying Layout count. EditText's covered
+Editable.append(CharSequence) path updates its owner and invalidates measurement.
+Compiled checks exercise inherited onMeasure, GC, failure recovery and retained
+old text snapshots. This is an approximate plain-text profile, not Android font
+shaping, bidi, styled metrics, ellipsizing or native multiline painting parity.
+The null-before-measurement behavior follows the [TextView contract](https://developer.android.com/reference/android/widget/TextView#getLayout()).
+
 Inflation retains XML AttributeSet and Context, calls the actual parent's
 virtual generateLayoutParams, and attaches children incrementally. Native base,
 margin, frame, linear and table parameters retain sizes, margins, gravity and

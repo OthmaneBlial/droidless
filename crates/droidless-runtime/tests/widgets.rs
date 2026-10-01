@@ -2,6 +2,34 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_text_layout_measurement_invalidation_and_callback_gc() {
+    let mut vm = Runtime::new(
+        Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
+    )
+    .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    let result = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/counter/TextLayoutContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "I".into(),
+            },
+            vec![activity],
+            false,
+        )
+        .unwrap();
+    assert_eq!(result, [Word::from(1)]);
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(activity).is_err(),
+        "measurement retained temporary roots"
+    );
+}
+
+#[test]
 fn compiled_widget_metadata_adapter_and_timed_scroll_contracts() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

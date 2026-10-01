@@ -223,7 +223,8 @@ impl Runtime {
                 };
                 result.push(sub);
             }
-            "append(Ljava/lang/CharSequence;)Landroid/text/SpannableStringBuilder;" => {
+            "append(Ljava/lang/CharSequence;)Landroid/text/SpannableStringBuilder;"
+            | "append(Ljava/lang/CharSequence;)Landroid/text/Editable;" => {
                 let (source, source_spans) = self.sequence_data_or_null(args[1])?;
                 self.append_spanned(receiver, source, source_spans)?;
                 result.push(receiver);
@@ -392,7 +393,18 @@ impl Runtime {
         }
         text.push_str(&suffix);
         spans.extend(suffix_spans);
-        self.heap.get_mut(receiver)?.data = Data::Spanned { text, spans };
+        if let Some(owner) = self
+            .heap
+            .get(receiver)?
+            .fields
+            .get("droidless:text:owner")
+            .and_then(|v| v.first())
+            .copied()
+        {
+            self.set_view_text(owner, text, spans)?;
+        } else {
+            self.heap.get_mut(receiver)?.data = Data::Spanned { text, spans };
+        }
         Ok(())
     }
 
@@ -426,6 +438,10 @@ impl Runtime {
             text,
             spans: vec![],
         };
+        self.heap
+            .get_mut(editable)?
+            .fields
+            .insert("droidless:text:owner".into(), vec![view]);
         self.heap
             .get_mut(view)?
             .fields
@@ -508,6 +524,7 @@ impl Runtime {
             .as_mut()
             .context("not a View")?
             .text = text.clone();
+        self.invalidate_text_layout(view)?;
         if is_edit_text || editable.is_some() {
             let editable = match editable {
                 Some(editable) => editable,
@@ -516,6 +533,10 @@ impl Runtime {
                     .instance("Landroid/text/SpannableStringBuilder;")?,
             };
             self.heap.get_mut(editable)?.data = Data::Spanned { text, spans };
+            self.heap
+                .get_mut(editable)?
+                .fields
+                .insert("droidless:text:owner".into(), vec![view]);
             self.heap
                 .get_mut(view)?
                 .fields

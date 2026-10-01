@@ -1,6 +1,6 @@
 # First interactive milestone evidence
 
-Latest local source gate: 101 Rust tests, warning-free Clippy, optimized builds
+Latest local source gate: 102 Rust tests, warning-free Clippy, optimized builds
 and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
 
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
@@ -1332,3 +1332,32 @@ cargo test -p droidless-runtime --test menus --locked
 sh tools/ci.sh
 python3 tools/compatibility.py
 ```
+
+## Current-source measured text Layout
+
+The compiled TextLayoutContract uses an APK TextView subclass whose onMeasure
+collects before and after its real superclass call. It verifies null before
+measurement; calculated wrapping and explicit/trailing newlines; width and owned
+text; stable identity across unchanged measurement and GC; invalidation after
+text, size, padding and single-line changes; height limits; zero width/size; empty
+and supplementary-character text; an exception after measurement; and editable
+append updating the owning View. Old Layout text remains an owned snapshot.
+One Rust check runs that DEX contract, checks clean frames and verifies temporary
+roots are released. These are bounded engine checks, not Android pixel/font parity.
+
+```sh
+cargo test -p droidless-runtime --test widgets --locked
+sh tools/ci.sh
+python3 tools/compatibility.py
+```
+
+The original pinned Notepad replay again creates two rows and deletes only the
+intended row, preserving the survivor's original ID/title/body. getLayout now
+resolves; the original Snackbar raises a guest NullPointerException at
+onMeasure PC 0x0036 when getLineCount receives null, because its native container
+has not measured the child. Container measurement and complete delete/restart
+remain open; no successful public Delete or new native result is claimed.
+
+Full local CI passes 102 Rust tests, warning-free Clippy, optimized CLI/replay
+builds and 4,096 seeded parser mutations. All existing public APK compatibility
+replays pass. GitHub Actions remain disabled.

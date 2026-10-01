@@ -149,7 +149,7 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🧠 DEX 035–040 | Headers, digests, IDs, classes, code and try handlers; annotations/debug partial |
 | ⚡ Own register interpreter | Arithmetic, wide values, branches, arrays, fields, dispatch, managed call continuations, Java throw/catch and retained DEX stack diagnostics |
 | 🧹 Managed objects | Inheritance, strings, sticky class initialization and handle-based mark/sweep GC |
-| 🪟 Native widgets | TextView, Button, EditText, LinearLayout, FrameLayout and bounded adapter-backed GridView; a targeted support-RecyclerView two-note path; approximate layout/style |
+| 🪟 Native widgets | TextView, Button, EditText, LinearLayout, FrameLayout and bounded adapter-backed GridView; a targeted support-RecyclerView two-note path; measured text Layout with approximate font metrics |
 | 🖼️ Resources and images | Packaged XML pull events and typed XML attributes; PNG/JPEG/WebP through BitmapFactory and ImageView; four native image views confirmed in an authored fixture |
 | 📝 Rich text/XML | Android spannable text and a bounded SAX parser subset exercised by an unmodified APK |
 | 🖱️ Input | Native calculator clicks, Counter text/key callbacks, and real keyboard text in the public Notepad APK |
@@ -202,7 +202,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 101 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 102 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

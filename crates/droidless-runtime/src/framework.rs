@@ -62,6 +62,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/Long;",
             "Ljava/lang/Number;",
             "Ljava/lang/Math;",
+            "Landroid/text/Layout;",
             "Ljava/lang/Thread;",
             "Ljava/lang/ThreadLocal;",
             "Ljava/util/Date;",
@@ -526,6 +527,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.text_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.text_layout_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.component_native(method, args)? {
@@ -3819,13 +3823,16 @@ impl Runtime {
             }
             ("Landroid/widget/TextView;", "setSingleLine()V") => {
                 self.heap.get_mut(receiver)?.fields.insert("droidless:text:single-line".into(), vec![Word::from(1)]);
+                self.invalidate_text_layout(receiver)?;
             }
             ("Landroid/widget/TextView;", "setSingleLine(Z)V") => {
                 self.heap.get_mut(receiver)?.fields.insert("droidless:text:single-line".into(), vec![arg(1)?]);
+                self.invalidate_text_layout(receiver)?;
             }
             ("Landroid/widget/TextView;", "setMaxLines(I)V")
             | ("Landroid/widget/TextView;", "setMinLines(I)V") => {
                 self.heap.get_mut(receiver)?.fields.insert(format!("droidless:text:{}", method.name), vec![arg(1)?]);
+                self.invalidate_text_layout(receiver)?;
             }
             ("Landroid/widget/ImageView;", "getScaleType()Landroid/widget/ImageView$ScaleType;") => {
                 let ordinal = self.view_mut(receiver)?.image_scale;
@@ -3985,6 +3992,7 @@ impl Runtime {
                 let size = f32::from_bits(arg(1)?.int()? as u32);
                 ensure!(size.is_finite() && size >= 0.0, "invalid text size");
                 self.view_mut(receiver)?.text_size = size;
+                self.invalidate_text_layout(receiver)?;
             }
             ("Landroid/widget/TextView;", "setTextAppearance(Landroid/content/Context;I)V")
             | ("Landroid/widget/TextView;", "setTextAppearance(I)V") => {
@@ -3994,6 +4002,7 @@ impl Runtime {
                     let size = dimension(&self.attribute(size)?)?;
                     ensure!(size >= 0., "invalid text appearance size");
                     self.view_mut(receiver)?.text_size = size;
+                    self.invalidate_text_layout(receiver)?;
                 }
                 if let Some(color) = attributes.get(&0x0101_0098) {
                     let color = self.attribute(color)?;
@@ -4395,37 +4404,7 @@ impl Runtime {
                     .insert("droidless:view:layout-requested".into(), vec![Word::ZERO]);
             }
             ("Landroid/view/View;", "onMeasure(II)V") => {
-                self.view_mut(receiver)?;
-                for (spec, horizontal, edge) in [(arg(1)?, true, "width"), (arg(2)?, false, "height")] {
-                    let spec = spec.int()? as u32;
-                    let mode = spec & 0xc000_0000;
-                    let size = (spec & 0x3fff_ffff) as i32;
-                    let minimum = self
-                        .heap
-                        .get(receiver)?
-                        .fields
-                        .get(&format!("droidless:view:minimum-{edge}"))
-                        .and_then(|values| values.first())
-                        .copied()
-                        .unwrap_or(Word::ZERO)
-                        .int()?;
-                    let desired = (crate::ui::dimension(
-                        &self.heap,
-                        receiver,
-                        horizontal,
-                        if mode == 0 { f32::INFINITY } else { size as f32 },
-                    )? as i32)
-                        .max(minimum);
-                    let measured = match mode {
-                        0x4000_0000 => size,
-                        0x8000_0000 => desired.min(size),
-                        _ => desired,
-                    }.max(0);
-                    self.heap.get_mut(receiver)?.fields.insert(
-                        format!("droidless:view:measured-{edge}"),
-                        vec![Word::from(measured)],
-                    );
-                }
+                self.measure_view(receiver, [arg(1)?, arg(2)?], false)?;
             }
             ("Landroid/view/View;", "setMeasuredDimension(II)V") => {
                 self.view_mut(receiver)?;
@@ -4980,6 +4959,7 @@ impl Runtime {
                     "padding must have four non-negative values"
                 );
                 self.view_mut(receiver)?.padding = [values[0] as f32, values[1] as f32, values[2] as f32, values[3] as f32];
+                self.invalidate_text_layout(receiver)?;
             }
             ("Landroid/util/Log;", sig)
                 if [

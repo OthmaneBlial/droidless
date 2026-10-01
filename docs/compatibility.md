@@ -40,8 +40,9 @@ input. Selection never toggles a checked item automatically and a false callback
 return does not undo guest effects. Native menu presentation/input remain open.
 The public Notepad's Delete callback removes the intended SQLite row and preserves
 the other row, then reaches its original Snackbar feedback. That path currently
-gets past Snackbar float clamping and detached-child removal, then fails at
-TextView.getLayout during Snackbar measurement; a complete delete/return/restart
+gets past Snackbar float clamping and detached-child removal. TextView.getLayout
+now resolves, but the original Snackbar receives null because its container has
+not measured the child, raising a guest NullPointerException at getLineCount; a complete delete/return/restart
 workflow is not yet verified. Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree
