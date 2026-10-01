@@ -47,6 +47,29 @@ fn parcel(vm: &mut Runtime, bytes: Vec<u8>) -> Word {
 }
 
 #[test]
+fn boxed_bundle_and_list_values_round_trip_with_aliases_types_and_gc() {
+    let mut vm = Runtime::new(
+        Apk::parse(include_bytes!("../../../fixtures/generated/parcels.apk")).unwrap(),
+    )
+    .unwrap();
+    let class = "Lorg/droidless/parcels/BoxedExtras;";
+    assert_eq!(
+        invoke(&mut vm, class, "contract", &[], "I", vec![]).unwrap(),
+        [Word::from(1)]
+    );
+    vm.collect();
+    let error = invoke(&mut vm, class, "unsupported", &[], "V", vec![]).unwrap_err();
+    assert!(format!("{error:#}").contains("Java serialization is unavailable"));
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert_eq!(
+        invoke(&mut vm, class, "contract", &[], "I", vec![]).unwrap(),
+        [Word::from(1)]
+    );
+    vm.close().unwrap();
+}
+
+#[test]
 fn compiled_parcel_callbacks_activity_isolation_gc_bounds_and_cleanup() {
     let mut vm = Runtime::new(
         Apk::parse(include_bytes!("../../../fixtures/generated/parcels.apk")).unwrap(),

@@ -126,13 +126,25 @@ impl Runtime {
             .copied()
             .unwrap_or(Word::ZERO);
         let roots = self.native_roots.len();
-        self.native_roots.extend([owner, comparator, left, right]);
+        self.native_roots.push(owner);
+        let result = self.compare_values(comparator, left, right);
+        self.native_roots.truncate(roots);
+        result
+    }
+    fn compare_values(
+        &mut self,
+        comparator: Word,
+        left: Word,
+        right: Word,
+    ) -> Result<std::cmp::Ordering> {
+        let roots = self.native_roots.len();
+        self.native_roots.extend([comparator, left, right]);
         let comparison = (|| -> Result<i32> {
             let result = if comparator == Word::ZERO {
                 if !self.is_a(&self.heap.get(left)?.class, "Ljava/lang/Comparable;") {
                     return Err(fault(
                         "Ljava/lang/ClassCastException;",
-                        "TreeSet element does not implement Comparable",
+                        "element does not implement Comparable",
                     ));
                 }
                 self.invoke(
@@ -157,9 +169,13 @@ impl Runtime {
                     true,
                 )?
             };
+            ensure!(
+                result.len() == 1,
+                "comparison returned invalid result width"
+            );
             result
                 .first()
-                .context("TreeSet comparison returned no value")?
+                .context("comparison returned no value")?
                 .int()
         })();
         self.native_roots.truncate(roots);
@@ -168,6 +184,53 @@ impl Runtime {
             0 => std::cmp::Ordering::Equal,
             _ => std::cmp::Ordering::Greater,
         })
+    }
+    fn sort_values(
+        &mut self,
+        source: &mut [Word],
+        comparator: Word,
+        after_compare: impl Fn(&Self) -> Result<()>,
+    ) -> Result<()> {
+        if comparator != Word::ZERO {
+            ensure!(
+                self.is_a(&self.heap.get(comparator)?.class, "Ljava/util/Comparator;"),
+                "sort requires Comparator"
+            );
+        }
+        let mut target = vec![Word::ZERO; source.len()];
+        let mut width = 1;
+        while width < source.len() {
+            for start in (0..source.len()).step_by(width * 2) {
+                let middle = (start + width).min(source.len());
+                let end = (start + width * 2).min(source.len());
+                let (mut left, mut right, mut output) = (start, middle, start);
+                while left < middle && right < end {
+                    let order = self.compare_values(comparator, source[left], source[right])?;
+                    after_compare(self)?;
+                    if order.is_le() {
+                        target[output] = source[left];
+                        left += 1;
+                    } else {
+                        target[output] = source[right];
+                        right += 1;
+                    }
+                    output += 1;
+                }
+                while left < middle {
+                    target[output] = source[left];
+                    left += 1;
+                    output += 1;
+                }
+                while right < end {
+                    target[output] = source[right];
+                    right += 1;
+                    output += 1;
+                }
+            }
+            source.copy_from_slice(&target);
+            width *= 2;
+        }
+        Ok(())
     }
     fn tree_find(&mut self, owner: Word, value: Word) -> Result<Option<usize>> {
         for (index, existing) in self.collection(owner)?.0.to_vec().into_iter().enumerate() {
@@ -483,6 +546,84 @@ impl Runtime {
                 true,
             )?));
         }
+        if method.class == "Ljava/util/Arrays;"
+            && [
+                "sort([Ljava/lang/Object;)V",
+                "sort([Ljava/lang/Object;Ljava/util/Comparator;)V",
+                "sort([Ljava/lang/Object;II)V",
+                "sort([Ljava/lang/Object;IILjava/util/Comparator;)V",
+            ]
+            .contains(&signature.as_str())
+        {
+            let array = *args.first().context("sort array missing")?;
+            let object = self.heap.get(array)?;
+            ensure!(
+                object.class.starts_with("[L") || object.class.starts_with("[["),
+                "sort requires reference array"
+            );
+            ensure!(
+                args.len() == method.parameters.len(),
+                "invalid array sort arguments"
+            );
+            let Data::Array { values, .. } = &object.data else {
+                bail!("sort requires array data");
+            };
+            let original = values.clone();
+            ensure!(original.len() <= 16_384, "array sort limit reached (16384)");
+            for value in &original {
+                ensure!(value.len() == 1, "invalid reference array element width");
+                value[0].reference()?;
+            }
+            let ranged = method.parameters.len() >= 3;
+            let (start, end) = if ranged {
+                (args[1].int()?, args[2].int()?)
+            } else {
+                (0, original.len() as i32)
+            };
+            if start > end {
+                return Err(fault(
+                    "Ljava/lang/IllegalArgumentException;",
+                    "sort range is reversed",
+                ));
+            }
+            if start < 0 || end as usize > original.len() {
+                return Err(fault(
+                    "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                    "sort range exceeds array",
+                ));
+            }
+            let comparator = if method
+                .parameters
+                .last()
+                .is_some_and(|ty| ty == "Ljava/util/Comparator;")
+            {
+                *args.last().context("sort comparator missing")?
+            } else {
+                Word::ZERO
+            };
+            let roots = self.native_roots.len();
+            self.native_roots.extend([array, comparator]);
+            self.native_roots.extend(original.iter().flatten().copied());
+            let sorted = (|| -> Result<()> {
+                let mut values = original[start as usize..end as usize]
+                    .iter()
+                    .map(|words| words[0])
+                    .collect::<Vec<_>>();
+                self.sort_values(&mut values, comparator, |_| Ok(()))?;
+                // Guest mutation during comparison is unsupported; preserve it rather than overwrite it.
+                let Data::Array { values: target, .. } = &mut self.heap.get_mut(array)?.data else {
+                    bail!("array changed type while sorting");
+                };
+                ensure!(*target == original, "array changed while sorting");
+                for (slot, value) in target[start as usize..end as usize].iter_mut().zip(values) {
+                    slot[0] = value;
+                }
+                Ok(())
+            })();
+            self.native_roots.truncate(roots);
+            sorted?;
+            return Ok(Some(vec![]));
+        }
         if method.class == "Ljava/util/Collections;" {
             if signature == "sort(Ljava/util/List;Ljava/util/Comparator;)V"
                 || signature == "sort(Ljava/util/List;)V"
@@ -495,88 +636,21 @@ impl Runtime {
                 );
                 let (values, version) = self.collection(list)?;
                 let mut source = values.to_vec();
-                let mut target = vec![Word::ZERO; source.len()];
                 let roots = self.native_roots.len();
                 self.native_roots.extend([list, comparator]);
                 self.native_roots.extend(source.iter().copied());
-                let sorted = (|| -> Result<()> {
-                    let mut width = 1;
-                    while width < source.len() {
-                        for start in (0..source.len()).step_by(width * 2) {
-                            let middle = (start + width).min(source.len());
-                            let end = (start + width * 2).min(source.len());
-                            let (mut left, mut right, mut output) = (start, middle, start);
-                            while left < middle && right < end {
-                                let compared = if comparator == Word::ZERO {
-                                    ensure!(
-                                        self.is_a(
-                                            &self.heap.get(source[left])?.class,
-                                            "Ljava/lang/Comparable;"
-                                        ),
-                                        fault(
-                                            "Ljava/lang/ClassCastException;",
-                                            "list element is not Comparable"
-                                        )
-                                    );
-                                    self.invoke(
-                                        Method {
-                                            class: "Ljava/lang/Comparable;".into(),
-                                            name: "compareTo".into(),
-                                            parameters: vec!["Ljava/lang/Object;".into()],
-                                            returns: "I".into(),
-                                        },
-                                        vec![source[left], source[right]],
-                                        true,
-                                    )?
-                                } else {
-                                    self.invoke(
-                                        Method {
-                                            class: "Ljava/util/Comparator;".into(),
-                                            name: "compare".into(),
-                                            parameters: vec!["Ljava/lang/Object;".into(); 2],
-                                            returns: "I".into(),
-                                        },
-                                        vec![comparator, source[left], source[right]],
-                                        true,
-                                    )?
-                                };
-                                ensure!(
-                                    self.collection(list)?.1 == version,
-                                    fault(
-                                        "Ljava/util/ConcurrentModificationException;",
-                                        "list changed while sorting"
-                                    )
-                                );
-                                let order = compared
-                                    .first()
-                                    .context("compare returned no value")?
-                                    .int()?;
-                                if order <= 0 {
-                                    target[output] = source[left];
-                                    left += 1;
-                                } else {
-                                    target[output] = source[right];
-                                    right += 1;
-                                }
-                                output += 1;
-                            }
-                            while left < middle {
-                                target[output] = source[left];
-                                left += 1;
-                                output += 1;
-                            }
-                            while right < end {
-                                target[output] = source[right];
-                                right += 1;
-                                output += 1;
-                            }
-                        }
-                        std::mem::swap(&mut source, &mut target);
-                        width *= 2;
-                    }
-                    self.change_collection(list, source)?;
-                    Ok(())
-                })();
+                let sorted = self
+                    .sort_values(&mut source, comparator, |vm| {
+                        ensure!(
+                            vm.collection(list)?.1 == version,
+                            fault(
+                                "Ljava/util/ConcurrentModificationException;",
+                                "list changed while sorting"
+                            )
+                        );
+                        Ok(())
+                    })
+                    .and_then(|()| self.change_collection(list, source));
                 self.native_roots.truncate(roots);
                 sorted?;
                 return Ok(Some(vec![]));

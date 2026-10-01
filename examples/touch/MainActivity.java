@@ -3,9 +3,12 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.FrameLayout;
+import android.widget.TextView;
 
 /** Guest callbacks exercise native dispatch, timers, event ownership and collection. */
 public class MainActivity extends Activity {
@@ -57,5 +60,46 @@ public class MainActivity extends Activity {
             || b.getPointerId(0)!=0 || b.findPointerIndex(1)!=-1 || b.getMetaState()!=3) throw new AssertionError("MotionEvent copy/offset");
         b.setLocation(40,50);if(b.getX(0)!=40 || b.getY(0)!=50 || b.getRawX()!=12.5f) throw new AssertionError("MotionEvent setLocation");
         a.recycle();b.recycle();return 1;
+    }
+    public static int velocityContract() {
+        VelocityTracker tracker=VelocityTracker.obtain();
+        long start=1L<<54;
+        for(int i=0;i<3;i++) {
+            MotionEvent event=MotionEvent.obtain(start,start+i*20,i==0?0:2,10+i*20,-i*20,0);
+            tracker.addMovement(event);event.recycle();System.gc();
+        }
+        tracker.computeCurrentVelocity(1000,250);
+        if(tracker.getXVelocity()!=250 || tracker.getYVelocity(0)!=-250 || tracker.getXVelocity(99)!=0) throw new AssertionError("velocity clamp/id");
+        tracker.computeCurrentVelocity(1);
+        if(Math.abs(tracker.getXVelocity()-1)>0.001f || Math.abs(tracker.getYVelocity()+1)>0.001f) throw new AssertionError("velocity units/long clock");
+        tracker.clear();tracker.computeCurrentVelocity(1000);
+        if(tracker.getXVelocity()!=0 || tracker.getYVelocity()!=0) throw new AssertionError("velocity clear");
+        MotionEvent first=MotionEvent.obtain(1,1,0,0,0,0);
+        MotionEvent second=MotionEvent.obtain(1,21,2,20,0,0);
+        tracker.addMovement(first);tracker.addMovement(second);
+        MotionEvent duplicate=MotionEvent.obtain(1,21,2,40,0,0);tracker.addMovement(duplicate);
+        tracker.computeCurrentVelocity(1000);
+        if(tracker.getXVelocity()!=2000) throw new AssertionError("velocity duplicate timestamp");
+        MotionEvent pause=MotionEvent.obtain(1,221,2,40,0,0);tracker.addMovement(pause);tracker.computeCurrentVelocity(1000);
+        if(tracker.getXVelocity()!=0) throw new AssertionError("velocity old samples");
+        first.recycle();second.recycle();duplicate.recycle();pause.recycle();tracker.recycle();return 1;
+    }
+    public static void recycledVelocity() { VelocityTracker tracker=VelocityTracker.obtain();tracker.recycle();tracker.clear(); }
+    public static void invalidVelocity() { VelocityTracker.obtain().computeCurrentVelocity(1000,Float.NaN); }
+    public static int measureContract() {
+        FrameLayout row=new FrameLayout(button.getContext());
+        LinearLayout column=new LinearLayout(button.getContext());column.setOrientation(1);
+        TextView label=new TextView(button.getContext());label.setText("Measured row");
+        column.addView(label,new LinearLayout.LayoutParams(-1,-2));
+        column.addView(new View(button.getContext()),new LinearLayout.LayoutParams(-1,10));
+        row.addView(column,new FrameLayout.LayoutParams(-1,-2));
+        if(row.onStartNestedScroll(row,column,2)) throw new AssertionError("base parent accepts nested scrolling");
+        row.measure(View.MeasureSpec.makeMeasureSpec(190,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
+        if(row.getMeasuredWidth()!=190 || row.getMeasuredHeight()<54) throw new AssertionError("unbounded row measurement");
+        row.measure(View.MeasureSpec.makeMeasureSpec(190,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(30,View.MeasureSpec.AT_MOST));
+        if(row.getMeasuredHeight()!=30) throw new AssertionError("bounded row measurement");
+        row.measure(0,View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.EXACTLY));
+        if(row.getMeasuredHeight()!=0 || row.getMeasuredWidth()<=0) throw new AssertionError("exact zero and intrinsic match-parent");
+        return 1;
     }
 }

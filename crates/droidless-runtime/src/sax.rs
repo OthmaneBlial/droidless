@@ -301,5 +301,20 @@ mod tests {
             .collect::<String>();
         assert_eq!(text, "one < two");
         assert!(parse_events("<!DOCTYPE root><root/>").is_err());
+        let mut vm = Runtime::new(
+            droidless_formats::apk::Apk::parse(include_bytes!(
+                "../../../fixtures/generated/counter.apk"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let exception = vm.heap.instance("Lorg/xml/sax/SAXException;").unwrap();
+        assert!(vm.is_a("Lorg/xml/sax/SAXException;", "Ljava/lang/Exception;"));
+        assert!(
+            vm.throw_reference(exception)
+                .unwrap()
+                .to_string()
+                .contains("uncaught guest exception")
+        );
     }
 }

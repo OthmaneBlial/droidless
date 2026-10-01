@@ -92,14 +92,16 @@
       "native_ui": false,
       "headless_conformance_verified": true,
       "source": "examples/collections",
-      "notes": "Authored compiled fixture: ordered/indexed lists, immediate FIFO queues, duplicate/null/capacity behavior, guest equals, Set/Map operations, iterator and inherited queue override dispatch, live read-only views, GC retention, limits and rejected eviction hooks. Native map copying, live/nested read-only List views, shared iterator aliases, snapshot GC roots and error cleanup are checked. Same ListContract, MapCopyContract and immediate QueueContract pass on desktop Java 17 with Java 8 source/target. Queue waits/workers are covered by the separate Scheduling fixture; queue iterators remain unsupported. No native interaction or independent notes-app evidence. SnapshotContract also passes on Java 17: immutable snapshot iteration across live changes, read-only wrapping, nulls/indexes and guest equality. Rust checks cover GC retention/release, serial guest worker writes, entry ceilings and explicit reentrant-remove rejection with root cleanup. Snapshot creation copies O(n) references; guest join and parallel CPU execution remain unsupported.",
+      "notes": "Authored compiled fixture: ordered/indexed lists, immediate FIFO queues, duplicate/null/capacity behavior, guest equals, Set/Map operations, iterator and inherited queue override dispatch, live read-only views, GC retention, limits and rejected eviction hooks. Native map copying, live/nested read-only List views, shared iterator aliases, snapshot GC roots and error cleanup are checked. Same ListContract, MapCopyContract and immediate QueueContract pass on desktop Java 17 with Java 8 source/target. Queue waits/workers are covered by the separate Scheduling fixture; queue iterators remain unsupported. No native interaction or independent notes-app evidence. SnapshotContract also passes on Java 17: immutable snapshot iteration across live changes, read-only wrapping, nulls/indexes and guest equality. Rust checks cover GC retention/release, serial guest worker writes, entry ceilings and explicit reentrant-remove rejection with root cleanup. Snapshot creation copies O(n) references; guest join and parallel CPU execution remain unsupported. ArraySortContract verifies stable natural/custom order, ranges and catchable comparison errors on DROIDLESS and desktop Java; Rust adds GC, mutation rejection and the 16384-element limit.",
       "desktop_java_list_differential_verified": true,
       "desktop_java_immediate_queue_differential_verified": true,
       "android_reference_verified": false,
       "desktop_java_map_copy_differential_verified": true,
       "headless_readonly_list_verified": true,
       "desktop_java_snapshot_differential_verified": true,
-      "headless_snapshot_worker_verified": true
+      "headless_snapshot_worker_verified": true,
+      "headless_object_array_sort_verified": true,
+      "desktop_java_array_sort_differential_verified": true
     },
     {
       "package": "org.droidless.reflection",
@@ -128,7 +130,7 @@
       "desktop_java_thread_metadata_differential_verified": true,
       "android_reference_verified": false,
       "source": "examples/scheduling",
-      "notes": "Earlier native timer/cancellation/delayed finish evidence. Current compiled headless checks also cover deferred workers, independent identities, queue/monitor waits, interrupt, main Handler result delivery, GC, bounded spinning, faults, capacity and shutdown. Same pure WorkerContract passes on desktop Java 17. Serial shared-heap host executor; no parallel CPU execution. Main/native-bridge waits, worker Looper delivery, priority and sleep/join remain unsupported. Fresh native Start worker delivers the complete result in accessibility state and closes with status 0; its long visible label clips at 360x340. No independent asynchronous workflow claim. Java Timer/TimerTask compiled checks now cover long/Date deadlines, fixed-delay/fixed-rate catch-up, one serial guest worker per Timer, blocking/cancellation, purge, GC, task failure, capacity, shutdown and main Handler UI posting. The portable validation/serial contract also passes on desktop Java; full timing/liveness parity and Timer finalization remain unsupported. Optimized native Scheduling at 420x720 delivers Background timer done: 3 through TimerTask-to-main Handler posting; restarting and canceling leaves Background timer cancelled beyond later deadlines. Executor.execute now queues work instead of running inline. Single/fixed/cached pools, Callable/Runnable Future results and original causes, waits/deadlines, interrupts, cancellation, shutdown and queued-task identities pass compiled contracts; the portable FutureContract also passes on desktop Java 17. Optimized native Start future worker waits for input, Deliver future input shows Future result: payload through the main Handler, restart/cancel remains cancelled after more input, and normal close exits 0. Custom pool configuration and scheduled executors remain unsupported.",
+      "notes": "Earlier native timer/cancellation/delayed finish evidence. Current compiled headless checks also cover deferred workers, independent identities, queue/monitor waits, interrupt, main Handler result delivery, GC, bounded spinning, faults, capacity and shutdown. Same pure WorkerContract passes on desktop Java 17. Serial shared-heap host executor; no parallel CPU execution. Main/native-bridge waits, worker Looper delivery, priority and sleep/join remain unsupported. Fresh native Start worker delivers the complete result in accessibility state and closes with status 0; its long visible label clips at 360x340. No independent asynchronous workflow claim. Java Timer/TimerTask compiled checks now cover long/Date deadlines, fixed-delay/fixed-rate catch-up, one serial guest worker per Timer, blocking/cancellation, purge, GC, task failure, capacity, shutdown and main Handler UI posting. The portable validation/serial contract also passes on desktop Java; full timing/liveness parity and Timer finalization remain unsupported. Optimized native Scheduling at 420x720 delivers Background timer done: 3 through TimerTask-to-main Handler posting; restarting and canceling leaves Background timer cancelled beyond later deadlines.",
       "headless_worker_verified": true,
       "native_worker_verified": true,
       "desktop_java_worker_differential_verified": true,
@@ -137,12 +139,7 @@
       "desktop_java_timer_contract_verified": true,
       "native_java_timer_verified": true,
       "native_java_timer_cancellation_verified": true,
-      "native_java_timer_close_exit_zero": true,
-      "headless_executor_future_verified": true,
-      "desktop_java_future_contract_verified": true,
-      "native_future_result_verified": true,
-      "native_future_cancellation_verified": true,
-      "native_future_close_exit_zero": true
+      "native_java_timer_close_exit_zero": true
     },
     {
       "package": "org.droidless.images",
@@ -167,7 +164,7 @@
       "native_keyboard_verified": true,
       "native_save_verified": true,
       "multi_note_restart_verified": true,
-      "notes": "Original release APK unmodified. Headless replay saves two note rows and renders both titles after Back and a fresh process. A native AppKit window accepted keyboard text and the APK saved it to SQLite. Worker flow and visual fidelity remain unverified. Not redistributed.",
+      "notes": "Original release APK unmodified. Headless replay saves two notes, reopens one through its row listener, edits title and multiline body, refreshes the list and restores both fields after restart with the original row ID. A native AppKit window accepted keyboard text and saved it to SQLite. Bodies with XML metacharacters reach a SAX loading/printStackTrace limit; rich formatting, drawing, worker flow and visual fidelity remain unverified. Not redistributed. Native existing-note selection/editing remains unverified: the closed drawer captures root touch and an editor mouse event stops at CoordinatorLayout drawing-order queries.",
       "release_tag": "v1.0.0",
       "headless_viewport": [
         390,
@@ -177,7 +174,12 @@
       "headless_note_editor_verified": true,
       "headless_text_input_verified": true,
       "save_restart_verified": true,
-      "saved_title_visible_after_restart": true
+      "saved_title_visible_after_restart": true,
+      "headless_existing_note_edit_verified": true,
+      "headless_title_body_restart_verified": true,
+      "existing_note_row_id_retained": true,
+      "native_existing_note_selection_verified": false,
+      "native_existing_note_edit_verified": false
     },
     {
       "package": "org.droidless.grids",

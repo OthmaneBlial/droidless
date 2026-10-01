@@ -8,6 +8,7 @@ use anyhow::{Context, Result, bail, ensure};
 use droidless_formats::dex::Method;
 
 const MOTION: &str = "Landroid/view/MotionEvent;";
+const VELOCITY: &str = "Landroid/view/VelocityTracker;";
 const DETECTOR: &str = "Landroid/view/GestureDetector;";
 const SIMPLE: &str = "Landroid/view/GestureDetector$SimpleOnGestureListener;";
 const LISTENER: &str = "Landroid/view/GestureDetector$OnGestureListener;";
@@ -48,6 +49,27 @@ impl Motion {
         );
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Velocity {
+    samples: Vec<Motion>,
+    value: [f32; 2],
+    recycled: bool,
+}
+
+fn add_sample(samples: &mut Vec<Motion>, motion: Motion) {
+    samples.retain(|sample| motion.time.saturating_sub(sample.time) <= 100);
+    if samples
+        .last()
+        .is_some_and(|sample| sample.time == motion.time)
+    {
+        samples.pop();
+    }
+    if samples.len() == 20 {
+        samples.remove(0);
+    }
+    samples.push(motion);
 }
 #[derive(Clone, Debug)]
 pub(crate) struct TouchStream {
@@ -279,14 +301,7 @@ impl Runtime {
                 self.cancel_gesture(&mut g)?;
                 return Ok(false);
             }
-            g.samples.retain(|s| m.time.saturating_sub(s.time) <= 100);
-            if g.samples.last().is_some_and(|s| s.time == m.time) {
-                g.samples.pop();
-            }
-            if g.samples.len() == 20 {
-                g.samples.remove(0);
-            }
-            g.samples.push(m);
+            add_sample(&mut g.samples, m);
             let down = g.down;
             if m.action == 2 {
                 if g.long_press {
@@ -358,7 +373,7 @@ impl Runtime {
                 }
                 handled
             } else {
-                let velocity = velocity(&g.samples);
+                let velocity = velocity(&g.samples, 1000, 8000.0);
                 if velocity.iter().any(|v| v.abs() > 50.0) {
                     self.gesture_callback(
                         detector,
@@ -680,6 +695,72 @@ impl Runtime {
         let receiver = args.first().copied().unwrap_or(Word::ZERO);
         let arg = |i: usize| args.get(i).copied().context("missing touch argument");
         let mut result = vec![];
+        if method_.class == VELOCITY {
+            if signature == "obtain()Landroid/view/VelocityTracker;" {
+                ensure!(args.is_empty(), "invalid VelocityTracker.obtain arguments");
+                let tracker = self.heap.instance(VELOCITY)?;
+                self.heap.get_mut(tracker)?.data = Data::Velocity(Velocity::default());
+                return Ok(Some(vec![tracker]));
+            }
+            ensure!(
+                args.len() == method_.parameters.len() + 1,
+                "invalid VelocityTracker arguments"
+            );
+            let movement = if signature == "addMovement(Landroid/view/MotionEvent;)V" {
+                Some(self.motion(arg(1)?)?)
+            } else {
+                None
+            };
+            let Data::Velocity(tracker) = &mut self.heap.get_mut(receiver)?.data else {
+                bail!("uninitialized VelocityTracker");
+            };
+            ensure!(!tracker.recycled, "recycled VelocityTracker");
+            match signature.as_str() {
+                "addMovement(Landroid/view/MotionEvent;)V" => {
+                    let movement = movement.context("missing velocity movement")?;
+                    if movement.action == 0 {
+                        tracker.samples.clear();
+                    }
+                    ensure!(
+                        tracker
+                            .samples
+                            .last()
+                            .is_none_or(|last| movement.time >= last.time),
+                        "out-of-order VelocityTracker movement"
+                    );
+                    add_sample(&mut tracker.samples, movement);
+                }
+                "computeCurrentVelocity(I)V" | "computeCurrentVelocity(IF)V" => {
+                    let units = arg(1)?.int()?;
+                    let maximum = if args.len() == 3 {
+                        f32::from_bits(arg(2)?.int()? as u32)
+                    } else {
+                        f32::MAX
+                    };
+                    ensure!(
+                        units > 0 && maximum.is_finite() && maximum >= 0.0,
+                        "invalid velocity units or maximum"
+                    );
+                    tracker.value = velocity(&tracker.samples, units, maximum);
+                }
+                "getXVelocity()F" | "getYVelocity()F" | "getXVelocity(I)F" | "getYVelocity(I)F" => {
+                    let pointer = if args.len() == 2 { arg(1)?.int()? } else { -1 };
+                    let value = if matches!(pointer, -1 | 0) {
+                        tracker.value[usize::from(method_.name == "getYVelocity")]
+                    } else {
+                        0.0
+                    };
+                    result.push(Word::Bits(value.to_bits()));
+                }
+                "clear()V" | "recycle()V" => {
+                    tracker.samples.clear();
+                    tracker.value = [0.0; 2];
+                    tracker.recycled = signature == "recycle()V";
+                }
+                _ => return Ok(None),
+            }
+            return Ok(Some(result));
+        }
         match (method_.class.as_str(), signature.as_str()) {
             (MOTION, "obtain(JJIFFI)Landroid/view/MotionEvent;") => {
                 let x = f32::from_bits(arg(5)?.int()? as u32);
@@ -1082,7 +1163,7 @@ impl Runtime {
     }
 }
 
-fn velocity(samples: &[Motion]) -> [f32; 2] {
+fn velocity(samples: &[Motion], units: i32, maximum: f32) -> [f32; 2] {
     // ponytail: bounded 100-ms linear regression; upgrade to Android's LSQ2 when curved-gesture parity requires it.
     let Some(last) = samples.last() else {
         return [0.0; 2];
@@ -1090,12 +1171,12 @@ fn velocity(samples: &[Motion]) -> [f32; 2] {
     let n = samples.len() as f64;
     let mean_t = samples
         .iter()
-        .map(|m| (m.time as f64 - last.time as f64) / 1000.0)
+        .map(|m| -((last.time - m.time) as f64) / 1000.0)
         .sum::<f64>()
         / n;
     let denominator = samples
         .iter()
-        .map(|m| ((m.time as f64 - last.time as f64) / 1000.0 - mean_t).powi(2))
+        .map(|m| (-((last.time - m.time) as f64) / 1000.0 - mean_t).powi(2))
         .sum::<f64>();
     if denominator < 1e-12 {
         return [0.0; 2];
@@ -1109,11 +1190,13 @@ fn velocity(samples: &[Motion]) -> [f32; 2] {
         (samples
             .iter()
             .map(|m| {
-                ((m.time as f64 - last.time as f64) / 1000.0 - mean_t)
+                (-((last.time - m.time) as f64) / 1000.0 - mean_t)
                     * (f64::from(if y { m.y } else { m.x }) - mean)
             })
             .sum::<f64>()
-            / denominator)
-            .clamp(-8000.0, 8000.0) as f32
+            / denominator
+            * f64::from(units)
+            / 1000.0)
+            .clamp(-f64::from(maximum), f64::from(maximum)) as f32
     })
 }

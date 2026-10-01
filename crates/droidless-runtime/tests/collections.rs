@@ -31,6 +31,54 @@ fn call_class(vm: &mut Runtime, class: &str, name: &str, returns: &str) -> Vec<W
 }
 
 #[test]
+fn stable_object_array_sort_ranges_comparators_faults_mutation_gc_and_limits() {
+    let mut vm = runtime();
+    assert_eq!(
+        call_class(&mut vm, "ArraySortContract", "contract", "I"),
+        [Word::from(1)]
+    );
+    let transient = call_class(
+        &mut vm,
+        "ArraySortContract",
+        "prepareMutation",
+        "Ljava/lang/Object;",
+    )[0];
+    let invoke = |vm: &mut Runtime, name: &str| {
+        vm.invoke(
+            Method {
+                class: "Lorg/droidless/collections/ArraySortContract;".into(),
+                name: name.into(),
+                parameters: vec![],
+                returns: "V".into(),
+            },
+            vec![],
+            false,
+        )
+    };
+    let error = invoke(&mut vm, "mutate").unwrap_err();
+    assert!(format!("{error:#}").contains("array changed while sorting"));
+    assert_eq!(
+        call_class(&mut vm, "ArraySortContract", "mutationKept", "I"),
+        [Word::from(1)]
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(transient).is_err(),
+        "sort error retained snapshot roots"
+    );
+    let error = invoke(&mut vm, "capacity").unwrap_err();
+    assert!(format!("{error:#}").contains("array sort limit reached"));
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert_eq!(
+        call_class(&mut vm, "ArraySortContract", "contract", "I"),
+        [Word::from(1)]
+    );
+    vm.close().unwrap();
+}
+
+#[test]
 fn guest_equality_nulls_iteration_live_readonly_views_and_gc() {
     let mut vm = runtime();
     vm.launch().unwrap();

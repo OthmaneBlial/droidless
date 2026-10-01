@@ -233,6 +233,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/view/GestureDetector$OnDoubleTapListener;",
             "Landroid/view/GestureDetector$SimpleOnGestureListener;",
             "Landroid/view/MotionEvent;",
+            "Landroid/view/VelocityTracker;",
+            "Landroid/view/ViewParent;",
             "Landroid/view/InputEvent;",
             "Ldroidless/runtime/GestureTimer;",
             "Landroid/content/Intent;",
@@ -3406,7 +3408,7 @@ impl Runtime {
                 result.push(Word::from(self.view_mut(receiver)?.gravity as i32));
             }
             (
-                "Landroid/view/ViewGroup;",
+            "Landroid/view/ViewGroup;",
                 "setOnHierarchyChangeListener(Landroid/view/ViewGroup$OnHierarchyChangeListener;)V",
             ) => {
                 let listener = arg(1)?;
@@ -3987,7 +3989,7 @@ impl Runtime {
                         &self.heap,
                         receiver,
                         horizontal,
-                        size as f32,
+                        if mode == 0 { f32::INFINITY } else { size as f32 },
                     )? as i32)
                         .max(minimum);
                     let measured = match mode {
@@ -4060,6 +4062,13 @@ impl Runtime {
             | ("Landroid/view/ViewGroup;", "onLayout(ZIIII)V") => {
                 self.view_mut(receiver)?;
             }
+            ("Landroid/view/ViewParent;" | "Landroid/view/ViewGroup;", "onStartNestedScroll(Landroid/view/View;Landroid/view/View;I)Z") => {
+                ensure!(self.is_a(&self.heap.get(receiver)?.class, "Landroid/view/ViewGroup;"), "nested-scroll parent requires ViewGroup");
+                self.view_mut(arg(1)?)?;
+                self.view_mut(arg(2)?)?;
+                arg(3)?.int()?;
+                result.push(Word::ZERO);
+            }
             ("Landroid/view/View;", "getParent()Landroid/view/ViewParent;") => {
                 let parent = self.heap.get(receiver)?.fields.get("droidless:view:parent").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO);
                 result.push(parent);
@@ -4121,7 +4130,7 @@ impl Runtime {
                     .fields
                     .insert("droidless:view:over-scroll-mode".into(), vec![arg(1)?]);
             }
-            ("Landroid/view/View;", "requestLayout()V" | "requestApplyInsets()V")
+            ("Landroid/view/View;", "requestLayout()V" | "requestApplyInsets()V" | "invalidate()V")
             | ("Landroid/support/v7/widget/ContentFrameLayout;", "requestLayout()V") => {
                 // ponytail: desktop content has zero Android system-bar insets; request a layout
                 // pass. Full WindowInsets/listener dispatch belongs with system-bar emulation.

@@ -596,8 +596,6 @@ passes 17 calculator scenarios plus the Notepad Notes list/editor and two-note
 SQLite save/restart probes. Both rows are retained and both titles render after
 Back and in a fresh process. No GitHub Actions run was used.
 
-## Current source: packaged raster images
-
 ## Current source: packaged binary XML pulls
 
 Verified 2026-10-01 on macOS ARM64. The authored image APK now calls
@@ -995,6 +993,64 @@ target/release/droidless run --headless --ephemeral fixtures/generated/schedulin
 # JSON View text: Future result: payload
 target/release/droidless run --ephemeral fixtures/generated/scheduling.apk
 # Native: Start future worker, Deliver future input; restart, cancel, deliver; close.
+sh tools/ci.sh
+python3 tools/compatibility.py
+```
+
+## Current source: editing an existing public note
+
+Verified 2026-10-01 with the unchanged pinned Notepad 1.0.0 APK. The local
+compatibility replay creates two notes and restarts, clicks the first note's
+non-clickable title through its owning row's real listener, and verifies that
+the editor loads that existing note. It changes the title and second editor
+field, then dispatches Back through the APK. The refreshed list contains the
+revised title and the untouched second note. SQLite still contains two rows;
+the edited row retains its ID. A fresh process reopens that row with the exact
+revised title and multiline body in its two EditTexts.
+
+`--input-at INDEX TEXT` selects an enabled visible EditText by zero-based View
+tree order. Both CLI input helpers edit the View model. The text selector chooses
+the nearest clickable ancestor of a matching label; direct guest performClick
+still does not bubble. Hidden branches and disabled click owners are checked.
+
+This flow adds boxed Integer/Long/Double/Boolean Bundle extras, ordinary Parcel
+primitive tags for boxed values, stable object-array sorting and bounded
+TextUtils UTF-16 search/plain-text replacement. Compiled checks cover aliases,
+wrong-type defaults, mixed lists, range errors, guest callback faults, mutation,
+GC and ceilings. ArraySortContract's portable contract also passes on desktop
+Java; this is separate from Android-specific Bundle and text behavior.
+
+The body probe uses multiline text without XML metacharacters. An additional
+probe containing `&` and `<` is not a successful round trip: inspection of the
+unchanged APK shows its serializer replacing newlines but storing those
+characters unescaped. Its SAX loading path fails, then reaches unsupported
+printStackTrace. This is a current compatibility limit, not Android-device
+differential evidence. SAXException now retains its real Exception/Throwable
+ancestry. Rich formatting, drawing and full visual fidelity remain open.
+
+UNSPECIFIED measurement now preserves intrinsic card height, including nested
+MATCH_PARENT children; compiled checks also retain EXACTLY-zero and AT_MOST
+bounds. FrameLayout takes maximum child extents on both axes. VelocityTracker
+uses the shared bounded linear gesture estimator, with units/clamps, duplicate
+timestamps, long-clock precision, event lifetime, GC and recycled-use checks.
+The base ViewGroup/ViewParent nested-scroll start callback declines the request;
+accepted nested scrolling remains unsupported.
+
+Native existing-note selection/editing is not verified. A real root MotionEvent
+DOWN/UP replay via `--tap 100 37` remains on Notes: the closed navigation drawer
+captures the input ahead of the measured card. Opening the row through its real
+APK callback before launching AppKit reaches the editor, but a native mouse
+press then fails at CoordinatorLayout.isChildrenDrawingOrderEnabled. No native
+keyboard change was completed in this attempt. The earlier native new-note
+keyboard/save evidence remains separate from this host-replay milestone.
+
+Local CI passes 92 Rust tests, warning-free Clippy, optimized builds and 4,096
+seeded parser mutations. The optimized public compatibility replay verifies the
+existing-row edit/restart alongside the unchanged calculator and image checks.
+GitHub Actions remain disabled. The v0.1.0 archive predates this source milestone;
+no achieved 50% checkpoint is claimed.
+
+```sh
 sh tools/ci.sh
 python3 tools/compatibility.py
 ```

@@ -79,3 +79,10 @@ compatibility. The unchanged Notepad APK saves two edited titles, and both
 Back and after a fresh process restart. A native AppKit run also confirmed
 keyboard text entry and saving through the APK's own flow.
 `tools/compatibility.py` checks this flow against the pinned upstream APK.
+
+The same probe now reopens an existing note through its own row listener, changes
+its title and multiline plain-text body, dispatches Back, and checks that the
+list refreshes. The original row ID remains unchanged and there are still two
+rows. A fresh process reopens the revised note with both edited fields intact.
+CLI `--input-at 1 TEXT` selects the second enabled visible editor field; like
+`--input`, it edits the View model and does not synthesize keyboard events.

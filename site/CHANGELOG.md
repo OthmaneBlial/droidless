@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Existing notes can now be reopened and edited through the original public
+  Notepad APK. The headless replay changes title and multiline body, returns to
+  the refreshed list and restores both fields after restart with the same row
+  ID. Boxed extras, stable object-array sorting and bounded text operations
+  support this flow. XML metacharacter loading, rich formatting and drawing
+  remain open; the v0.1.0 archive predates these additions.
+
 - Executor.execute now queues guest work instead of running inline.
   Single/fixed/cached pools reuse workers; Future values/causes, cancellation,
   timed waits and actual shutdown/termination state pass compiled checks.

@@ -33,19 +33,22 @@ our authored test APKs only; they do not participate in execution.
 ## 📓 A public notes APK, opened in DROIDLESS
 
 The unmodified [Notepad 1.0.0 release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0)
-opens its Notes screen and editor. A headless run taps **＋**, enters
-`Hello, desktop`, and confirms the text in the APK's editable View tree.
+opens its Notes screen and editor. The headless replay saves two notes, reopens
+one, edits its title and multiline body, then restarts: both fields return
+through the APK's own code. ✍️
 
 <div align="center">
-<img src="site/assets/notepad-preview.svg" alt="Illustrated headless View-tree preview of the public Notepad APK in DROIDLESS, with its editor open and Hello, desktop entered." width="280">
+<img src="site/assets/notepad-preview.svg" alt="Illustrated headless View-tree preview of the public Notepad APK in DROIDLESS, with two saved notes and a revised title." width="280">
 <p><sub>Illustrated from the 390 × 844 View snapshot; this is not a native-window capture.</sub></p>
 </div>
 
 The original APK's SHA-256 is checked by `sh tools/fetch-notepad.sh`; DROIDLESS
 does not patch or redistribute it. After Back, the Notes list shows the saved
-title; a fresh process reopens with that title still visible. Native AppKit
-keyboard entry and saving are also verified; visual fidelity remains unverified.
-[Exact evidence and limits](docs/verification.md#current-source-public-notepad-editor).
+titles; editing an existing note keeps its original row ID and refreshes the list.
+A fresh process restores its revised title and body. An earlier native AppKit
+run verified keyboard entry and saving a new note. Native existing-note selection
+and editing remain open.
+[Exact evidence and limits](docs/verification.md#current-source-editing-an-existing-public-note).
 
 ```sh
 sh tools/fetch-notepad.sh
@@ -147,7 +150,7 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 📝 Rich text/XML | Android spannable text and a bounded SAX parser subset exercised by an unmodified APK |
 | 🖱️ Input | Native calculator clicks, Counter text/key callbacks, and real keyboard text in the public Notepad APK |
 | 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish, Application observers and platform fragments without Views — current source |
-| 📓 Persistent storage | Typed SharedPreferences and bounded SQLite support; two public Notepad notes appear after Back and a fresh process — current source |
+| 📓 Persistent storage | Two public Notepad notes survive restart; reopening and editing an existing title/body keeps the same SQLite row — current source |
 | 🗂️ Java collections | Bounded HashSet/ArrayList/HashMap/basic LinkedHashMap, snapshot CopyOnWriteArrayList, immediate FIFO queues, indexed lists, guest equality, native map copying and live read-only Set/List views — current source |
 | 🔎 APK classes | APK-local Class lookup, no-argument construction, initialization/access faults, primitive TYPE metadata and inherited field resolution — current source |
 | 🌍 API profile | Fixed read-only Build.VERSION.SDK_INT = 21 for app version checks; partial framework support — current source |
@@ -180,7 +183,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Touch and gestures | [Authored Java fixture](examples/touch/MainActivity.java) | Single-pointer dispatch, child coordinates/capture, click fallback, timed taps/double taps/presses, scroll/fling, cancellation and callback GC/error cleanup. SwpieView replay verifies actual next/previous images; native taps hide/show controls. Native drag verification remains pending |
 | Photo grid | [Authored Java/XML fixture](examples/grids/MainActivity.java) | Guest BaseAdapter cells, auto-fit and four stretch modes, observer updates and native photo clicks with 64-bit IDs; disabled items ignore clicks and Refresh replaces seven photos with four |
 | Widgets | [Authored Java contracts](examples/images/WidgetProbe.java) | Timed scrolling, manifest application metadata, listener overrides, virtual background dispatch and content-description retention; image accessibility labels verified in native AppKit |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Headless Notes list/editor, two-row SQLite save and fresh-process title retention; native AppKit typing and saving also verified |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Headless two-row save/restart, existing-row title/body edits and field restoration. Earlier native new-note typing and saving verified; native existing-note editing remains open |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).
@@ -195,7 +198,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 86 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 92 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

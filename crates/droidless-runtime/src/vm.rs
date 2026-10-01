@@ -416,16 +416,24 @@ impl Runtime {
         Ok(result)
     }
     pub fn click_text(&mut self, text: &str) -> Result<bool> {
-        fn find(node: &Node, text: &str) -> Option<usize> {
-            if (node.view.text == text || node.view.content_description.as_deref() == Some(text))
-                && (node.view.listener.is_some() || node.view.xml_click.is_some())
-            {
+        fn find(node: &Node, text: &str, parent: Option<usize>) -> Option<usize> {
+            if node.view.visible != 0 {
+                return None;
+            }
+            let target = if node.view.listener.is_some() || node.view.xml_click.is_some() {
                 Some(node.handle)
             } else {
-                node.children.iter().find_map(|c| find(c, text))
+                parent
+            };
+            if (node.view.text == text || node.view.content_description.as_deref() == Some(text))
+                && target.is_some()
+            {
+                return target;
             }
+            node.children.iter().find_map(|c| find(c, text, target))
         }
-        let handle = find(&self.layout_snapshot()?, text)
+        // Select the owning row/card for a non-clickable label; guest performClick never bubbles.
+        let handle = find(&self.layout_snapshot()?, text, None)
             .with_context(|| format!("no clickable View with text or description {text:?}"))?;
         self.click(handle)
     }
@@ -445,17 +453,25 @@ impl Runtime {
     }
     /// Edit the first enabled visible EditText in the foreground screen.
     pub fn input(&mut self, text: &str) -> Result<()> {
-        fn find(node: &Node) -> Option<usize> {
+        self.input_at(0, text)
+    }
+    /// Edit an enabled visible EditText by its zero-based position in the View tree.
+    pub fn input_at(&mut self, index: usize, text: &str) -> Result<()> {
+        fn find(node: &Node, index: &mut usize) -> Option<usize> {
             if node.view.visible != 0 {
                 return None;
             }
             if node.view.editable && node.view.enabled {
-                Some(node.handle)
-            } else {
-                node.children.iter().find_map(find)
+                if *index == 0 {
+                    return Some(node.handle);
+                }
+                *index -= 1;
             }
+            node.children.iter().find_map(|child| find(child, index))
         }
-        let handle = find(&self.layout_snapshot()?).context("no editable View")?;
+        let mut remaining = index;
+        let handle = find(&self.layout_snapshot()?, &mut remaining)
+            .with_context(|| format!("no editable View at index {index}"))?;
         self.edit(handle, text)
     }
     pub fn key(&mut self, handle: usize, action: i32, keycode: i32) -> Result<bool> {
@@ -988,6 +1004,12 @@ impl Runtime {
             }
             if current == "Ljava/lang/String;" {
                 work.push("Ljava/lang/Comparable;".into());
+            }
+            if current == "Ljava/lang/Number;" || current == "Ljava/lang/Boolean;" {
+                work.push("Ljava/io/Serializable;".into());
+            }
+            if current == "Landroid/view/ViewGroup;" {
+                work.push("Landroid/view/ViewParent;".into());
             }
             if ["Landroid/net/Uri;", "Landroid/os/Bundle;"].contains(&current.as_str()) {
                 work.push("Landroid/os/Parcelable;".into());

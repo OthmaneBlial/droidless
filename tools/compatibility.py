@@ -256,10 +256,47 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
     if retained != sorted((title, "") for title in probe_titles):
         raise SystemExit("Notepad did not retain both note rows after a fresh process")
 
+    with sqlite3.connect(database) as connection:
+        original_id = connection.execute("SELECT id FROM Note WHERE title = ?", [probe_titles[0]]).fetchone()[0]
+    opened = subprocess.run([
+        str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", app_data,
+        "--click", probe_titles[0], str(notepad),
+    ], text=True, capture_output=True, check=True, timeout=120)
+    fields = [node["view"]["text"] for node in flatten(json.loads(opened.stdout)) if node["view"]["kind"] == "EditText"]
+    if fields != [probe_titles[0], ""]:
+        raise SystemExit("Notepad did not reopen the existing note through its row callback")
+    revised_title = "Hello, revised desktop"
+    body = "Saved body from the original APK.\nSecond line survives restart."
+    edited = subprocess.run([
+        str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", app_data,
+        "--click", probe_titles[0], "--input", revised_title, "--input-at", "1", body,
+        "--back", str(notepad),
+    ], text=True, capture_output=True, check=True, timeout=120)
+    labels = [node["view"]["text"] for node in flatten(json.loads(edited.stdout))]
+    if revised_title not in labels or probe_titles[1] not in labels or probe_titles[0] in labels:
+        raise SystemExit("Notepad did not refresh its list after editing the existing note")
+    with sqlite3.connect(database) as connection:
+        rows = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+    if len(rows) != 2 or (original_id, revised_title, body) not in rows:
+        raise SystemExit("Notepad edit did not update the same row with the title and body")
+    reopened = subprocess.run([
+        str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", app_data,
+        "--click", revised_title, str(notepad),
+    ], text=True, capture_output=True, check=True, timeout=120)
+    fields = [node["view"]["text"] for node in flatten(json.loads(reopened.stdout)) if node["view"]["kind"] == "EditText"]
+    if fields != [revised_title, body]:
+        raise SystemExit("Notepad title/body did not survive restart and reopen in the editor")
+
 report["note_row_survives_fresh_process"] = True
 report["note_title_visible_after_save"] = True
 report["note_title_visible_in_reopened_list"] = True
 report["saved_notes"] = probe_titles
+report["existing_note_title_and_body_edit_verified"] = True
+report["existing_note_id_retained"] = True
+report["edited_note_fields_survive_restart"] = True
+report["revised_title"] = revised_title
+report["reopened_body"] = body
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
+print("PASS Notepad: existing row reopened, title/body edited, list refreshed and both fields retained after restart")

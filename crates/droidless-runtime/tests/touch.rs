@@ -54,6 +54,25 @@ fn compiled_touch_dispatch_gestures_timing_gc_and_failure_cleanup() {
     let mut vm = runtime();
     assert!(vm.touch_input_enabled());
     assert_eq!(
+        call(&mut vm, "measureContract", &[], "I", vec![]).unwrap(),
+        [Word::from(1)]
+    );
+    assert_eq!(
+        call(&mut vm, "velocityContract", &[], "I", vec![]).unwrap(),
+        [Word::from(1)]
+    );
+    for (name, diagnostic) in [
+        ("recycledVelocity", "recycled VelocityTracker"),
+        ("invalidVelocity", "invalid velocity units or maximum"),
+    ] {
+        assert!(
+            format!("{:#}", call(&mut vm, name, &[], "V", vec![]).unwrap_err())
+                .contains(diagnostic)
+        );
+        assert_eq!(vm.stack_depth(), 0);
+        vm.collect();
+    }
+    assert_eq!(
         call(&mut vm, "motionContract", &[], "I", vec![]).unwrap(),
         [Word::from(1)]
     );

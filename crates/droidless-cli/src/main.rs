@@ -6,8 +6,9 @@ mod native;
 
 enum Action {
     Click(String),
+    Tap(f32, f32),
     Key(String),
-    Input(String),
+    Input(usize, String),
     Back,
     Advance(u64),
 }
@@ -22,7 +23,7 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
         println!(
-            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --key CHAR --input TEXT --back --stats\n             --advance-ms MILLISECONDS (deterministic timer replay)\n             --data-dir APPS_ROOT | --ephemeral\n             --size WIDTHxHEIGHT (128..4096; default 420x720)\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText. Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
+            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --tap X Y --key CHAR --input TEXT --back --stats\n             --advance-ms MILLISECONDS (deterministic timer replay)\n             --data-dir APPS_ROOT | --ephemeral\n             --size WIDTHxHEIGHT (128..4096; default 420x720)\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText.\n--input-at INDEX TEXT selects another editable field (zero-based). Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
         );
         return Ok(());
     }
@@ -85,10 +86,37 @@ fn run() -> Result<()> {
                 "--input" => {
                     i += 1;
                     actions.push(Action::Input(
+                        0,
                         args.get(i)
                             .ok_or_else(|| anyhow::anyhow!("--input requires text"))?
                             .clone(),
                     ));
+                }
+                "--input-at" => {
+                    i += 1;
+                    let index = args
+                        .get(i)
+                        .ok_or_else(|| anyhow::anyhow!("--input-at requires INDEX and TEXT"))?
+                        .parse::<usize>()?;
+                    i += 1;
+                    let text = args
+                        .get(i)
+                        .ok_or_else(|| anyhow::anyhow!("--input-at requires INDEX and TEXT"))?
+                        .clone();
+                    actions.push(Action::Input(index, text));
+                }
+                "--tap" => {
+                    i += 1;
+                    let x = args
+                        .get(i)
+                        .ok_or_else(|| anyhow::anyhow!("--tap requires X and Y"))?
+                        .parse()?;
+                    i += 1;
+                    let y = args
+                        .get(i)
+                        .ok_or_else(|| anyhow::anyhow!("--tap requires X and Y"))?
+                        .parse()?;
+                    actions.push(Action::Tap(x, y));
                 }
                 "--data-dir" => {
                     i += 1;
@@ -155,7 +183,11 @@ fn run() -> Result<()> {
                     runtime.click_text(&text)?;
                 }
                 Action::Back => runtime.back()?,
-                Action::Input(text) => runtime.input(&text)?,
+                Action::Tap(x, y) => {
+                    runtime.touch(0, x, y)?;
+                    runtime.touch(1, x, y)?;
+                }
+                Action::Input(index, text) => runtime.input_at(index, &text)?,
                 Action::Advance(milliseconds) => {
                     runtime.advance_time(milliseconds)?;
                 }

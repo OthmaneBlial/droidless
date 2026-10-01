@@ -76,7 +76,11 @@ event parser cover Notepad's rich-text serialization path. DTDs are rejected.
 SQLite support includes `SQLiteOpenHelper`, SQL statements/transactions,
 `ContentValues` updates, `rawQuery` and typed cursor reads; the pinned Notepad
 APK save/restart probe confirms two note rows persist and the reopened list
-renders both titles. These narrow paths do not imply general text/XML/database
+renders both titles. It also reopens an existing row, updates its title and
+multiline plain-text body, refreshes the list and restores both fields in a fresh
+editor process. Object-array sort executes stable guest Comparator/Comparable
+callbacks. TextUtils UTF-16 search and disjoint plain-text replacement support
+this save path. These narrow paths do not imply general text/XML/database
 compatibility.
 Current source adds explicit same-APK Intent constructors/setClass/setClassName,
 startActivity/startActivityForResult, getIntent, action/type/data metadata,
@@ -89,6 +93,9 @@ Nested Bundle/Parcelable/Parcelable ArrayList state now crosses Activity launche
 and results through a bounded Parcel subset. Authored checks exercise actual
 guest writers/CREATORs, mutation/GC, state isolation, malformed data and cleanup.
 [Exact Parcelable scope](framework.md#bounded-parcelable-state-transfer).
+Boxed Integer/Long/Double/Boolean extras and list entries use ordinary Parcel
+value tags and preserve shallow-copy identity. General Java serialization remains
+unsupported.
 The v0.1.0 release predates these additions. [Result and picker scope](framework.md#activity-results-and-native-folder-selection).
 Application lifecycle observers add bounded registration/removal, GC-rooted
 snapshot delivery from six Activity super methods and canonical getApplication

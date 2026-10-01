@@ -35,8 +35,13 @@ The following are objectives, not completed capability claims.
    original APK's editable View tree. Saving the title writes the APK's private
    Note table; the headless replay creates two notes and renders both titles
    after Back and after a fresh process. A native AppKit window also accepted
-   keyboard text and saved the resulting note. Broader list layout and visual
-   fidelity remain open.
+   keyboard text and saved the resulting note. Existing-note row selection and
+   title/body editing now also retain the same SQLite ID and reopen both fields
+   after restart in host replay. A root MotionEvent tap still reaches the closed
+   navigation drawer instead of the note card; an editor mouse event then stops
+   at CoordinatorLayout's drawing-order query. Native existing-note selection
+   and editing remain open, along with rich formatting/drawing, broader list
+   layout and visual fidelity.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

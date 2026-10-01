@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- The unchanged public Notepad APK now reopens an existing note, updates its
+  title and multiline body, refreshes the list and restores both fields after
+  restart without creating another row. Host text selection finds a label's
+  nearest click owner; --input-at selects another editor field. Boxed extras
+  retain shallow-copy identity and use ordinary Parcel value tags. Object-array
+  sorting shares stable guest comparison callbacks with Collections.sort;
+  bounded TextUtils search/replacement supports the body serialization path.
+  Typed SharedPreferences retain their original storage representation.
+  UNSPECIFIED measurement now preserves intrinsic card sizes; bounded
+  VelocityTracker support shares the gesture estimator. Native existing-note
+  selection/editing remains blocked by drawer geometry and CoordinatorLayout
+  drawing-order queries.
+
 - Executor.execute no longer runs tasks inline or reports fabricated shutdown
   success. Single/fixed/cached pools reuse guest workers; Callable and Runnable
   submissions retain real Future values/causes, cancellation and deadline waits.

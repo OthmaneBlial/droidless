@@ -12,6 +12,11 @@ fn utf16_len(text: &str) -> usize {
     text.encode_utf16().count()
 }
 
+fn find_utf16(source: &[u16], needle: &[u16]) -> Option<usize> {
+    (0..=source.len())
+        .find(|index| source.get(*index..index.saturating_add(needle.len())) == Some(needle))
+}
+
 fn checked_range(start: i32, end: i32, length: usize) -> Result<(usize, usize)> {
     if start < 0 || end < start || end as usize > length {
         return Err(fault(
@@ -53,6 +58,89 @@ impl Runtime {
         method: &Method,
         args: &[Word],
     ) -> Result<Option<Vec<Word>>> {
+        if method.class == "Landroid/text/TextUtils;"
+            && method.signature() == "indexOf(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)I"
+        {
+            ensure!(args.len() == 2, "invalid TextUtils.indexOf arguments");
+            let source = self.heap.text(args[0])?.encode_utf16().collect::<Vec<_>>();
+            let needle = self.heap.text(args[1])?.encode_utf16().collect::<Vec<_>>();
+            let found = find_utf16(&source, &needle);
+            return Ok(Some(vec![Word::from(
+                found.map_or(-1, |index| index as i32),
+            )]));
+        }
+        if method.class == "Landroid/text/TextUtils;"
+            && method.signature()
+                == "replace(Ljava/lang/CharSequence;[Ljava/lang/String;[Ljava/lang/CharSequence;)Ljava/lang/CharSequence;"
+        {
+            ensure!(args.len() == 3, "invalid TextUtils.replace arguments");
+            let (template, spans) = self.sequence_data(args[0])?;
+            ensure!(spans.is_empty(), "TextUtils.replace with spans unsupported");
+            let references = |array| -> Result<Vec<Word>> {
+                let Data::Array { values, .. } = &self.heap.get(array)?.data else {
+                    bail!("TextUtils.replace requires arrays");
+                };
+                ensure!(
+                    values.len() <= 16_384,
+                    "text replacement array limit reached"
+                );
+                values
+                    .iter()
+                    .map(|words| {
+                        ensure!(words.len() == 1, "invalid text replacement element width");
+                        words[0].reference()?;
+                        Ok(words[0])
+                    })
+                    .collect()
+            };
+            let sources = references(args[1])?;
+            let destinations = references(args[2])?;
+            ensure!(
+                sources.len() == destinations.len(),
+                "text replacement array lengths differ"
+            );
+            let units = template.encode_utf16().collect::<Vec<_>>();
+            let mut replacements = vec![];
+            for (source, destination) in sources.into_iter().zip(destinations) {
+                let source = self.heap.text(source)?.encode_utf16().collect::<Vec<_>>();
+                // ponytail: disjoint plain-text replacements; span/overlap parity needs the full Editable replace engine.
+                ensure!(
+                    !source.is_empty(),
+                    "empty text replacement source unsupported"
+                );
+                if let Some(start) = find_utf16(&units, &source) {
+                    let (text, spans) = self.sequence_data(destination)?;
+                    ensure!(
+                        spans.is_empty(),
+                        "TextUtils.replace destination spans unsupported"
+                    );
+                    replacements.push((start, start + source.len(), text));
+                }
+            }
+            replacements.sort_by_key(|replacement| replacement.0);
+            let mut text = String::new();
+            let mut previous = 0;
+            for (start, end, replacement) in replacements {
+                ensure!(
+                    start >= previous,
+                    "overlapping text replacement sources unsupported"
+                );
+                text.push_str(&String::from_utf16_lossy(&units[previous..start]));
+                text.push_str(&replacement);
+                ensure!(text.len() <= TEXT_LIMIT, "text replacement exceeds 1 MiB");
+                previous = end;
+            }
+            text.push_str(&String::from_utf16_lossy(&units[previous..]));
+            ensure!(text.len() <= TEXT_LIMIT, "text replacement exceeds 1 MiB");
+            let result = self
+                .heap
+                .instance("Landroid/text/SpannableStringBuilder;")?;
+            self.heap.get_mut(result)?.data = Data::Spanned {
+                text,
+                spans: vec![],
+            };
+            return Ok(Some(vec![result]));
+        }
         if ![
             "Ljava/lang/CharSequence;",
             "Landroid/text/Spanned;",

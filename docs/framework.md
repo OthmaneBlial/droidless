@@ -94,6 +94,15 @@ sender. Bundle/Intent copy constructors retain Android's shallow object values.
 GC roots protect snapshot elements across mutating writers and CREATOR callbacks;
 errors release roots and restore recursion/read bounds.
 
+Integer, Long, Double and Boolean extras also retain Serializable marker identity
+and typed getter values. Bundle primitive writes box these four types immediately,
+preserving object identity across shallow copies. Parcel transport uses Android's
+ordinary primitive value tags, including boxed entries in supported ArrayLists;
+it does not implement Java object serialization. Float/Byte/Short/Character
+boxing and arbitrary Serializable object transport remain unsupported. The
+compiled BoxedExtras contract checks aliases, nulls, wrong-type defaults, wide
+values, mixed lists, GC and explicit custom-serialization failure.
+
 The authored Parcels APK verifies callback execution, Unicode/wide values, null
 list elements, shallow versus transported state, source-list mutation during GC,
 activity results and callback failures. It is not an Android-device differential
@@ -136,6 +145,19 @@ Comparable callbacks, including null-comparator sort. Snapshot elements remain
 rooted across guest GC/mutation; failures release temporary roots. String.lastIndexOf
 uses UTF-16 positions for String and character overloads, including supplementary
 code points, individual surrogate units and negative search bounds.
+
+Object-array `Arrays.sort` adds natural/Comparator and range overloads through the
+same stable sort. Guest callbacks, GC, faults and unsupported concurrent mutation
+are checked. [Array sorting limits](collections.md#object-array-sorting).
+
+TextUtils.indexOf(CharSequence, CharSequence) uses UTF-16 positions for supported
+String/builder/spanned values. TextUtils.replace supports disjoint nonempty plain
+text patterns: it replaces each pattern's first original match, so newly inserted
+text is not searched again. Existing/destination spans, overlapping patterns,
+empty patterns and unequal arrays fail explicitly. Replacement arrays are bounded
+at 16,384 elements and output at 1 MiB. General guest CharSequence implementations
+and a complete Editable replacement engine remain unsupported.
+Reference: [API-21 TextUtils](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/text/TextUtils.java).
 
 ImageView.ScaleType has canonical enum values and retained get/set state.
 FIT_XY, FIT_START/CENTER/END, CENTER, CENTER_CROP and CENTER_INSIDE render through
@@ -193,6 +215,25 @@ produces scroll callbacks and cancels tap/press timers. Fling uses a bounded
 50-pixel/second threshold; it does not claim Android VelocityTracker parity.
 SimpleOnGestureListener provides Android's default callback bodies. Failed
 callbacks cancel pending gesture timers and release temporary roots.
+
+VelocityTracker.obtain, addMovement, computeCurrentVelocity, X/Y getters, clear
+and recycle reuse that bounded 100-ms/20-sample linear estimator. Units and
+maximum speed are honored, duplicate timestamps replace the latest sample,
+recycled input fails, and movement is copied independently of MotionEvent
+lifetime. Only pointer 0 is tracked; other IDs return zero. This is approximate
+velocity support, not Android's native fitting algorithm.
+
+UNSPECIFIED View measurement now leaves intrinsic sizes unbounded instead of
+clipping them to a zero spec size. MATCH_PARENT contributes intrinsic size in
+that case; EXACTLY and AT_MOST still constrain it. FrameLayout measurement takes
+the maximum child extent on both axes. This fixes zero-height Notepad cards;
+full Android measurement and scrolling remain incomplete.
+Reference: [VelocityTracker](https://developer.android.com/reference/android/view/VelocityTracker).
+
+The base ViewGroup/ViewParent onStartNestedScroll callback returns false, as on
+Android; guest overrides still execute from DEX. Accepted nested scrolling is
+not implemented. Closed-drawer geometry and CoordinatorLayout drawing-order
+queries still block native existing-note selection/editing in Notepad.
 
 View translation and alpha reach native geometry/opacity. System UI flags are
 retained as app state; the desktop content profile has zero Android system-bar

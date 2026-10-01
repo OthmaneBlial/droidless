@@ -493,7 +493,8 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
         } else {
             v.height
         };
-        if value == -1.0 {
+        // UNSPECIFIED measurement has no parent limit; match-parent contributes intrinsic size.
+        if value == -1.0 && parent.is_finite() {
             return Ok(parent);
         }
         if value >= 0.0 {
@@ -540,7 +541,9 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
             .iter()
             .map(|c| measure(heap, *c, horizontal, parent, depth + 1))
             .collect::<Result<Vec<_>>>()?;
-        let total = if horizontal == (v.orientation == 0) {
+        let total = if !matches!(v.kind.as_str(), "FrameLayout" | "View")
+            && horizontal == (v.orientation == 0)
+        {
             sizes.iter().sum()
         } else {
             sizes.iter().copied().fold(0.0, f32::max)

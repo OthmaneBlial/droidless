@@ -40,7 +40,9 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         "Ljava/util/concurrent/ExecutionException;" | "Ljava/util/concurrent/TimeoutException;" => {
             "Ljava/lang/Exception;"
         }
-        "Ljava/lang/InterruptedException;" => "Ljava/lang/Exception;",
+        "Ljava/lang/InterruptedException;" | "Lorg/xml/sax/SAXException;" => {
+            "Ljava/lang/Exception;"
+        }
         "Ljava/lang/ArrayIndexOutOfBoundsException;"
         | "Ljava/lang/StringIndexOutOfBoundsException;" => "Ljava/lang/IndexOutOfBoundsException;",
         "Ljava/lang/RuntimeException;" => "Ljava/lang/Exception;",
@@ -139,6 +141,7 @@ pub enum Data {
     },
     Bundle(BTreeMap<String, (String, Vec<Word>)>),
     Motion(crate::touch::Motion),
+    Velocity(crate::touch::Velocity),
     Gesture(crate::touch::Gesture),
     Timer(crate::timers::Timer),
     Executor(crate::executors::Executor),

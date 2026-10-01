@@ -317,6 +317,22 @@ impl Runtime {
             return self.parcel_int(parcel, -1);
         }
         let class = self.heap.get(value)?.class.clone();
+        if let Some((ty, words)) = self.boxed_words(value)? {
+            self.parcel_int(
+                parcel,
+                match ty {
+                    "I" => 1,
+                    "J" => 6,
+                    "D" => 8,
+                    "Z" => 9,
+                    _ => unreachable!(),
+                },
+            )?;
+            for word in words {
+                self.parcel_int(parcel, word.int()?)?;
+            }
+            return Ok(());
+        }
         match class.as_str() {
             "Ljava/lang/String;" => {
                 let text = self.heap.text(value)?.to_owned();
@@ -459,15 +475,16 @@ impl Runtime {
                 self.parcel_scope(parcel, &[list], |vm| {
                     for _ in 0..count {
                         let (ty, words) = vm.parcel_read_value(parcel, loader)?;
-                        ensure!(
-                            ty.starts_with(['L', '[']),
-                            "primitive Parcel list entries unsupported"
-                        );
+                        let value = if ty.starts_with(['L', '[']) {
+                            words[0]
+                        } else {
+                            vm.box_words(&ty, words)?
+                        };
                         let Data::Collection { values, .. } = &mut vm.heap.get_mut(list)?.data
                         else {
                             bail!("invalid Parcel list");
                         };
-                        values.push(words[0]);
+                        values.push(value);
                     }
                     Ok(())
                 })?;

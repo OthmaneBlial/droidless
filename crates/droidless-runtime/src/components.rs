@@ -202,15 +202,72 @@ impl Runtime {
                 word.int()?;
             }
         }
-        let Data::Bundle(values) = &mut self.heap.get_mut(object)?.data else {
+        let Data::Bundle(values) = &self.heap.get(object)?.data else {
             bail!("uninitialized Bundle");
         };
         ensure!(
             values.contains_key(&key) || values.len() < 16_384,
             "Bundle entry limit reached"
         );
+        // Android Bundle stores boxed objects: shallow copies retain their identity.
+        let (ty, words) = if matches!(ty.as_str(), "I" | "J" | "D" | "Z")
+            && self.is_a(&self.heap.get(object)?.class, "Landroid/os/Bundle;")
+        {
+            let boxed = self.box_words(&ty, words)?;
+            (self.heap.get(boxed)?.class.clone(), vec![boxed])
+        } else {
+            (ty, words)
+        };
+        let Data::Bundle(values) = &mut self.heap.get_mut(object)?.data else {
+            unreachable!("validated Bundle");
+        };
         values.insert(key, (ty, words));
         Ok(())
+    }
+    pub(crate) fn boxed_words(&self, value: Word) -> Result<Option<(&'static str, Vec<Word>)>> {
+        let object = self.heap.get(value)?;
+        let ty = match object.class.as_str() {
+            "Ljava/lang/Integer;" => "I",
+            "Ljava/lang/Long;" => "J",
+            "Ljava/lang/Double;" => "D",
+            "Ljava/lang/Boolean;" => "Z",
+            _ => return Ok(None),
+        };
+        let words = object
+            .fields
+            .get("value")
+            .context("uninitialized boxed value")?
+            .clone();
+        ensure!(
+            words.len() == crate::heap::default_value(ty).len(),
+            "invalid boxed value width"
+        );
+        for word in &words {
+            word.int()?;
+        }
+        Ok(Some((ty, words)))
+    }
+    pub(crate) fn box_words(&mut self, ty: &str, words: Vec<Word>) -> Result<Word> {
+        let class = match ty {
+            "I" => "Ljava/lang/Integer;",
+            "J" => "Ljava/lang/Long;",
+            "D" => "Ljava/lang/Double;",
+            "Z" => "Ljava/lang/Boolean;",
+            _ => bail!("unsupported boxed Parcel/Bundle primitive {ty}"),
+        };
+        ensure!(
+            words.len() == crate::heap::default_value(ty).len(),
+            "invalid boxing value width"
+        );
+        for word in &words {
+            word.int()?;
+        }
+        let boxed = self.heap.instance(class)?;
+        self.heap
+            .get_mut(boxed)?
+            .fields
+            .insert("value".into(), words);
+        Ok(boxed)
     }
     fn bundle_get(
         &self,
@@ -225,20 +282,32 @@ impl Runtime {
         let Data::Bundle(values) = &self.heap.get(object)?.data else {
             bail!("uninitialized Bundle");
         };
-        Ok(values
-            .get(key)
-            .filter(|(kind, words)| {
-                kind == ty
-                    || (ty.starts_with(['L', '['])
-                        && words.len() == 1
-                        && words[0] != Word::ZERO
-                        && self
-                            .heap
-                            .get(words[0])
-                            .is_ok_and(|value| self.is_a(&value.class, ty)))
-            })
-            .map(|(_, words)| words.clone())
-            .unwrap_or(default))
+        let Some((kind, words)) = values.get(key).cloned() else {
+            return Ok(default);
+        };
+        if kind == ty {
+            return Ok(words);
+        }
+        if kind.starts_with(['L', '[']) {
+            if ty.starts_with(['L', '[']) {
+                return Ok(
+                    if words[0] != Word::ZERO && self.is_a(&self.heap.get(words[0])?.class, ty) {
+                        words
+                    } else {
+                        default
+                    },
+                );
+            }
+            if words[0] != Word::ZERO
+                && let Some((boxed, words)) = self.boxed_words(words[0])?
+                && boxed == ty
+            {
+                return Ok(words);
+            }
+        } else if ty == "Ljava/io/Serializable;" {
+            bail!("unsupported boxed Bundle primitive {kind}");
+        }
+        Ok(default)
     }
     fn intent_extras(&mut self, intent: Word, create: bool) -> Result<Word> {
         let extras = self

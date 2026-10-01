@@ -26,6 +26,22 @@ them. Ordering and performance do not reproduce a Java hash-table implementation
 List insertion/removal currently copies the bounded backing vector; Java's
 amortized append performance is not reproduced.
 
+## Object-array sorting
+
+`Arrays.sort(Object[])` and its Comparator and from/to range overloads share the
+stable bounded merge sort used by `Collections.sort`. Null Comparator selects
+natural order through actual guest `Comparable.compareTo`; explicit Comparators
+execute their DEX callbacks. Equal elements retain their order. Ranges leave
+prefix/suffix elements untouched; invalid bounds and guest comparison exceptions
+remain catchable. Snapshot references stay rooted across guest GC.
+
+The ceiling is 16,384 array elements. Mutating the array during comparison is
+explicitly unsupported: the guest mutation is retained and sorting fails without
+overwriting it. Primitive-array sorting and parallel sorting remain unsupported.
+`examples/collections/ArraySortContract.java` checks stability, ranges, natural and
+custom ordering and failures; its portable contract also passes on desktop Java.
+Rust checks additionally cover the runtime ceiling, mutation and GC cleanup.
+
 ## Immediate FIFO queues
 
 LinkedBlockingQueue preserves insertion order and duplicates, with catchable
