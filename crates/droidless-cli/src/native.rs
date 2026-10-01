@@ -131,7 +131,7 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
         }
         Ok(())
     }
-    let tree = context.runtime.snapshot()?;
+    let tree = context.runtime.layout_snapshot()?;
     let title = CString::new(format!("{} — DROIDLESS", context.runtime.title.trim()))?;
     // SAFETY: the live host pointer comes only from dl_open and is used on the same thread.
     unsafe {

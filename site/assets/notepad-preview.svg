@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 710" role="img" aria-labelledby="title desc">
-  <title id="title">Notepad editor running in DROIDLESS</title>
-  <desc id="desc">A vector preview based on the headless View tree of the unmodified public Notepad APK at 390 by 844. The note editor is open with No pink entered in its first editable field.</desc>
+  <title id="title">A saved Notepad entry reopened in DROIDLESS</title>
+  <desc id="desc">Illustration based on the public Notepad APK's headless View tree: the title Hello, desktop appears in Notes after a fresh process restart.</desc>
   <defs>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#19211e" flood-opacity=".16"/></filter>
   </defs>
@@ -12,26 +12,24 @@
     <path d="M50 81h420" stroke="#d8d9d1"/>
     <circle cx="70" cy="57" r="5" fill="#dc6b4e"/><circle cx="87" cy="57" r="5" fill="#d9b84c"/><circle cx="104" cy="57" r="5" fill="#6d9c79"/>
     <text x="130" y="61" fill="#626a63" font-family="Chivo,Arial,sans-serif" font-size="12" font-weight="700">DROIDLESS  /  ORIGINAL APK</text>
-    <rect x="50" y="82" width="420" height="570" rx="0" fill="#fafafa"/>
+    <rect x="50" y="82" width="420" height="570" fill="#fafafa"/>
     <rect x="50" y="82" width="420" height="58" fill="#fff"/>
-    <path d="M50 140h420" stroke="#d7d9d4"/>
-    <path d="m76 111-8 0m0 0 7-7m-7 7 7 7" fill="none" stroke="#28332e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="98" y="118" fill="#202722" font-family="Chivo,Arial,sans-serif" font-size="19" font-weight="750">Notepad</text>
+    <text x="78" y="119" fill="#202722" font-family="Chivo,Arial,sans-serif" font-size="21" font-weight="750">Notes</text>
     <circle cx="438" cy="111" r="17" fill="#d9ff63"/>
-    <path d="m431 112 5 5 10-12" fill="none" stroke="#202722" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <text x="78" y="177" fill="#66716a" font-family="Chivo Mono,monospace" font-size="10" letter-spacing="1.2">TITLE</text>
-    <rect x="76" y="190" width="368" height="54" rx="8" fill="#fff" stroke="#dfe2dc"/>
-    <text x="94" y="224" fill="#202722" font-family="Chivo,Arial,sans-serif" font-size="18" font-weight="600">No pink</text>
-    <text x="78" y="278" fill="#66716a" font-family="Chivo Mono,monospace" font-size="10" letter-spacing="1.2">NOTE</text>
-    <rect x="76" y="291" width="368" height="230" rx="8" fill="#fff" stroke="#dfe2dc"/>
-    <path d="M96 333h326M96 369h326M96 405h326M96 441h326M96 477h326" stroke="#edf0ec"/>
-    <path d="M50 583h420" stroke="#d7d9d4"/>
-    <text x="260" y="614" text-anchor="middle" fill="#63746f" font-family="Chivo,Arial,sans-serif" font-size="12">Created moments ago</text>
-    <circle cx="413" cy="614" r="22" fill="#d9ff63"/>
-    <path d="M413 604v20m-10-10h20" stroke="#202722" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M438 102v18m-9-9h18" stroke="#202722" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M50 140h420" stroke="#d7d9d4"/>
+    <text x="76" y="174" fill="#66716a" font-family="Chivo Mono,monospace" font-size="10" letter-spacing="1.2">YOUR NOTES</text>
+    <rect x="70" y="190" width="380" height="112" rx="9" fill="#fff" stroke="#dfe2dc"/>
+    <path d="M70 199a9 9 0 0 1 9-9h5v112h-5a9 9 0 0 1-9-9Z" fill="#d9ff63"/>
+    <text x="103" y="229" fill="#202722" font-family="Chivo,Arial,sans-serif" font-size="18" font-weight="700">Hello, desktop</text>
+    <path d="M103 251h291" stroke="#edf0ec"/>
+    <text x="103" y="278" fill="#63746f" font-family="Chivo,Arial,sans-serif" font-size="12">Saved title · opened again</text>
+    <path d="M70 322h380M70 438h380M70 554h380" stroke="#e4e6df" stroke-dasharray="3 7"/>
+    <circle cx="413" cy="606" r="22" fill="#d9ff63"/>
+    <path d="M413 596v20m-10-10h20" stroke="#202722" stroke-width="2.5" stroke-linecap="round"/>
   </g>
-  <g transform="rotate(-5 387 677)">
-    <rect x="313" y="655" width="160" height="34" rx="4" fill="#17201c"/>
-    <text x="393" y="677" text-anchor="middle" fill="#f5f3e9" font-family="Chivo Mono,monospace" font-size="10" font-weight="700" letter-spacing=".5">✨  EDITOR OPENED</text>
+  <g transform="rotate(-5 386 677)">
+    <rect x="293" y="655" width="190" height="34" rx="4" fill="#17201c"/>
+    <text x="388" y="677" text-anchor="middle" fill="#f5f3e9" font-family="Chivo Mono,monospace" font-size="10" font-weight="700" letter-spacing=".5">✓  FRESH PROCESS</text>
   </g>
 </svg>

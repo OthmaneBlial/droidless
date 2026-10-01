@@ -3,6 +3,7 @@ use crate::{
     vm::Runtime,
 };
 use anyhow::{Context, Result, bail, ensure};
+use droidless_formats::dex::Method;
 
 #[derive(Debug)]
 pub(crate) struct Thrown(pub Word, pub String);
@@ -357,9 +358,14 @@ impl Runtime {
                 let matches = object == Word::ZERO || self.is_a(&self.heap.get(object)?.class, &ty);
                 if op == 0x1f {
                     if !matches {
+                        let actual = if object == Word::ZERO {
+                            "null".into()
+                        } else {
+                            self.heap.get(object)?.class.clone()
+                        };
                         return Err(fault(
                             "Ljava/lang/ClassCastException;",
-                            format!("incompatible cast to {ty}"),
+                            format!("{actual} cannot be cast to {ty}"),
                         ));
                     }
                 } else {
@@ -707,6 +713,44 @@ impl Runtime {
                         vec![self.class_object(primitive)?]
                     } else if self.sdk_field(&field) {
                         vec![Word::from(crate::framework::SDK_INT)]
+                    } else if self.collections_empty_list_field(&field) {
+                        let value = if let Some(value) = self
+                            .statics
+                            .get(&key)
+                            .and_then(|values| values.first())
+                            .copied()
+                        {
+                            value
+                        } else {
+                            let list = self.heap.instance("Ljava/util/ArrayList;")?;
+                            self.invoke(
+                                Method {
+                                    class: "Ljava/util/ArrayList;".into(),
+                                    name: "<init>".into(),
+                                    parameters: vec![],
+                                    returns: "V".into(),
+                                },
+                                vec![list],
+                                true,
+                            )?;
+                            let wrapped = self.invoke(
+                                Method {
+                                    class: "Ljava/util/Collections;".into(),
+                                    name: "unmodifiableList".into(),
+                                    parameters: vec!["Ljava/util/List;".into()],
+                                    returns: "Ljava/util/List;".into(),
+                                },
+                                vec![list],
+                                false,
+                            )?;
+                            let value = wrapped
+                                .first()
+                                .copied()
+                                .context("Collections.unmodifiableList returned no value")?;
+                            self.statics.insert(key.clone(), vec![value]);
+                            value
+                        };
+                        vec![value]
                     } else if self.view_outline_provider_field(&field) {
                         vec![self.view_outline_provider_object(&field)?]
                     } else if self.text_truncate_at_field(&field) {
@@ -732,6 +776,7 @@ impl Runtime {
                 } else {
                     if self.primitive_field(&field).is_some()
                         || self.sdk_field(&field)
+                        || self.collections_empty_list_field(&field)
                         || self.view_outline_provider_field(&field)
                         || self.time_unit_field(&field).is_some()
                     {

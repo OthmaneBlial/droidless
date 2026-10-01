@@ -75,6 +75,7 @@ Its current bridge covers `SQLiteOpenHelper`, `execSQL`, transactions,
 `compileStatement` binding/execution, `ContentValues` updates, `rawQuery`, and
 typed cursor reads. This is a method subset, not general Android database
 compatibility. The unchanged Notepad APK saves an edited title, and its `Note`
-row survives a fresh process. The reopened Notes screen still shows its empty
-state, so persistence is proven while list-row rendering remains incomplete.
+row survives a fresh process. The Notes screen renders the saved title both
+after Back and after a fresh process restart; native-window interaction remains
+unverified.
 `tools/compatibility.py` checks this flow against the pinned upstream APK.

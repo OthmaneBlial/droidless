@@ -17,9 +17,8 @@ The following are objectives, not completed capability claims.
    profile, lifecycle observers and its DBFlow startup now resolve. The Notes list
    and note editor render headlessly; tapping ＋ and entering text changes the
    original APK's editable View tree. Saving the title writes the APK's private
-   Note table, and the row survives a fresh process restart. The reopened list
-   still shows its empty state, so row rendering and native-window input remain
-   next.
+   Note table; returning to Notes renders that title immediately, and a fresh
+   process renders it again. Native-window Notepad interaction remains next.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

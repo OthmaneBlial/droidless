@@ -142,6 +142,7 @@ fn run() -> Result<()> {
         for action in actions {
             match action {
                 Action::Key(text) => {
+                    runtime.layout_snapshot()?;
                     let target = runtime
                         .focused_key_target()?
                         .ok_or_else(|| anyhow::anyhow!("no View key listener"))?;
@@ -162,7 +163,10 @@ fn run() -> Result<()> {
             runtime.poll_messages()?;
         }
         if headless {
-            let tree = runtime.activity.map(|_| runtime.snapshot()).transpose()?;
+            let tree = runtime
+                .activity
+                .map(|_| runtime.layout_snapshot())
+                .transpose()?;
             println!("{}", serde_json::to_string_pretty(&tree)?);
         } else {
             #[cfg(target_os = "macos")]

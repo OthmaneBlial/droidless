@@ -262,6 +262,94 @@ impl Runtime {
             self.height,
         )
     }
+    pub fn layout_snapshot(&mut self) -> Result<Node> {
+        fn collect(node: &Node, parent: (f32, f32), out: &mut Vec<(Word, [i32; 4])>) {
+            let left = (node.rect.x - parent.0) as i32;
+            let top = (node.rect.y - parent.1) as i32;
+            let right = left + node.rect.width as i32;
+            let bottom = top + node.rect.height as i32;
+            out.push((Word::Ref(node.handle), [left, top, right, bottom]));
+            for child in &node.children {
+                collect(child, (node.rect.x, node.rect.y), out);
+            }
+        }
+        let root = self.root.context("no content View")?;
+        let before = ui::layout(&self.heap, root, self.width, self.height)?;
+        let mut views = vec![];
+        collect(&before, (0.0, 0.0), &mut views);
+        let mut recycler_views = vec![];
+        for (view, bounds) in views {
+            let class = self.heap.get(view)?.class.clone();
+            let navigation_menu = self.is_a(
+                &class,
+                "Landroid/support/design/internal/NavigationMenuView;",
+            );
+            if !navigation_menu
+                && (self.is_a(&class, "Landroid/support/v7/widget/RecyclerView;")
+                    || self.is_a(&class, "Landroidx/recyclerview/widget/RecyclerView;"))
+            {
+                recycler_views.push((view, bounds));
+            }
+        }
+        let roots = self.native_roots.len();
+        self.native_roots
+            .extend(recycler_views.iter().map(|(view, _)| *view));
+        let result = (|| -> Result<()> {
+            for (view, [left, top, right, bottom]) in recycler_views {
+                let width = (right - left).max(0);
+                let height = (bottom - top).max(0);
+                let width_spec = Word::from((0x4000_0000u32 | width as u32) as i32);
+                let height_spec = Word::from((0x4000_0000u32 | height as u32) as i32);
+                if self.is_a(
+                    &self.heap.get(view)?.class,
+                    "Landroid/support/v7/widget/RecyclerView;",
+                ) {
+                    // ponytail: snapshots have no animation clock; disable this support library's
+                    // visual-only item animator until ValueAnimator frames are implemented.
+                    self.invoke(
+                        Method {
+                            class: "Landroid/support/v7/widget/RecyclerView;".into(),
+                            name: "setItemAnimator".into(),
+                            parameters: vec!["Landroid/support/v7/widget/eh;".into()],
+                            returns: "V".into(),
+                        },
+                        vec![view, Word::ZERO],
+                        true,
+                    )?;
+                }
+                self.invoke(
+                    Method {
+                        class: "Landroid/view/View;".into(),
+                        name: "measure".into(),
+                        parameters: vec!["I".into(), "I".into()],
+                        returns: "V".into(),
+                    },
+                    vec![view, width_spec, height_spec],
+                    true,
+                )?;
+                self.invoke(
+                    Method {
+                        class: "Landroid/view/View;".into(),
+                        name: "layout".into(),
+                        parameters: vec!["I".into(), "I".into(), "I".into(), "I".into()],
+                        returns: "V".into(),
+                    },
+                    vec![
+                        view,
+                        Word::from(left),
+                        Word::from(top),
+                        Word::from(right),
+                        Word::from(bottom),
+                    ],
+                    true,
+                )?;
+            }
+            Ok(())
+        })();
+        self.native_roots.truncate(roots);
+        result?;
+        ui::layout(&self.heap, root, self.width, self.height)
+    }
     pub fn click(&mut self, handle: usize) -> Result<bool> {
         self.budget = 0;
         let word = Word::Ref(handle);
@@ -320,7 +408,7 @@ impl Runtime {
                 node.children.iter().find_map(|c| find(c, text))
             }
         }
-        let handle = find(&self.snapshot()?, text)
+        let handle = find(&self.layout_snapshot()?, text)
             .with_context(|| format!("no clickable View with text {text:?}"))?;
         self.click(handle)
     }
@@ -350,7 +438,7 @@ impl Runtime {
                 node.children.iter().find_map(find)
             }
         }
-        let handle = find(&self.snapshot()?).context("no editable View")?;
+        let handle = find(&self.layout_snapshot()?).context("no editable View")?;
         self.edit(handle, text)
     }
     pub fn key(&mut self, handle: usize, action: i32, keycode: i32) -> Result<bool> {
@@ -485,6 +573,16 @@ impl Runtime {
                     "leftMargin" | "topMargin" | "rightMargin" | "bottomMargin",
                     "I",
                 ) => Some("Landroid/view/ViewGroup$MarginLayoutParams;"),
+                (class, "width" | "height", "I")
+                    if self.is_a(class, "Landroid/view/ViewGroup$MarginLayoutParams;") =>
+                {
+                    Some("Landroid/view/ViewGroup$LayoutParams;")
+                }
+                (class, "leftMargin" | "topMargin" | "rightMargin" | "bottomMargin", "I")
+                    if self.is_a(class, "Landroid/view/ViewGroup$MarginLayoutParams;") =>
+                {
+                    Some("Landroid/view/ViewGroup$MarginLayoutParams;")
+                }
                 _ => None,
             };
             if let Some(owner) = owner {
@@ -501,6 +599,8 @@ impl Runtime {
             Some("Ljava/lang/Class;")
         } else if self.sdk_field(field) {
             Some("I")
+        } else if self.collections_empty_list_field(field) {
+            Some("Ljava/util/List;")
         } else if self.view_outline_provider_field(field) {
             Some("Landroid/view/ViewOutlineProvider;")
         } else if self.text_truncate_at_field(field) {

@@ -2,14 +2,16 @@
 
 ## Unreleased
 
-- Added Android spannable text, bounded SAX parsing, interface reflection,
-  Java array binary search and SQLite updates to the unmodified Notepad path. It
-  now saves a title into its private SQLite database, and the row survives a
-  fresh DROIDLESS process. The reopened Notes screen still shows its empty state;
-  list-row rendering and native-window interaction remain unfinished.
-- Added ContentValues text/null storage, bundled ResourceBundle lookup, locale,
-  regex replacement and view-listener retention required by the real APK path.
-  GitHub Actions remain disabled; validation stays local.
+- The unmodified public Notepad APK now renders a saved title in the reopened
+  Notes list after Back and after a fresh DROIDLESS process. Local verification
+  also keeps the native-window boundary explicit; GitHub Actions stay disabled.
+- At the previous checkpoint, the unmodified public Notepad APK opened its
+  editor and saved the edited title to SQLite; the row survived a fresh
+  DROIDLESS process, but the reopened Notes list still showed its empty state.
+  Added Android text/SAX support,
+  reflection interface lookup, Java array binary search and SQLite updates for
+  this save path. Local CI passes 66 Rust tests, Clippy, release build and 4,096
+  seeded parser mutations.
 - Fixed read-only Build.VERSION.SDK_INT = 21, independent of APK/host metadata.
   Compiled checks cover stable reads, inherited aliases and native final-field
   faults. This branch profile does not imply full API-21 compatibility.
@@ -20,9 +22,10 @@
   navigation/Back/close, retention/release and callback fault cleanup. Native
   navigation/Back/close executes 33 observer calls and exits with status 0.
   Saved-state/pre/post callbacks and missing-super enforcement remain unsupported.
-- At an earlier Notepad checkpoint, Stetho stopped at FileInputStream while
-  reading /proc/self/cmdline. The latest source now opens its Notes list and editor;
-  save/restart and native-window input still need verification.
+- At an earlier checkpoint, unmodified Notepad passed SDK checks and observer
+  registration, then reached FileInputStream while Stetho read /proc/self/cmdline.
+  That checkpoint had no Activity/UI workflow; it passed 41 Rust tests and
+  4,096 mutations.
 
 - Bounded CopyOnWriteArrayList operations and snapshot iterators: old values
   survive live mutations, GC and serial guest worker updates; iterator removal

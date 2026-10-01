@@ -562,32 +562,31 @@ mismatch; the APK is neither modified nor redistributed.
 The original APK now completes Application startup and renders its Notes list,
 including the empty state and **＋** button. Clicking **＋** runs the APK's own
 listener/navigation code and builds `NoteActivity` with two editable Views and
-the `Notepad` / `Created moments ago` labels. `--input "No pink"` updates the
+the `Notepad` / `Created moments ago` labels. `--input "Hello, desktop"` updates the
 first editable View in the emitted tree. This CLI helper writes the View model
 directly; it does not synthesize Android keyboard events or prove the app's save
 listener. The note editor can be replayed with:
 
 ```sh
 target/release/droidless run --headless --ephemeral --size 390x844 \
-  --click "＋" --input "No pink" artifacts/apks/notepad-v1.0.0.apk
+  --click "＋" --input "Hello, desktop" artifacts/apks/notepad-v1.0.0.apk
 ```
 
 The tree comes from the original APK and runs its Activity/DBFlow initialization.
 `tools/compatibility.py` also opens the editor, changes the title, dispatches
 Back through the APK, and confirms the resulting `Note` row in its private
-SQLite database. A second DROIDLESS process opens the same app-data directory;
-the row remains present after that restart. The fresh process reads the row's
-columns, but the rendered Notes screen still shows its empty-state text. Note
-list refresh/rendering is therefore incomplete even though SQLite save/restart
-is verified. The probe checks database state, not native keyboard events.
+SQLite database. Returning to Notes renders the saved title immediately. A
+second DROIDLESS process opens the same app-data directory and renders that
+title again. The probe checks database state and the headless View tree, not
+native keyboard events.
 
 `site/assets/notepad-preview.svg` is a vector illustration of the editor, not a
 captured native window. AppKit text interaction, visual fidelity and an
 independent Android reference run remain unverified. The 50% everyday-app
 checkpoint remains ahead.
 
-`sh tools/ci.sh` passes locally with 66 Rust tests, warning-free Clippy, the
+`sh tools/ci.sh` passes locally with the current Rust test suite, warning-free Clippy, the
 optimized release build and 4,096 seeded parser mutations. `python3 tools/compatibility.py`
 passes 17 calculator scenarios plus the Notepad Notes list/editor and SQLite
-save/restart probes. The saved row is retained after restart; the reopened list
-still shows its empty state. No GitHub Actions run was used.
+save/restart probes. The saved row is retained and its title is rendered after
+restart. No GitHub Actions run was used.

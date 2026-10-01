@@ -128,6 +128,31 @@ pub fn layout(heap: &Heap, root: Word, width: f32, height: f32) -> Result<Node> 
         &mut vec![],
     )
 }
+fn laid_out_rect(heap: &Heap, word: Word, parent: Rect) -> Result<Option<Rect>> {
+    let fields = &heap.get(word)?.fields;
+    if !fields
+        .get("droidless:view:laid-out")
+        .and_then(|values| values.first())
+        .is_some_and(|value| value.truth())
+    {
+        return Ok(None);
+    }
+    let edge = |name: &str| -> Result<f32> {
+        Ok(fields
+            .get(&format!("droidless:view:{name}"))
+            .and_then(|values| values.first())
+            .copied()
+            .unwrap_or(Word::ZERO)
+            .int()? as f32)
+    };
+    let (left, top, right, bottom) = (edge("left")?, edge("top")?, edge("right")?, edge("bottom")?);
+    Ok(Some(Rect {
+        x: parent.x + left,
+        y: parent.y + top,
+        width: (right - left).max(0.0),
+        height: (bottom - top).max(0.0),
+    }))
+}
 fn build(heap: &Heap, word: Word, rect: Rect, path: &mut Vec<usize>) -> Result<Node> {
     let handle = word.reference()?;
     ensure!(
@@ -154,17 +179,13 @@ fn build(heap: &Heap, word: Word, rect: Rect, path: &mut Vec<usize>) -> Result<N
             if c.visible == 8 {
                 continue;
             }
-            children.push(build(
-                heap,
-                *child,
-                Rect {
-                    x: available.x + c.margins[0],
-                    y: available.y + c.margins[1],
-                    width: dimension(heap, *child, true, available.width)?,
-                    height: dimension(heap, *child, false, available.height)?,
-                },
-                path,
-            )?);
+            let child_rect = laid_out_rect(heap, *child, rect)?.unwrap_or(Rect {
+                x: available.x + c.margins[0],
+                y: available.y + c.margins[1],
+                width: dimension(heap, *child, true, available.width)?,
+                height: dimension(heap, *child, false, available.height)?,
+            });
+            children.push(build(heap, *child, child_rect, path)?);
         }
     } else {
         let vertical = view.orientation == 1;
@@ -224,17 +245,13 @@ fn build(heap: &Heap, word: Word, rect: Rect, path: &mut Vec<usize>) -> Result<N
                 cursor += length + c.margins[2];
                 r
             };
-            children.push(build(
-                heap,
-                *child,
-                Rect {
-                    x,
-                    y,
-                    width: w,
-                    height: h,
-                },
-                path,
-            )?);
+            let child_rect = laid_out_rect(heap, *child, rect)?.unwrap_or(Rect {
+                x,
+                y,
+                width: w,
+                height: h,
+            });
+            children.push(build(heap, *child, child_rect, path)?);
         }
     }
     path.pop();
@@ -245,7 +262,7 @@ fn build(heap: &Heap, word: Word, rect: Rect, path: &mut Vec<usize>) -> Result<N
         children,
     })
 }
-fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Result<f32> {
+pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Result<f32> {
     fn measure(
         heap: &Heap,
         word: Word,

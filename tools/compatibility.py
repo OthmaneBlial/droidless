@@ -85,13 +85,13 @@ if "Notes" not in home_labels or "You have no notes!" not in home_labels or "＋
 print("PASS Notepad: public Notes list and empty state rendered")
 process = subprocess.run([
     str(args.binary), "run", "--headless", "--ephemeral", "--size", "390x844",
-    "--click", "＋", "--input", "No pink", str(notepad),
+    "--click", "＋", "--input", "Hello, desktop", str(notepad),
 ], text=True, capture_output=True, check=True, timeout=120)
 tree = json.loads(process.stdout)
 nodes = list(flatten(tree))
 editable = [node for node in nodes if node["view"]["kind"] == "EditText"]
 labels = [node["view"]["text"] for node in nodes]
-if len(editable) != 2 or editable[0]["view"]["text"] != "No pink":
+if len(editable) != 2 or editable[0]["view"]["text"] != "Hello, desktop":
     raise SystemExit("Notepad did not expose both editor fields and the entered title")
 if "Notepad" not in labels or "Created moments ago" not in labels:
     raise SystemExit("Notepad editor screen labels were not rendered")
@@ -104,11 +104,15 @@ report = {
 }
 probe_title = "Droidless persistence probe"
 with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
-    subprocess.run([
+    saved_process = subprocess.run([
         str(args.binary), "run", "--headless", "--size", "390x844",
         "--data-dir", app_data, "--click", "＋", "--input", probe_title,
         "--back", str(notepad),
     ], text=True, capture_output=True, check=True, timeout=120)
+    saved_tree = json.loads(saved_process.stdout)
+    saved_labels = [node["view"]["text"] for node in flatten(saved_tree)]
+    if probe_title not in saved_labels:
+        raise SystemExit("Notepad did not render its saved title after returning to Notes")
     database = Path(app_data) / "ir.cafebazaar.notepad/databases/AppDatabase.db"
     with sqlite3.connect(database) as connection:
         saved = connection.execute(
@@ -125,6 +129,8 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
     restarted_labels = [node["view"]["text"] for node in flatten(restarted_tree)]
     if "Notes" not in restarted_labels:
         raise SystemExit("Notepad did not return to its Notes screen after restart")
+    if probe_title not in restarted_labels:
+        raise SystemExit("Notepad did not render its saved title in the reopened Notes list")
     with sqlite3.connect(database) as connection:
         retained = connection.execute(
             "SELECT title, body FROM Note WHERE id = ?", (saved[0][0],)
@@ -133,11 +139,8 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
         raise SystemExit("Notepad did not retain the note row after a fresh process")
 
 report["note_row_survives_fresh_process"] = True
-report["note_title_visible_in_reopened_list"] = probe_title in restarted_labels
+report["note_title_visible_after_save"] = True
+report["note_title_visible_in_reopened_list"] = True
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
-print("PASS Notepad: saved title survives a fresh process restart in SQLite")
-if report["note_title_visible_in_reopened_list"]:
-    print("PASS Notepad: saved title appears in the reopened Notes list")
-else:
-    print("LIMITATION Notepad: reopened Notes list still shows its empty state")
+print("PASS Notepad: saved title appears immediately, survives restart and returns to Notes")

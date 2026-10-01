@@ -33,24 +33,23 @@ our authored test APKs only; they do not participate in execution.
 ## 📓 A public notes APK, opened in DROIDLESS
 
 The unmodified [Notepad 1.0.0 release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0)
-now reaches its Notes screen and opens the note editor. A headless run taps **＋**,
-enters `No pink`, and confirms the title in the real APK's editable View tree.
+opens its Notes screen and editor. A headless run taps **＋**, enters
+`Hello, desktop`, and confirms the text in the APK's editable View tree.
 
 <div align="center">
-<img src="site/assets/notepad-preview.svg" alt="Illustrated headless View-tree preview of the public Notepad APK in DROIDLESS, with its editor open and No pink entered." width="280">
+<img src="site/assets/notepad-preview.svg" alt="Illustrated headless View-tree preview of the public Notepad APK in DROIDLESS, with its editor open and Hello, desktop entered." width="280">
 <p><sub>Illustrated from the 390 × 844 View snapshot; this is not a native-window capture.</sub></p>
 </div>
 
 The original APK's SHA-256 is checked by `sh tools/fetch-notepad.sh`; DROIDLESS
-does not patch or redistribute it. A typed title now survives saving and a fresh
-process restart in the app's SQLite database. The reopened Notes screen still
-shows its empty state, so list-row rendering and native-window input remain
-unfinished. [Exact evidence and limits](docs/verification.md#current-source-public-notepad-editor).
+does not patch or redistribute it. After Back, the Notes list shows the saved
+title; a fresh process reopens with that title still visible. Native-window
+interaction and visual fidelity remain unverified. [Exact evidence and limits](docs/verification.md#current-source-public-notepad-editor).
 
 ```sh
 sh tools/fetch-notepad.sh
 target/release/droidless run --headless --ephemeral --size 390x844 \
-  --click "＋" --input "No pink" artifacts/apks/notepad-v1.0.0.apk
+  --click "＋" --input "Hello, desktop" artifacts/apks/notepad-v1.0.0.apk
 ```
 
 ## 🧮 The native calculator milestone
@@ -79,7 +78,7 @@ cargo build --release --locked
 sh tools/fetch-notepad.sh
 # Notes → editor → typed title 👋
 target/release/droidless run --headless --ephemeral --size 390x844 --click "＋" \
-  --input "No pink" artifacts/apks/notepad-v1.0.0.apk
+  --input "Hello, desktop" artifacts/apks/notepad-v1.0.0.apk
 ```
 
 The [v0.1.0 release](https://github.com/OthmaneBlial/droidless/releases/tag/v0.1.0)
@@ -142,7 +141,7 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🧠 DEX 035–040 | Headers, digests, IDs, classes, code and try handlers; annotations/debug partial |
 | ⚡ Own register interpreter | Arithmetic, wide values, branches, arrays, fields, dispatch, managed call continuations and Java throw/catch |
 | 🧹 Managed objects | Inheritance, strings, sticky class initialization and handle-based mark/sweep GC |
-| 🪟 Native widgets | TextView, Button, EditText, LinearLayout and FrameLayout; approximate layout/style |
+| 🪟 Native widgets | TextView, Button, EditText, LinearLayout and FrameLayout; a targeted support-RecyclerView saved-row path; approximate layout/style |
 | 📝 Rich text/XML | Android spannable text and a bounded SAX parser subset exercised by an unmodified APK |
 | 🖱️ Input | Native calculator mouse callbacks, Counter text/key callbacks and clean close |
 | 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish and native Application lifecycle observers — current source |
@@ -152,7 +151,7 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🌍 API profile | Fixed read-only Build.VERSION.SDK_INT = 21 for app version checks; partial framework support — current source |
 | ⏱️ Scheduled callbacks | Main Handler/Looper/Message queue, delayed APK callbacks, cancellation and GC retention; native authored timer verified — current source |
 | 🧵 Guest workers | Deferred DEX execution on a serial shared-heap host executor; queue/monitor waits/interrupt pass headless checks; main Handler results also verified natively — current source |
-| 🛠️ Next up | Render saved notes in the reopened public Notepad list and verify native-window input; then follow the next real app failure |
+| 🛠️ Next up | Verify native-window Notepad interaction, then follow the next real app failure |
 
 The published **v0.1.0 archive predates navigation, persistence, collections, scheduling and the new calculator demo**. Current source capability
 is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
@@ -171,7 +170,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, snapshot iteration across mutation/GC/worker writes, guest equality, read-only views and limits; same normal list, snapshot, map-copy and immediate queue contracts pass on desktop Java |
 | Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, primitive TYPE identities, guest faults and inherited fields; pure Java contracts pass on desktop Java. SDK profile field checks are compiled DEX evidence |
 | Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native delayed timer/cancellation/finish and worker-to-main results; headless ordering, Message overrides, worker waits/interrupt, GC, errors and limits. [Exact scheduling scope](docs/threading.md) |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Notes screen/editor, typed title save and SQLite retention across a fresh process verified; reopened list still shows empty state; native-window interaction unverified |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Notes screen/editor, typed title save, SQLite retention and title rendering after a fresh process verified; native-window interaction unverified |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).

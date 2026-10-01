@@ -2,9 +2,13 @@
 
 ## Unreleased
 
-- The unmodified public Notepad APK now opens its editor and saves the edited
-  title to SQLite; the row survives a fresh DROIDLESS process. The reopened
-  Notes list still shows its empty state. Added Android text/SAX support,
+- The unmodified public Notepad APK now renders a saved title in the reopened
+  Notes list after Back and after a fresh DROIDLESS process. Local verification
+  also keeps the native-window boundary explicit; GitHub Actions stay disabled.
+- At the previous checkpoint, the unmodified public Notepad APK opened its
+  editor and saved the edited title to SQLite; the row survived a fresh
+  DROIDLESS process, but the reopened Notes list still showed its empty state.
+  Added Android text/SAX support,
   reflection interface lookup, Java array binary search and SQLite updates for
   this save path. Local CI passes 66 Rust tests, Clippy, release build and 4,096
   seeded parser mutations.

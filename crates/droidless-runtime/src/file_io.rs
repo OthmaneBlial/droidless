@@ -183,6 +183,54 @@ impl Runtime {
                 *values = names;
                 Ok(Some(vec![array]))
             }
+            ("Ljava/lang/String;", "<init>([CII)V") => {
+                ensure!(
+                    self.heap.get(receiver)?.class == "Ljava/lang/String;",
+                    "invalid String receiver"
+                );
+                let array = argument(1)?;
+                let object = self.heap.get(array)?;
+                let Data::Array { element, values } = &object.data else {
+                    return Err(fault(
+                        "Ljava/lang/IllegalArgumentException;",
+                        "String source must be a char array",
+                    ));
+                };
+                ensure!(
+                    element == "C",
+                    fault(
+                        "Ljava/lang/IllegalArgumentException;",
+                        "String source must be a char array",
+                    )
+                );
+                let offset = usize::try_from(argument(2)?.int()?).map_err(|_| {
+                    fault(
+                        "Ljava/lang/IndexOutOfBoundsException;",
+                        "negative char-array offset",
+                    )
+                })?;
+                let length = usize::try_from(argument(3)?.int()?).map_err(|_| {
+                    fault(
+                        "Ljava/lang/IndexOutOfBoundsException;",
+                        "negative char count",
+                    )
+                })?;
+                ensure!(
+                    offset <= values.len() && length <= values.len() - offset,
+                    fault(
+                        "Ljava/lang/IndexOutOfBoundsException;",
+                        "char-array range is out of bounds",
+                    )
+                );
+                let units = values[offset..offset + length]
+                    .iter()
+                    .map(|value| value[0].int().map(|unit| unit as u16))
+                    .collect::<Result<Vec<_>>>()?;
+                let text = String::from_utf16_lossy(&units);
+                ensure!(text.len() <= 1_048_576, "guest string exceeds 1 MiB");
+                self.heap.get_mut(receiver)?.data = Data::String(text);
+                Ok(Some(vec![]))
+            }
             ("Ljava/lang/String;", "<init>([BII)V") => {
                 ensure!(
                     self.heap.get(receiver)?.class == "Ljava/lang/String;",

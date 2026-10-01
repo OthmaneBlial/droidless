@@ -143,13 +143,17 @@
       "status": "headless-interaction-subset",
       "native_ui": false,
       "native_mouse_verified": false,
-      "headless_viewport": [390, 844],
-      "headless_scenarios": 1,
+      "headless_viewport": [
+        390,
+        844
+      ],
+      "headless_scenarios": 3,
       "headless_note_editor_verified": true,
       "headless_text_input_verified": true,
-      "save_restart_verified": false,
-      "notes": "Original release APK unmodified. Headless launch shows Notes; tapping ＋ opens NoteActivity with two editable fields and the Created moments ago label. Typing No pink updates the first field in the emitted View tree. Save/restart, native AppKit input, worker flow and visual fidelity remain unverified. Not redistributed.",
-      "release_tag": "v1.0.0"
+      "save_restart_verified": true,
+      "notes": "Original release APK unmodified. Headless launch renders Notes and the editor; typing Hello, desktop updates the View tree. The app save action persists the title in SQLite; Notes renders it after Back and again after a fresh process. Native AppKit interaction, worker flow and visual fidelity remain unverified. Not redistributed.",
+      "release_tag": "v1.0.0",
+      "saved_title_visible_after_restart": true
     }
   ]
 }
