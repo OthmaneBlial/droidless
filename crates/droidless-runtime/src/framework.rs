@@ -2698,7 +2698,7 @@ impl Runtime {
                     let b=values(other)?;
                     let fa=f32::from_bits(a[6] as u32);
                     let fb=f32::from_bits(b[6] as u32);
-                    a[..6]==b[..6] && !(fa<fb || fa>fb)
+                    a[..6]==b[..6] && matches!(fa.partial_cmp(&fb), None | Some(std::cmp::Ordering::Equal))
                 };
                 // ponytail: compare the seven profile fields; locale and full qualifier configuration remain unsupported.
                 result.push(Word::from(i32::from(equal)));
