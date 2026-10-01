@@ -65,6 +65,17 @@ public class MainActivity extends Activity {
     static class EqualToken {
         public boolean equals(Object other) { return other instanceof EqualToken; }
     }
+    static class LayoutAnimation extends TextView {
+        boolean started;
+        LayoutAnimation(Activity context) { super(context); setText("Layout animation"); }
+        protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+            super.onLayout(changed, left, top, right, bottom);
+            if (!started) {
+                started = true;
+                animate().translationX(100f).alpha(0f).setDuration(100).setInterpolator(null);
+            }
+        }
+    }
     public void startUnsafeWorker() {
         WorkerContract.prepare(4, new Runnable() { public void run() { label.setText("Wrong worker UI"); } });
     }
@@ -85,6 +96,10 @@ public class MainActivity extends Activity {
         start.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
             timerHandler.removeCallbacks(timer); ticks = 0; label.setText("Waiting for timer"); timerHandler.postDelayed(timer,1500);
         }}); layout.addView(start);
+        Button animation = new Button(this); animation.setText("Start layout animation");
+        animation.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            setContentView(new LayoutAnimation(MainActivity.this));
+        }}); layout.addView(animation);
         Button cancel = new Button(this); cancel.setText("Cancel timer");
         cancel.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
             timerHandler.removeCallbacks(timer); label.setText("Timer cancelled");

@@ -208,6 +208,11 @@ fn run() -> Result<()> {
                 }
                 Action::Input(index, text) => runtime.input_at(index, &text)?,
                 Action::Advance(milliseconds) => {
+                    if runtime.activity.is_some() {
+                        // Establish this frame's layout and animation starts before moving its clock.
+                        runtime.layout_snapshot()?;
+                        runtime.poll_messages()?;
+                    }
                     runtime.advance_time(milliseconds)?;
                 }
             }
