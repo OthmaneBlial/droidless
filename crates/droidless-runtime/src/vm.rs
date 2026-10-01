@@ -1355,6 +1355,7 @@ impl Runtime {
         if let Some(cause) = cause {
             fields.insert("cause".into(), vec![cause]);
         }
+        self.capture_throwable_trace(object)?;
         self.throw_reference(object)
     }
     pub(crate) fn new_instance(&mut self, class: &str) -> Result<Word> {

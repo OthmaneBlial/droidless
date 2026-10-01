@@ -485,6 +485,9 @@ impl Runtime {
         Ok(object)
     }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+        if let Some(result) = self.throwable_native(method, args)? {
+            return Ok(Some(result));
+        }
         if let Some(result) = self.document_native(method, args)? {
             return Ok(Some(result));
         }
@@ -939,56 +942,8 @@ impl Runtime {
                 self.heap.get(receiver)?;
                 result.push(Word::ZERO);
             }
-            (class, "<init>()V") if exception_parent(class).is_some() => {
-                self.heap.get(receiver)?;
-            }
             ("Landroid/net/ConnectivityManager$NetworkCallback;", "<init>()V") => {
                 self.heap.get(receiver)?;
-            }
-            (class, "<init>(Ljava/lang/String;)V") if exception_parent(class).is_some() => {
-                self.heap
-                    .get_mut(receiver)?
-                    .fields
-                    .insert("message".into(), vec![arg(1)?]);
-            }
-            ("Ljava/lang/Throwable;", "getMessage()Ljava/lang/String;") => {
-                result = self
-                    .heap
-                    .get(receiver)?
-                    .fields
-                    .get("message")
-                    .cloned()
-                    .unwrap_or_else(|| vec![Word::ZERO]);
-            }
-            ("Ljava/lang/Throwable;", "getCause()Ljava/lang/Throwable;")
-            | ("Ljava/lang/ExceptionInInitializerError;", "getException()Ljava/lang/Throwable;") => {
-                result = self
-                    .heap
-                    .get(receiver)?
-                    .fields
-                    .get("cause")
-                    .cloned()
-                    .unwrap_or_else(|| vec![Word::ZERO]);
-            }
-            ("Ljava/lang/Throwable;", "toString()Ljava/lang/String;") => {
-                let object = self.heap.get(receiver)?;
-                let class = object
-                    .class
-                    .trim_start_matches('L')
-                    .trim_end_matches(';')
-                    .replace('/', ".");
-                let message = object
-                    .fields
-                    .get("message")
-                    .and_then(|v| v.first())
-                    .copied()
-                    .unwrap_or(Word::ZERO);
-                let text = if message == Word::ZERO {
-                    class
-                } else {
-                    format!("{class}: {}", self.heap.text(message)?)
-                };
-                result.push(self.heap.string(text)?);
             }
             ("Ljava/lang/ref/Reference;" | "Ljava/lang/ref/WeakReference;", "<init>(Ljava/lang/Object;)V")
             | ("Ljava/lang/ref/Reference;" | "Ljava/lang/ref/WeakReference;", "<init>(Ljava/lang/Object;Ljava/lang/ref/ReferenceQueue;)V") => {
