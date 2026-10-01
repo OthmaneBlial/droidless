@@ -31,6 +31,7 @@ public class MainActivity extends Activity {
     LinkedBlockingQueue<String> futureInput;
     boolean looperRunning;
     Object looperOwner;
+    LayoutAnimation currentAnimation;
     final Runnable timer = new Runnable() {
         public void run() {
             if (Thread.currentThread() != Looper.getMainLooper().getThread()) throw new IllegalStateException("wrong timer thread");
@@ -71,6 +72,7 @@ public class MainActivity extends Activity {
     }
     static class LayoutAnimation extends TextView {
         boolean started;
+        boolean advanced;
         LayoutAnimation(Activity context) { super(context); setText("Layout animation"); }
         protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
             super.onLayout(changed, left, top, right, bottom);
@@ -79,6 +81,14 @@ public class MainActivity extends Activity {
                 animate().translationX(100f).alpha(0f).setDuration(100).setInterpolator(null);
             }
         }
+        @Override public void computeScroll() {
+            super.computeScroll();
+            advanced = getTranslationX() >= 50f;
+        }
+    }
+    @Override public void onBackPressed() {
+        if (currentAnimation == null) { super.onBackPressed(); return; }
+        currentAnimation.setText(currentAnimation.advanced ? "Advanced frame observed" : "Stale frame observed");
     }
     public void startUnsafeWorker() {
         WorkerContract.prepare(4, new Runnable() { public void run() { label.setText("Wrong worker UI"); } });
@@ -102,7 +112,8 @@ public class MainActivity extends Activity {
         }}); layout.addView(start);
         Button animation = new Button(this); animation.setText("Start layout animation");
         animation.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
-            setContentView(new LayoutAnimation(MainActivity.this));
+            currentAnimation = new LayoutAnimation(MainActivity.this);
+            setContentView(currentAnimation);
         }}); layout.addView(animation);
         Button cancel = new Button(this); cancel.setText("Cancel timer");
         cancel.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {

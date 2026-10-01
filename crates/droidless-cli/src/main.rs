@@ -214,6 +214,9 @@ fn run() -> Result<()> {
                         runtime.poll_messages()?;
                     }
                     runtime.advance_time(milliseconds)?;
+                    if runtime.activity.is_some() {
+                        runtime.layout_snapshot()?;
+                    }
                 }
             }
             runtime.poll_messages()?;
