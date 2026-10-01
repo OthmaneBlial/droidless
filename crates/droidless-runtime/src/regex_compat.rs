@@ -35,17 +35,7 @@ impl Runtime {
                     source.len() <= MAX_INPUT_BYTES && pattern.len() <= MAX_PATTERN_BYTES,
                     "String.replaceAll input exceeds runtime limit"
                 );
-                let regex = RegexBuilder::new(pattern)
-                    .size_limit(MAX_REGEX_SIZE)
-                    .dfa_size_limit(MAX_REGEX_SIZE)
-                    .build()
-                    .map_err(|error| {
-                        fault(
-                            "Ljava/util/regex/PatternSyntaxException;",
-                            error.to_string(),
-                        )
-                    })?;
-                let replaced = regex.replace_all(&source, replacement).into_owned();
+                let replaced = replace_all(pattern, &source, replacement)?;
                 Ok(Some(vec![self.heap.string(replaced)?]))
             }
             (
@@ -217,6 +207,500 @@ impl Runtime {
     }
 }
 
+fn replace_all(pattern: &str, source: &str, replacement: &str) -> Result<String> {
+    let Some((open, close)) = terminal_positive_lookahead(pattern)? else {
+        let regex = RegexBuilder::new(pattern)
+            .size_limit(MAX_REGEX_SIZE)
+            .dfa_size_limit(MAX_REGEX_SIZE)
+            .build()
+            .map_err(|error| {
+                fault(
+                    "Ljava/util/regex/PatternSyntaxException;",
+                    error.to_string(),
+                )
+            })?;
+        return Ok(regex.replace_all(source, replacement).into_owned());
+    };
+
+    if let Some((group_open, group_close, branches)) = lookahead_alternation(pattern, open, close) {
+        if replacement.is_empty() {
+            return replace_all_empty_lookahead_alternation(
+                pattern,
+                source,
+                open,
+                close,
+                group_open,
+                group_close,
+                &branches,
+            );
+        }
+        return Err(fault(
+            "Ljava/util/regex/PatternSyntaxException;",
+            "String.replaceAll look-ahead alternations require an empty replacement",
+        ));
+    }
+
+    let consumed = format!("{}{}", &pattern[..open], &pattern[close + 1..]);
+    let flags_len = leading_flag_bytes(&consumed);
+    let assertion = &pattern[open + 3..close];
+    let actual_name = unique_group_name(pattern, "actual");
+    let assertion_name = unique_group_name(pattern, "assertion");
+    let combined = format!(
+        "{}(?P<{actual_name}>(?:{}))(?P<{assertion_name}>(?:{assertion}))",
+        &consumed[..flags_len],
+        &consumed[flags_len..]
+    );
+    let regex = RegexBuilder::new(&combined)
+        .size_limit(MAX_REGEX_SIZE)
+        .dfa_size_limit(MAX_REGEX_SIZE)
+        .build()
+        .map_err(|error| {
+            fault(
+                "Ljava/util/regex/PatternSyntaxException;",
+                error.to_string(),
+            )
+        })?;
+    let original_groups = regex.captures_len().saturating_sub(3);
+    let mut output = String::with_capacity(source.len());
+    let (mut search, mut copied) = (0, 0);
+    while search <= source.len() {
+        let Some(captures) = regex.captures_at(source, search) else {
+            break;
+        };
+        let actual = captures
+            .name(&actual_name)
+            .context("look-ahead match lost its consumed range")?;
+        ensure!(actual.start() >= copied, "look-ahead regex moved backwards");
+        append_limited(&mut output, &source[copied..actual.start()])?;
+        expand_replacement(
+            &mut output,
+            replacement,
+            source,
+            &captures,
+            &actual_name,
+            &assertion_name,
+            original_groups,
+        )?;
+        copied = actual.end();
+        if actual.end() > actual.start() {
+            search = actual.end();
+        } else if let Some(character) = source[actual.end()..].chars().next() {
+            search = actual.end() + character.len_utf8();
+        } else {
+            search = source.len() + 1;
+        }
+    }
+    append_limited(&mut output, &source[copied..])?;
+    Ok(output)
+}
+
+fn lookahead_alternation(
+    pattern: &str,
+    look_open: usize,
+    look_close: usize,
+) -> Option<(usize, usize, Vec<usize>)> {
+    let bytes = pattern.as_bytes();
+    let (mut index, mut escaped, mut in_class) = (0, false, false);
+    let mut groups: Vec<(usize, Vec<usize>)> = Vec::new();
+    let mut result = None;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if in_class {
+            if byte == b']' {
+                in_class = false;
+            }
+        } else if byte == b'[' {
+            in_class = true;
+        } else if bytes[index..].starts_with(b"(?=") {
+            index = matching_paren(bytes, index).ok()?;
+        } else if byte == b'(' {
+            groups.push((index, Vec::new()));
+        } else if byte == b'|' {
+            groups.last_mut()?.1.push(index);
+        } else if byte == b')' {
+            let (open, pipes) = groups.pop()?;
+            if result.is_none() && open < look_open && look_close < index && !pipes.is_empty() {
+                result = Some((open, index, pipes));
+            }
+        }
+        index += 1;
+    }
+    result
+}
+
+fn replace_all_empty_lookahead_alternation(
+    pattern: &str,
+    source: &str,
+    look_open: usize,
+    look_close: usize,
+    group_open: usize,
+    group_close: usize,
+    pipes: &[usize],
+) -> Result<String> {
+    let starts = std::iter::once(group_open + 1)
+        .chain(pipes.iter().map(|pipe| pipe + 1))
+        .collect::<Vec<_>>();
+    let ends = pipes
+        .iter()
+        .copied()
+        .chain(std::iter::once(group_close))
+        .collect::<Vec<_>>();
+    ensure!(
+        starts.len() == ends.len(),
+        "invalid regular-expression alternation"
+    );
+
+    let assertion = &pattern[look_open + 3..look_close];
+    ensure!(
+        !has_capture_group(assertion) && !pattern.contains("\\1") && !pattern.contains("\\k<"),
+        fault(
+            "Ljava/util/regex/PatternSyntaxException;",
+            "capturing look-ahead or backreferences are unsupported in alternations",
+        )
+    );
+    let target = starts
+        .iter()
+        .zip(&ends)
+        .position(|(start, end)| *start <= look_open && look_close < *end)
+        .context("look-ahead is outside its alternation")?;
+    ensure!(
+        ends[target] == look_close + 1,
+        fault(
+            "Ljava/util/regex/PatternSyntaxException;",
+            "String.replaceAll supports look-ahead at the end of an alternation branch only",
+        )
+    );
+
+    let mut names = Vec::with_capacity(starts.len());
+    let mut alternatives = String::new();
+    for branch in 0..starts.len() {
+        if branch != 0 {
+            alternatives.push('|');
+        }
+        let name = unique_group_name(pattern, &format!("branch_{branch}"));
+        let branch_end = if branch == target {
+            look_open
+        } else {
+            ends[branch]
+        };
+        names.push(name.clone());
+        alternatives.push_str(&format!(
+            "(?P<{name}>(?:{}))",
+            &pattern[starts[branch]..branch_end]
+        ));
+        if branch == target {
+            alternatives.push_str("(?:");
+            alternatives.push_str(assertion);
+            alternatives.push(')');
+        }
+    }
+    let combined = format!(
+        "{}(?:{}){}",
+        &pattern[..group_open],
+        alternatives,
+        &pattern[group_close + 1..]
+    );
+    let regex = RegexBuilder::new(&combined)
+        .size_limit(MAX_REGEX_SIZE)
+        .dfa_size_limit(MAX_REGEX_SIZE)
+        .build()
+        .map_err(|error| {
+            fault(
+                "Ljava/util/regex/PatternSyntaxException;",
+                error.to_string(),
+            )
+        })?;
+    let mut output = String::with_capacity(source.len());
+    let (mut search, mut copied) = (0, 0);
+    while search <= source.len() {
+        let Some(captures) = regex.captures_at(source, search) else {
+            break;
+        };
+        let actual = names
+            .iter()
+            .find_map(|name| captures.name(name))
+            .context("look-ahead alternation lost its consumed range")?;
+        append_limited(&mut output, &source[copied..actual.start()])?;
+        copied = actual.end();
+        if actual.end() > actual.start() {
+            search = actual.end();
+        } else if let Some(character) = source[actual.end()..].chars().next() {
+            search = actual.end() + character.len_utf8();
+        } else {
+            search = source.len() + 1;
+        }
+    }
+    append_limited(&mut output, &source[copied..])?;
+    Ok(output)
+}
+
+fn terminal_positive_lookahead(pattern: &str) -> Result<Option<(usize, usize)>> {
+    let bytes = pattern.as_bytes();
+    let (mut index, mut depth, mut escaped, mut in_class) = (0, 0isize, false, false);
+    let mut found = None;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if in_class {
+            if byte == b']' {
+                in_class = false;
+            }
+        } else if byte == b'[' {
+            in_class = true;
+        } else if bytes[index..].starts_with(b"(?=") {
+            ensure!(
+                found.is_none(),
+                fault(
+                    "Ljava/util/regex/PatternSyntaxException;",
+                    "multiple positive look-aheads are unsupported by String.replaceAll"
+                )
+            );
+            let close = matching_paren(bytes, index)?;
+            ensure!(
+                bytes[close + 1..].iter().all(|byte| *byte == b')'),
+                fault(
+                    "Ljava/util/regex/PatternSyntaxException;",
+                    "String.replaceAll supports a terminal positive look-ahead only"
+                )
+            );
+            ensure!(
+                !has_capture_group(&pattern[index + 3..close]),
+                fault(
+                    "Ljava/util/regex/PatternSyntaxException;",
+                    "capturing groups inside look-ahead are unsupported"
+                )
+            );
+            found = Some((index, close));
+            index = close;
+        } else if byte == b'(' {
+            depth += 1;
+        } else if byte == b')' {
+            depth -= 1;
+            ensure!(
+                depth >= 0,
+                fault(
+                    "Ljava/util/regex/PatternSyntaxException;",
+                    "unmatched closing parenthesis"
+                )
+            );
+        }
+        index += 1;
+    }
+    ensure!(
+        depth == 0,
+        fault(
+            "Ljava/util/regex/PatternSyntaxException;",
+            "unclosed regular-expression group"
+        )
+    );
+    Ok(found)
+}
+
+fn matching_paren(bytes: &[u8], open: usize) -> Result<usize> {
+    let (mut index, mut depth, mut escaped, mut in_class) = (open, 0isize, false, false);
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if in_class {
+            if byte == b']' {
+                in_class = false;
+            }
+        } else if byte == b'[' {
+            in_class = true;
+        } else if byte == b'(' {
+            depth += 1;
+        } else if byte == b')' {
+            depth -= 1;
+            if depth == 0 {
+                return Ok(index);
+            }
+        }
+        index += 1;
+    }
+    Err(fault(
+        "Ljava/util/regex/PatternSyntaxException;",
+        "unclosed positive look-ahead",
+    ))
+}
+
+fn has_capture_group(pattern: &str) -> bool {
+    let bytes = pattern.as_bytes();
+    let (mut index, mut escaped, mut in_class) = (0, false, false);
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if in_class {
+            if byte == b']' {
+                in_class = false;
+            }
+        } else if byte == b'[' {
+            in_class = true;
+        } else if byte == b'(' && !bytes[index..].starts_with(b"(?:") {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn leading_flag_bytes(pattern: &str) -> usize {
+    let bytes = pattern.as_bytes();
+    let mut end = 0;
+    while bytes[end..].starts_with(b"(?") {
+        let Some(close) = bytes[end + 2..].iter().position(|byte| *byte == b')') else {
+            break;
+        };
+        let close = end + 2 + close;
+        let flags = &bytes[end + 2..close];
+        if flags.is_empty()
+            || !flags
+                .iter()
+                .all(|byte| byte.is_ascii_alphabetic() || *byte == b'-')
+        {
+            break;
+        }
+        end = close + 1;
+    }
+    end
+}
+
+fn unique_group_name(pattern: &str, name: &str) -> String {
+    let mut index = 0;
+    loop {
+        let candidate = format!("droidless_{name}_{index}");
+        if !pattern.contains(&candidate) {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
+fn append_limited(output: &mut String, text: &str) -> Result<()> {
+    ensure!(
+        output.len() + text.len() <= MAX_INPUT_BYTES,
+        fault(
+            "Ljava/lang/IllegalArgumentException;",
+            "regex replacement exceeds 1 MiB"
+        )
+    );
+    output.push_str(text);
+    Ok(())
+}
+
+fn expand_replacement(
+    output: &mut String,
+    replacement: &str,
+    source: &str,
+    captures: &regex::Captures<'_>,
+    actual_name: &str,
+    assertion_name: &str,
+    original_groups: usize,
+) -> Result<()> {
+    let mut index = 0;
+    while index < replacement.len() {
+        let character = replacement[index..].chars().next().unwrap();
+        if character != '$' {
+            append_limited(output, &character.to_string())?;
+            index += character.len_utf8();
+            continue;
+        }
+        let after_dollar = index + 1;
+        if replacement[after_dollar..].starts_with('$') {
+            append_limited(output, "$")?;
+            index = after_dollar + 1;
+            continue;
+        }
+        if replacement[after_dollar..].starts_with('{') {
+            let name_start = after_dollar + 1;
+            if let Some(relative_end) = replacement[name_start..].find('}') {
+                let name = &replacement[name_start..name_start + relative_end];
+                let number = name.parse::<usize>().ok();
+                let value = if name == "0" {
+                    captures.name(actual_name)
+                } else if name == assertion_name {
+                    None
+                } else {
+                    captures.name(name)
+                };
+                if name == assertion_name {
+                    return Err(fault(
+                        "Ljava/lang/IllegalArgumentException;",
+                        "replacement refers to an internal regex capture",
+                    ));
+                }
+                if !name.is_empty() && value.is_none() && name != "0" && number.is_none() {
+                    return Err(fault(
+                        "Ljava/lang/IllegalArgumentException;",
+                        format!("unknown regex capture group {name}"),
+                    ));
+                }
+                if name != "0" {
+                    if let Some(number) = number {
+                        if number > original_groups {
+                            return Err(fault(
+                                "Ljava/lang/IndexOutOfBoundsException;",
+                                format!("no regex capture group {number}"),
+                            ));
+                        }
+                        let value = captures.get(number + 1);
+                        if let Some(value) = value {
+                            append_limited(output, value.as_str())?;
+                        }
+                    } else if let Some(value) = value {
+                        append_limited(output, value.as_str())?;
+                    }
+                } else if let Some(value) = value {
+                    append_limited(output, &source[value.start()..value.end()])?;
+                }
+                index = name_start + relative_end + 1;
+                continue;
+            }
+        } else if replacement[after_dollar..]
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_digit())
+        {
+            let digits_end = replacement[after_dollar..]
+                .char_indices()
+                .take_while(|(_, character)| character.is_ascii_digit())
+                .map(|(offset, character)| after_dollar + offset + character.len_utf8())
+                .last()
+                .unwrap();
+            let digits = &replacement[after_dollar..digits_end];
+            let selected = (1..=digits.len()).rev().find_map(|length| {
+                digits[..length]
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|number| *number <= original_groups)
+                    .map(|number| (length, number))
+            });
+            if let Some((length, number)) = selected {
+                if let Some(value) = captures.get(number + 1) {
+                    append_limited(output, value.as_str())?;
+                }
+                index = after_dollar + length;
+                continue;
+            }
+        }
+        append_limited(output, "$")?;
+        index = after_dollar;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -284,6 +768,53 @@ mod tests {
             &[source, pattern, replacement],
         )[0];
         assert_eq!(vm.heap.text(output).unwrap(), "note #12");
+    }
+
+    #[test]
+    fn replace_all_supports_terminal_lookahead_and_preserves_its_text() {
+        let mut vm = runtime();
+        let source = vm.heap.string("a   b".into()).unwrap();
+        let pattern = vm.heap.string(" +(?= |$)".into()).unwrap();
+        let replacement = vm.heap.string("_".into()).unwrap();
+        let output = call(
+            &mut vm,
+            "Ljava/lang/String;",
+            "replaceAll",
+            &["Ljava/lang/String;", "Ljava/lang/String;"],
+            "Ljava/lang/String;",
+            &[source, pattern, replacement],
+        )[0];
+        assert_eq!(vm.heap.text(output).unwrap(), "a_ b");
+
+        let source = vm.heap.string("abc! x".into()).unwrap();
+        let pattern = vm.heap.string("([a-z]+)(?=!)".into()).unwrap();
+        let replacement = vm.heap.string("<$0:$1>".into()).unwrap();
+        let output = call(
+            &mut vm,
+            "Ljava/lang/String;",
+            "replaceAll",
+            &["Ljava/lang/String;", "Ljava/lang/String;"],
+            "Ljava/lang/String;",
+            &[source, pattern, replacement],
+        )[0];
+        assert_eq!(vm.heap.text(output).unwrap(), "<abc:abc>! x");
+    }
+
+    #[test]
+    fn replace_all_handles_notepad_rich_text_whitespace_pattern() {
+        let mut vm = runtime();
+        let source = vm.heap.string("  Notes survive restart   ".into()).unwrap();
+        let pattern = vm.heap.string("(?m)(^ *| +(?= |$))".into()).unwrap();
+        let replacement = vm.heap.string(String::new()).unwrap();
+        let output = call(
+            &mut vm,
+            "Ljava/lang/String;",
+            "replaceAll",
+            &["Ljava/lang/String;", "Ljava/lang/String;"],
+            "Ljava/lang/String;",
+            &[source, pattern, replacement],
+        )[0];
+        assert_eq!(vm.heap.text(output).unwrap(), "Notes survive restart");
     }
     fn string(vm: &mut Runtime, class: &str, matcher: Word, group: Option<i32>) -> Option<String> {
         let (name, parameters, args) = match group {

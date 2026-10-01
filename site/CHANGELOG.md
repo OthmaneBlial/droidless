@@ -2,10 +2,11 @@
 
 ## Unreleased
 
-- Unmodified public Notepad 1.0.0 now reaches its Notes list and note editor in
-  the headless runtime; typing into its first EditText updates the APK's View tree.
-  The original SHA-256 is pinned and a local compatibility replay covers the flow.
-  Save/restart and native-window interaction remain unverified.
+- Added Android spannable text, bounded SAX parsing, interface reflection,
+  Java array binary search and SQLite updates to the unmodified Notepad path. It
+  now saves a title into its private SQLite database, and the row survives a
+  fresh DROIDLESS process. The reopened Notes screen still shows its empty state;
+  list-row rendering and native-window interaction remain unfinished.
 - Added ContentValues text/null storage, bundled ResourceBundle lookup, locale,
   regex replacement and view-listener retention required by the real APK path.
   GitHub Actions remain disabled; validation stays local.

@@ -326,15 +326,17 @@ impl Runtime {
     }
     pub fn edit(&mut self, handle: usize, text: &str) -> Result<()> {
         ensure!(text.len() <= 1_048_576, "text exceeds limit");
-        let view = self
-            .heap
-            .get_mut(Word::Ref(handle))?
-            .view
-            .as_mut()
-            .context("not a View")?;
-        ensure!(view.editable && view.enabled, "View is not editable");
-        view.text = text.to_owned();
-        Ok(())
+        let word = Word::Ref(handle);
+        {
+            let view = self
+                .heap
+                .get_mut(word)?
+                .view
+                .as_mut()
+                .context("not a View")?;
+            ensure!(view.editable && view.enabled, "View is not editable");
+        }
+        self.set_view_text(word, text.to_owned(), vec![])
     }
     /// Edit the first enabled visible EditText in the foreground screen.
     pub fn input(&mut self, text: &str) -> Result<()> {
@@ -719,6 +721,13 @@ impl Runtime {
             return Some(parent.into());
         }
         let parent = match class {
+            "Landroid/text/SpannableStringBuilder;" => "Landroid/text/Editable;",
+            "Landroid/text/Editable;" => "Landroid/text/Spannable;",
+            "Landroid/text/SpannableString;" => "Landroid/text/Spannable;",
+            "Landroid/text/Spannable;" => "Landroid/text/Spanned;",
+            "Landroid/text/SpannedString;" => "Landroid/text/Spanned;",
+            "Landroid/text/Spanned;" => "Ljava/lang/CharSequence;",
+            "Ljava/lang/CharSequence;" => "Ljava/lang/Object;",
             "Ljava/lang/Enum;" => "Ljava/lang/Object;",
             "Ljava/util/ListResourceBundle;" => "Ljava/util/ResourceBundle;",
             "Ljava/util/ResourceBundle;" => "Ljava/lang/Object;",
@@ -755,6 +764,8 @@ impl Runtime {
             "Ljava/util/LinkedHashMap;" => "Ljava/util/HashMap;",
             "Ljava/util/concurrent/ConcurrentHashMap;" => "Ljava/util/HashMap;",
             "Ljava/util/ArrayList;" => "Ljava/util/AbstractList;",
+            "Ljava/util/Stack;" => "Ljava/util/Vector;",
+            "Ljava/util/Vector;" => "Ljava/util/AbstractList;",
             "Ldroidless/runtime/UnmodifiableRandomAccessList;" => {
                 "Ldroidless/runtime/UnmodifiableList;"
             }
@@ -883,6 +894,8 @@ impl Runtime {
             }
             if current == "Ljava/util/ArrayList;"
                 || current == "Ljava/util/concurrent/CopyOnWriteArrayList;"
+                || current == "Ljava/util/Vector;"
+                || current == "Ljava/util/Stack;"
             {
                 work.extend(
                     [

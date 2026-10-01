@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The unmodified public Notepad APK now opens its editor and saves the edited
+  title to SQLite; the row survives a fresh DROIDLESS process. The reopened
+  Notes list still shows its empty state. Added Android text/SAX support,
+  reflection interface lookup, Java array binary search and SQLite updates for
+  this save path. Local CI passes 66 Rust tests, Clippy, release build and 4,096
+  seeded parser mutations.
 - Fixed read-only Build.VERSION.SDK_INT = 21, independent of APK/host metadata.
   Compiled checks cover stable reads, inherited aliases and native final-field
   faults. This branch profile does not imply full API-21 compatibility.
@@ -12,9 +18,10 @@
   navigation/Back/close, retention/release and callback fault cleanup. Native
   navigation/Back/close executes 33 observer calls and exits with status 0.
   Saved-state/pre/post callbacks and missing-super enforcement remain unsupported.
-- Unmodified Notepad passes SDK checks and observer registration, then reaches
-  FileInputStream while Stetho reads /proc/self/cmdline. No Activity/UI workflow
-  yet. Local CI passes 41 Rust tests, 4,096 mutations and 17 calculator scenarios.
+- At an earlier checkpoint, unmodified Notepad passed SDK checks and observer
+  registration, then reached FileInputStream while Stetho read /proc/self/cmdline.
+  That checkpoint had no Activity/UI workflow; it passed 41 Rust tests and
+  4,096 mutations.
 
 - Bounded CopyOnWriteArrayList operations and snapshot iterators: old values
   survive live mutations, GC and serial guest worker updates; iterator removal

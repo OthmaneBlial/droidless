@@ -405,6 +405,25 @@ impl Runtime {
                     Word::ZERO
                 });
             }
+            ("Ljava/lang/Class;", "getInterfaces()[Ljava/lang/Class;") => {
+                let class = self.reflected_class(arg(0)?)?;
+                let interfaces = self
+                    .class_location(&class)
+                    .map(|(dex, index)| self.apk.dex[dex].classes[index].interfaces.clone())
+                    .unwrap_or_default();
+                ensure!(
+                    interfaces.len() <= 65_536,
+                    "class interface reflection limit reached"
+                );
+                let array = self.array("Ljava/lang/Class;".into(), interfaces.len())?;
+                for (index, interface) in interfaces.iter().enumerate() {
+                    let interface = self.class_object(interface)?;
+                    if let Data::Array { values, .. } = &mut self.heap.get_mut(array)?.data {
+                        values[index] = vec![interface];
+                    }
+                }
+                result.push(array);
+            }
             ("Ljava/lang/Class;", "getDeclaredMethods()[Ljava/lang/reflect/Method;") => {
                 let class = self.reflected_class(arg(0)?)?;
                 let methods = self

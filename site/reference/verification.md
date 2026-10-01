@@ -573,12 +573,21 @@ target/release/droidless run --headless --ephemeral --size 390x844 \
 ```
 
 The tree comes from the original APK and runs its Activity/DBFlow initialization.
-`site/assets/notepad-preview.svg` is a vector illustration of the observed state,
-not a captured native window. Save/restart, AppKit text interaction, visual
-fidelity and an independent Android reference run remain unverified. The 50%
-everyday-app checkpoint remains ahead.
+`tools/compatibility.py` also opens the editor, changes the title, dispatches
+Back through the APK, and confirms the resulting `Note` row in its private
+SQLite database. A second DROIDLESS process opens the same app-data directory;
+the row remains present after that restart. The fresh process reads the row's
+columns, but the rendered Notes screen still shows its empty-state text. Note
+list refresh/rendering is therefore incomplete even though SQLite save/restart
+is verified. The probe checks database state, not native keyboard events.
 
-`sh tools/ci.sh` passes locally with 61 Rust tests, warning-free Clippy, the
+`site/assets/notepad-preview.svg` is a vector illustration of the editor, not a
+captured native window. AppKit text interaction, visual fidelity and an
+independent Android reference run remain unverified. The 50% everyday-app
+checkpoint remains ahead.
+
+`sh tools/ci.sh` passes locally with 66 Rust tests, warning-free Clippy, the
 optimized release build and 4,096 seeded parser mutations. `python3 tools/compatibility.py`
-passes 17 calculator scenarios plus the Notepad Notes
-list/editor replay. No GitHub Actions run was used.
+passes 17 calculator scenarios plus the Notepad Notes list/editor and SQLite
+save/restart probes. The saved row is retained after restart; the reopened list
+still shows its empty state. No GitHub Actions run was used.

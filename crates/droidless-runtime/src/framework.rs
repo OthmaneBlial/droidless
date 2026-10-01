@@ -77,6 +77,15 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/net/NetworkRequest$Builder;",
             "Landroid/view/accessibility/AccessibilityManager;",
             "Ljava/io/InputStream;",
+            "Ljava/io/Reader;",
+            "Ljava/io/StringReader;",
+            "Ljavax/xml/parsers/SAXParserFactory;",
+            "Ljavax/xml/parsers/SAXParser;",
+            "Ljavax/xml/parsers/ParserConfigurationException;",
+            "Lorg/xml/sax/InputSource;",
+            "Lorg/xml/sax/Attributes;",
+            "Lorg/xml/sax/SAXException;",
+            "Lorg/xml/sax/helpers/DefaultHandler;",
             "Ljava/io/File;",
             "Ljava/io/FileInputStream;",
             "Landroid/database/sqlite/SQLiteOpenHelper;",
@@ -94,6 +103,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/net/LocalServerSocket;",
             "Landroid/net/LocalSocket;",
             "Ljava/util/HashSet;",
+            "Ljava/util/Vector;",
+            "Ljava/util/Stack;",
             "Ljava/util/TreeSet;",
             "Ljava/util/HashMap;",
             "Ljava/util/ArrayList;",
@@ -132,6 +143,13 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/graphics/Paint;",
             "Landroid/graphics/PorterDuff$Mode;",
             "Landroid/text/TextUtils;",
+            "Ljava/lang/CharSequence;",
+            "Landroid/text/Spanned;",
+            "Landroid/text/Spannable;",
+            "Landroid/text/Editable;",
+            "Landroid/text/SpannableStringBuilder;",
+            "Landroid/text/SpannableString;",
+            "Landroid/text/SpannedString;",
             "Landroid/view/WindowManager;",
             "Landroid/view/Display;",
             "Landroid/view/ViewConfiguration;",
@@ -361,6 +379,9 @@ impl Runtime {
         if self.trace.framework {
             eprintln!("framework: {} {args:?}", method.key());
         }
+        if let Some(result) = self.text_native(method, args)? {
+            return Ok(Some(result));
+        }
         if let Some(result) = self.component_native(method, args)? {
             return Ok(Some(result));
         }
@@ -377,6 +398,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.sqlite_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.sax_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.string_format_native(method, args)? {
@@ -2882,30 +2906,23 @@ impl Runtime {
                     .insert("droidless:motion-event-splitting".into(), vec![arg(1)?]);
             }
             ("Landroid/widget/TextView;", "setText(Ljava/lang/CharSequence;)V") => {
-                let text = if arg(1)? == Word::ZERO {
-                    String::new()
-                } else {
-                    self.heap.text(arg(1)?)?.to_owned()
-                };
-                self.view_mut(receiver)?.text = text;
+                self.set_text_view(receiver, arg(1)?)?;
             }
             ("Landroid/widget/TextView;", "setText(I)V") => {
                 let text = self.resource_text(arg(1)?.int()? as u32)?;
-                self.view_mut(receiver)?.text = text;
+                self.set_view_text(receiver, text, vec![])?;
             }
             ("Landroid/widget/TextView;", "append(Ljava/lang/CharSequence;)V") => {
-                let text = self.heap.text(arg(1)?)?.to_owned();
-                let view = self.view_mut(receiver)?;
-                ensure!(
-                    view.text.len() + text.len() <= 1_048_576,
-                    "TextView text limit reached"
-                );
-                view.text.push_str(&text);
+                self.append_text_view(receiver, arg(1)?)?;
             }
             ("Landroid/widget/TextView;", "getText()Ljava/lang/CharSequence;")
             | ("Landroid/widget/EditText;", "getText()Landroid/text/Editable;") => {
-                let text = self.view_mut(receiver)?.text.clone();
-                result.push(self.heap.string(text)?);
+                if method.class == "Landroid/widget/EditText;" {
+                    result.push(self.editable_text(receiver)?);
+                } else {
+                    let text = self.view_mut(receiver)?.text.clone();
+                    result.push(self.heap.string(text)?);
+                }
             }
             ("Landroid/widget/TextView;", "setEllipsize(Landroid/text/TextUtils$TruncateAt;)V") => {
                 let value = arg(1)?;

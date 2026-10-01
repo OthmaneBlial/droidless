@@ -23,24 +23,26 @@ annotation coverage remains pending. Reserved/newer opcodes fail with method/PC.
 
 Activity constructors/lifecycle/content/title/findViewById/window metrics;
 Context/Resources strings/resources; View ID/visibility/enabled/background/
-parent/layout params/padding/click/key/focus/touch listeners; ViewGroup addView;
-LinearLayout orientation; TextView text/append/size/color/gravity; EditText
-text/null key listener/selection;
+uniform padding/click/key listeners; ViewGroup addView; LinearLayout orientation;
+TextView text/append/size/color/gravity; EditText text/null key listener/selection;
 KeyEvent action/keycode; String valueOf/toString/length/equals/startsWith/contains/
-substring/concat/charAt/replaceAll; StringBuilder constructors/append/toString; Integer
+substring/concat/charAt; StringBuilder constructors/append/toString; Integer
 parseInt/toString; Double parseDouble/valueOf(D)/doubleValue/toString/isNaN(D); Long toString(J); Math sqrt/cbrt/sin/cos/tan/log/
 exp/abs/pow; Log d/i/w/e. The source's exact signature table is authoritative;
 other overloads remain unsupported.
-The Notepad startup/editor path additionally exercises Date, Locale/ResourceBundle,
-ContentValues text/null entries, SQLite queries/cursors/statements and extra drawable/
-layout APIs. This does not establish arbitrary SQLite writes or note persistence.
 Throwable constructors/getMessage/getCause/toString and common runtime exception types
 are implemented for the fault paths covered by conformance tests.
+Android `CharSequence`/`Spanned`/`SpannableStringBuilder` text and a bounded SAX
+event parser cover Notepad's rich-text serialization path. DTDs are rejected.
+SQLite support includes `SQLiteOpenHelper`, SQL statements/transactions,
+`ContentValues` updates, `rawQuery` and typed cursor reads; the pinned Notepad
+APK save/restart probe confirms its note row persists. Its reopened list still
+shows the empty state. These narrow paths do not imply general text/XML/database
+compatibility.
 Current source adds explicit same-APK Intent constructors/setClass/setClassName,
 startActivity, getIntent, finish/isFinishing/onBackPressed, Bundle typed extras and
-back-stack lifecycle. Authored fixtures verify saved preferences and navigation;
-the public Notepad check separately reaches its editor headlessly but does not verify
-third-party save/restart. The v0.1.0 release predates these changes.
+back-stack lifecycle. This is authored-fixture evidence, not a third-party notes
+app claim; the v0.1.0 release predates navigation, persistence, collections, scheduling and the new calculator demo.
 Application lifecycle observers add bounded registration/removal, GC-rooted
 snapshot delivery from six Activity super methods and canonical getApplication
 identity. Native authored navigation/Back/close executes these observers; saved-state
@@ -80,15 +82,6 @@ fixture. Deferred workers execute DEX on a serial shared-heap host executor;
 queue/monitor waits, interruption and worker-to-main result posting pass headless
 checks. The authored native Start worker action also delivers its main-thread result and closes cleanly. [Exact scheduling methods, clocks and limits](threading.md).
 
-## Current third-party notes-app evidence
-
-The unmodified [Notepad 1.0.0 APK](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0)
-now opens its Notes screen and note editor in the headless runtime. At 390 × 844,
-the view tree contains two editable fields; a replay enters `No pink` in the first.
-This does not verify native AppKit editing, saving, database persistence across a
-fresh runtime, or broad Android compatibility. The artifact is fetched separately
-and checked against SHA-256; it is not redistributed. [Reproduce the check](verification.md#current-source-public-notepad-editor).
-
 ## Known ceilings
 
 - One foreground Activity with a bounded preserved back stack; serial shared-heap VM with bounded guest workers
@@ -104,7 +97,8 @@ and checked against SHA-256; it is not redistributed. [Reproduce the check](veri
   worker Looper delivery/priority, parallel execution and general Java timers are unsupported.
 - Other bulk collections, custom Map copies/views, CopyOnWriteArrayList write revalidation,
   ListIterator/subList, custom class loaders, method/field reflection, general file I/O,
-  general SQLite APIs beyond the Notepad path, images, networking, JNI, JIT,
+  general SQLite APIs beyond the subset documented in [storage](storage.md),
+  images, networking, JNI, JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.
 

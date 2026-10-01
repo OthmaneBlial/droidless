@@ -42,9 +42,10 @@ enters `No pink`, and confirms the title in the real APK's editable View tree.
 </div>
 
 The original APK's SHA-256 is checked by `sh tools/fetch-notepad.sh`; DROIDLESS
-does not patch or redistribute it. The editor and typed title are verified.
-Saving a note across a restart and native-window interaction with this app remain
-unverified. [Exact evidence and limits](docs/verification.md#current-source-public-notepad-editor).
+does not patch or redistribute it. A typed title now survives saving and a fresh
+process restart in the app's SQLite database. The reopened Notes screen still
+shows its empty state, so list-row rendering and native-window input remain
+unfinished. [Exact evidence and limits](docs/verification.md#current-source-public-notepad-editor).
 
 ```sh
 sh tools/fetch-notepad.sh
@@ -142,15 +143,16 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | ⚡ Own register interpreter | Arithmetic, wide values, branches, arrays, fields, dispatch, managed call continuations and Java throw/catch |
 | 🧹 Managed objects | Inheritance, strings, sticky class initialization and handle-based mark/sweep GC |
 | 🪟 Native widgets | TextView, Button, EditText, LinearLayout and FrameLayout; approximate layout/style |
+| 📝 Rich text/XML | Android spannable text and a bounded SAX parser subset exercised by an unmodified APK |
 | 🖱️ Input | Native calculator mouse callbacks, Counter text/key callbacks and clean close |
 | 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish and native Application lifecycle observers — current source |
-| 📓 Persistent preferences | Typed SharedPreferences, isolated package data, native authored-note save/restart/clear — current source |
+| 📓 Persistent storage | Typed SharedPreferences and bounded SQLite support; authored preferences plus a public Notepad note row survive process restart — current source |
 | 🗂️ Java collections | Bounded HashSet/ArrayList/HashMap/basic LinkedHashMap, snapshot CopyOnWriteArrayList, immediate FIFO queues, indexed lists, guest equality, native map copying and live read-only Set/List views — current source |
 | 🔎 APK classes | APK-local Class lookup, no-argument construction, initialization/access faults, primitive TYPE metadata and inherited field resolution — current source |
 | 🌍 API profile | Fixed read-only Build.VERSION.SDK_INT = 21 for app version checks; partial framework support — current source |
 | ⏱️ Scheduled callbacks | Main Handler/Looper/Message queue, delayed APK callbacks, cancellation and GC retention; native authored timer verified — current source |
 | 🧵 Guest workers | Deferred DEX execution on a serial shared-heap host executor; queue/monitor waits/interrupt pass headless checks; main Handler results also verified natively — current source |
-| 🛠️ Next up | Verify save/restart and native-window input in the public Notepad APK; then follow the next real app failure |
+| 🛠️ Next up | Render saved notes in the reopened public Notepad list and verify native-window input; then follow the next real app failure |
 
 The published **v0.1.0 archive predates navigation, persistence, collections, scheduling and the new calculator demo**. Current source capability
 is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
@@ -169,7 +171,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, snapshot iteration across mutation/GC/worker writes, guest equality, read-only views and limits; same normal list, snapshot, map-copy and immediate queue contracts pass on desktop Java |
 | Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, primitive TYPE identities, guest faults and inherited fields; pure Java contracts pass on desktop Java. SDK profile field checks are compiled DEX evidence |
 | Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native delayed timer/cancellation/finish and worker-to-main results; headless ordering, Message overrides, worker waits/interrupt, GC, errors and limits. [Exact scheduling scope](docs/threading.md) |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Notes screen, editor opening and typed title verified headlessly; save/restart and native-window interaction unverified |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Notes screen/editor, typed title save and SQLite retention across a fresh process verified; reopened list still shows empty state; native-window interaction unverified |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).
@@ -183,7 +185,7 @@ sh tools/fetch-notepad.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 61 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 66 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

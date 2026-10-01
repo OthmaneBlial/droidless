@@ -1,5 +1,6 @@
 //! DROIDLESS's own register interpreter and Android compatibility layer.
 mod activities;
+mod android_text;
 mod animations;
 mod atomics;
 mod collections;
@@ -13,6 +14,7 @@ mod preferences;
 mod queues;
 mod reflection;
 mod regex_compat;
+mod sax;
 mod scheduling;
 mod sqlite;
 mod storage;

@@ -32,6 +32,13 @@ exp/abs/pow; Log d/i/w/e. The source's exact signature table is authoritative;
 other overloads remain unsupported.
 Throwable constructors/getMessage/getCause/toString and common runtime exception types
 are implemented for the fault paths covered by conformance tests.
+Android `CharSequence`/`Spanned`/`SpannableStringBuilder` text and a bounded SAX
+event parser cover Notepad's rich-text serialization path. DTDs are rejected.
+SQLite support includes `SQLiteOpenHelper`, SQL statements/transactions,
+`ContentValues` updates, `rawQuery` and typed cursor reads; the pinned Notepad
+APK save/restart probe confirms its note row persists. Its reopened list still
+shows the empty state. These narrow paths do not imply general text/XML/database
+compatibility.
 Current source adds explicit same-APK Intent constructors/setClass/setClassName,
 startActivity, getIntent, finish/isFinishing/onBackPressed, Bundle typed extras and
 back-stack lifecycle. This is authored-fixture evidence, not a third-party notes
@@ -90,7 +97,8 @@ checks. The authored native Start worker action also delivers its main-thread re
   worker Looper delivery/priority, parallel execution and general Java timers are unsupported.
 - Other bulk collections, custom Map copies/views, CopyOnWriteArrayList write revalidation,
   ListIterator/subList, custom class loaders, method/field reflection, general file I/O,
-  SQLite, images, networking, JNI, JIT,
+  general SQLite APIs beyond the subset documented in [storage](storage.md),
+  images, networking, JNI, JIT,
   APK signature verification, installation registry or Linux native renderer.
 - AndroidX, modern Kotlin patterns, Compose, multimedia and games are unsupported.
 

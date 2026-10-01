@@ -328,6 +328,64 @@ impl Runtime {
                 self.persist_database(&key)?;
                 Ok(Some(vec![]))
             }
+            "update(Ljava/lang/String;Landroid/content/ContentValues;Ljava/lang/String;[Ljava/lang/String;)I"
+            | "updateWithOnConflict(Ljava/lang/String;Landroid/content/ContentValues;Ljava/lang/String;[Ljava/lang/String;I)I" =>
+            {
+                let table = self.heap.text(arg(1)?)?.to_owned();
+                let values = match &self.heap.get(arg(2)?)?.data {
+                    Data::ContentValues(values) => values.clone(),
+                    _ => bail!("uninitialized ContentValues"),
+                };
+                if values.is_empty() {
+                    return Ok(Some(vec![Word::from(0)]));
+                }
+                let conflict = if method.name == "update" {
+                    2
+                } else {
+                    arg(5)?.int()?
+                };
+                let conflict = match conflict {
+                    0 => "",
+                    1 => " OR ROLLBACK",
+                    2 => " OR ABORT",
+                    3 => " OR FAIL",
+                    4 => " OR IGNORE",
+                    5 => " OR REPLACE",
+                    _ => {
+                        return Err(fault(
+                            "Ljava/lang/IllegalArgumentException;",
+                            "invalid SQLite conflict algorithm",
+                        ));
+                    }
+                };
+                let mut sql = format!(
+                    "UPDATE{conflict} {} SET {}",
+                    quote_sql_identifier(&table),
+                    values
+                        .keys()
+                        .map(|column| format!("{} = ?", quote_sql_identifier(column)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+                let mut bindings = values.into_values().collect::<Vec<_>>();
+                if arg(3)? != Word::ZERO {
+                    sql.push_str(" WHERE ");
+                    sql.push_str(self.heap.text(arg(3)?)?);
+                }
+                let where_values = if arg(4)? == Word::ZERO {
+                    Vec::new()
+                } else {
+                    self.sql_values_array(arg(4)?)?
+                };
+                bindings.extend(where_values);
+                let changed = connection
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("SQLite connection poisoned"))?
+                    .execute(&sql, params_from_iter(bindings.iter().map(sql_value)))
+                    .map_err(sql_fault)?;
+                self.persist_database(&key)?;
+                Ok(Some(vec![Word::from(changed as i32)]))
+            }
             "compileStatement(Ljava/lang/String;)Landroid/database/sqlite/SQLiteStatement;" => {
                 let sql = self.heap.text(arg(1)?)?.to_owned();
                 let parameter_count = {
@@ -997,6 +1055,14 @@ fn sql_fault(error: rusqlite::Error) -> anyhow::Error {
     )
 }
 
+fn quote_sql_identifier(identifier: &str) -> String {
+    let identifier = identifier
+        .strip_prefix('`')
+        .and_then(|identifier| identifier.strip_suffix('`'))
+        .unwrap_or(identifier);
+    format!("\"{}\"", identifier.replace('"', "\"\""))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1101,6 +1167,73 @@ mod tests {
                 .int()
                 .unwrap(),
             2
+        );
+    }
+
+    #[test]
+    fn sqlite_update_applies_bound_content_values_and_where_arguments() {
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/intents.apk")).unwrap(),
+        )
+        .unwrap();
+        let connection = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        connection
+            .lock()
+            .unwrap()
+            .execute_batch(
+                "CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT); INSERT INTO notes VALUES (1, 'draft');",
+            )
+            .unwrap();
+        vm.databases.insert("memory".into(), connection.clone());
+        let database = vm.heap.instance(DATABASE).unwrap();
+        vm.heap.get_mut(database).unwrap().data = Data::SqlDatabase("memory".into());
+        let values = vm.heap.instance("Landroid/content/ContentValues;").unwrap();
+        vm.heap.get_mut(values).unwrap().data = Data::ContentValues(BTreeMap::from([(
+            "`body`".into(),
+            SqlValue::Text("saved".into()),
+        )]));
+        let table = vm.heap.string("`notes`".into()).unwrap();
+        let where_clause = vm.heap.string("id = ?".into()).unwrap();
+        let where_value = vm.heap.string("1".into()).unwrap();
+        let where_args = vm.heap.instance("[Ljava/lang/String;").unwrap();
+        vm.heap.get_mut(where_args).unwrap().data = Data::Array {
+            element: "Ljava/lang/String;".into(),
+            values: vec![vec![where_value]],
+        };
+
+        let changed = call(
+            &mut vm,
+            DATABASE,
+            "updateWithOnConflict",
+            &[
+                "Ljava/lang/String;",
+                "Landroid/content/ContentValues;",
+                "Ljava/lang/String;",
+                "[Ljava/lang/String;",
+                "I",
+            ],
+            "I",
+            &[
+                database,
+                table,
+                values,
+                where_clause,
+                where_args,
+                Word::from(2),
+            ],
+        )
+        .unwrap()[0]
+            .int()
+            .unwrap();
+        assert_eq!(changed, 1);
+        assert_eq!(
+            connection
+                .lock()
+                .unwrap()
+                .query_row("SELECT body FROM notes WHERE id = 1", [], |row| row
+                    .get::<_, String>(0))
+                .unwrap(),
+            "saved"
         );
     }
 

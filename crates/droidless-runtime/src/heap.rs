@@ -111,10 +111,22 @@ pub fn default_value(ty: &str) -> Vec<Word> {
 }
 
 #[derive(Clone, Debug)]
+pub struct TextSpan {
+    pub object: Word,
+    pub start: usize,
+    pub end: usize,
+    pub flags: i32,
+}
+
+#[derive(Clone, Debug)]
 pub enum Data {
     Instance,
     String(String),
     Builder(String),
+    Spanned {
+        text: String,
+        spans: Vec<TextSpan>,
+    },
     File(String),
     Array {
         element: String,
@@ -290,6 +302,7 @@ impl Heap {
     pub fn text(&self, word: Word) -> Result<&str> {
         match &self.get(word)?.data {
             Data::String(s) | Data::Builder(s) => Ok(s),
+            Data::Spanned { text, .. } => Ok(text),
             _ => anyhow::bail!("expected string, got {}", self.get(word)?.class),
         }
     }
@@ -319,6 +332,9 @@ impl Heap {
             }
             if let Data::Bundle(values) = &object.data {
                 work.extend(values.values().flat_map(|(_, words)| words).copied());
+            }
+            if let Data::Spanned { spans, .. } = &object.data {
+                work.extend(spans.iter().map(|span| span.object));
             }
             if let Data::Collection { values, .. } = &object.data {
                 work.extend(values.iter().copied());

@@ -49,8 +49,9 @@ support the current lifecycle/storage fixtures. Preference stores support typed
 String/int/long/float/boolean values, defaults, contains, staged editors,
 remove/clear and commit/apply. Values survive Activity transitions and GC; optional
 disk persistence is confined to host-selected per-package directories. Apply is
-currently synchronous. MODE_PRIVATE only; listeners/String sets/files/SQLite remain
-unsupported. [Exact storage semantics and boundaries](storage.md).
+currently synchronous. MODE_PRIVATE only; listeners/String sets/general files
+remain unsupported. A separate SQLite method subset supports the Notepad save
+path. [Exact storage semantics and boundaries](storage.md).
 
 ## Java collections subset
 

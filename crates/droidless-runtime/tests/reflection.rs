@@ -1,5 +1,8 @@
 use droidless_formats::{apk::Apk, dex::Method};
-use droidless_runtime::{Runtime, heap::Word};
+use droidless_runtime::{
+    Runtime,
+    heap::{Data, Word},
+};
 
 #[test]
 fn apk_class_lookup_construction_initialization_and_inherited_fields() {
@@ -22,6 +25,42 @@ fn apk_class_lookup_construction_initialization_and_inherited_fields() {
         returns: "Ljava/lang/Class;".into(),
     };
     let first = vm.invoke(for_name.clone(), vec![name], false).unwrap()[0];
+    let name = vm
+        .heap
+        .string("org.droidless.reflection.ReflectionContract$SubConstants".into())
+        .unwrap();
+    let sub_constants = vm.invoke(for_name.clone(), vec![name], false).unwrap()[0];
+    let get_interfaces = Method {
+        class: "Ljava/lang/Class;".into(),
+        name: "getInterfaces".into(),
+        parameters: vec![],
+        returns: "[Ljava/lang/Class;".into(),
+    };
+    let interfaces = vm
+        .invoke(get_interfaces.clone(), vec![sub_constants], false)
+        .unwrap()[0];
+    let Data::Array { values, .. } = &vm.heap.get(interfaces).unwrap().data else {
+        panic!("getInterfaces must return a Class[]");
+    };
+    assert_eq!(values.len(), 1);
+    let parent_interface = values[0][0];
+    let parent_name = vm
+        .invoke(
+            Method {
+                class: "Ljava/lang/Class;".into(),
+                name: "getName".into(),
+                parameters: vec![],
+                returns: "Ljava/lang/String;".into(),
+            },
+            vec![parent_interface],
+            false,
+        )
+        .unwrap()[0];
+    assert_eq!(
+        vm.heap.text(parent_name).unwrap(),
+        "org.droidless.reflection.ReflectionContract$Constants"
+    );
+    assert!(vm.invoke(get_interfaces, vec![first], false).is_ok());
     vm.collect();
     let name = vm
         .heap

@@ -87,7 +87,7 @@ impl Runtime {
         }
         // ponytail: linear membership with guest equals; use hash buckets if profiling justifies them.
         let len = values.len();
-        let identity = !self.is_a(&self.heap.get(owner)?.class, "Ljava/util/ArrayList;");
+        let identity = !self.is_a(&self.heap.get(owner)?.class, "Ljava/util/List;");
         for offset in 0..len {
             let index = if last { len - 1 - offset } else { offset };
             // A guest equals callback may set a later List element without changing its version.
@@ -302,6 +302,118 @@ impl Runtime {
                 _ => return Ok(None),
             };
             return Ok(Some(result));
+        }
+        if method.class == "Ljava/util/Arrays;"
+            && matches!(
+                signature.as_str(),
+                "binarySearch([Ljava/lang/Object;Ljava/lang/Object;)I"
+                    | "binarySearch([Ljava/lang/Object;IILjava/lang/Object;)I"
+            )
+        {
+            let array = *args.first().context("Arrays.binarySearch array missing")?;
+            if array == Word::ZERO {
+                return Err(fault("Ljava/lang/NullPointerException;", "array is null"));
+            }
+            let values = match &self.heap.get(array)?.data {
+                Data::Array { values, element } if element.starts_with(['L', '[']) => values
+                    .iter()
+                    .map(|value| value.first().copied().unwrap_or(Word::ZERO))
+                    .collect::<Vec<_>>(),
+                _ => bail!("Arrays.binarySearch requires an object array"),
+            };
+            let (from, to, key) = if signature
+                == "binarySearch([Ljava/lang/Object;Ljava/lang/Object;)I"
+            {
+                (
+                    0,
+                    values.len(),
+                    args.get(1).copied().context("search key missing")?,
+                )
+            } else {
+                let from =
+                    usize::try_from(args.get(1).copied().context("range start missing")?.int()?)
+                        .map_err(|_| {
+                            fault(
+                                "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                                "negative binary search range start",
+                            )
+                        })?;
+                let to = usize::try_from(args.get(2).copied().context("range end missing")?.int()?)
+                    .map_err(|_| {
+                        fault(
+                            "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                            "negative binary search range end",
+                        )
+                    })?;
+                (
+                    from,
+                    to,
+                    args.get(3).copied().context("search key missing")?,
+                )
+            };
+            if from > to {
+                return Err(fault(
+                    "Ljava/lang/IllegalArgumentException;",
+                    "binary search range start exceeds end",
+                ));
+            }
+            if to > values.len() {
+                return Err(fault(
+                    "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                    "binary search range exceeds array length",
+                ));
+            }
+            let mut low = from as isize;
+            let mut high = to as isize - 1;
+            while low <= high {
+                let middle = ((low + high) >> 1) as usize;
+                let value = values[middle];
+                if value == Word::ZERO || key == Word::ZERO {
+                    return Err(fault(
+                        "Ljava/lang/NullPointerException;",
+                        "binary search compared a null value",
+                    ));
+                }
+                let class = self.heap.get(value)?.class.clone();
+                let comparison = if class == "Ljava/lang/String;" {
+                    let left = self.heap.text(value)?.encode_utf16().collect::<Vec<_>>();
+                    let right = self.heap.text(key)?.encode_utf16().collect::<Vec<_>>();
+                    left.iter()
+                        .zip(&right)
+                        .find_map(|(left, right)| {
+                            (left != right).then_some(i32::from(*left) - i32::from(*right))
+                        })
+                        .unwrap_or_else(|| left.len() as i32 - right.len() as i32)
+                } else {
+                    if !self.is_a(&class, "Ljava/lang/Comparable;") {
+                        return Err(fault(
+                            "Ljava/lang/ClassCastException;",
+                            format!("{} does not implement Comparable", class),
+                        ));
+                    }
+                    self.invoke(
+                        Method {
+                            class: "Ljava/lang/Comparable;".into(),
+                            name: "compareTo".into(),
+                            parameters: vec!["Ljava/lang/Object;".into()],
+                            returns: "I".into(),
+                        },
+                        vec![value, key],
+                        true,
+                    )?
+                    .first()
+                    .context("Comparable.compareTo returned no value")?
+                    .int()?
+                };
+                if comparison < 0 {
+                    low = middle as isize + 1;
+                } else if comparison > 0 {
+                    high = middle as isize - 1;
+                } else {
+                    return Ok(Some(vec![Word::from(middle as i32)]));
+                }
+            }
+            return Ok(Some(vec![Word::from(-(low as i32) - 1)]));
         }
         if method.class == "Ljava/util/Arrays;"
             && signature == "asList([Ljava/lang/Object;)Ljava/util/List;"
@@ -623,7 +735,13 @@ impl Runtime {
             return self.map_native(method, args);
         }
         let cow = method.class == COPY_ON_WRITE_LIST;
-        let list = method.class == "Ljava/util/ArrayList;" || cow;
+        let list = [
+            "Ljava/util/ArrayList;",
+            "Ljava/util/Vector;",
+            "Ljava/util/Stack;",
+        ]
+        .contains(&method.class.as_str())
+            || cow;
         let tree_set = method.class == TREE_SET;
         let snapshot_iterator = method.class == SNAPSHOT_ITERATOR;
         if !list
@@ -776,6 +894,41 @@ impl Runtime {
             "invalid collection receiver"
         );
         match sig.as_str() {
+            "empty()Z" if method.class == "Ljava/util/Stack;" => {
+                result.push(Word::from(i32::from(
+                    self.collection(receiver)?.0.is_empty(),
+                )));
+            }
+            "peek()Ljava/lang/Object;" | "pop()Ljava/lang/Object;"
+                if method.class == "Ljava/util/Stack;" =>
+            {
+                let mut values = self.collection(receiver)?.0.to_vec();
+                let value = values
+                    .last()
+                    .copied()
+                    .ok_or_else(|| fault("Ljava/util/EmptyStackException;", "Stack is empty"))?;
+                if sig == "pop()Ljava/lang/Object;" {
+                    values.pop();
+                    self.change_collection(receiver, values)?;
+                }
+                result.push(value);
+            }
+            "push(Ljava/lang/Object;)Ljava/lang/Object;" if method.class == "Ljava/util/Stack;" => {
+                let value = arg(1)?;
+                value.reference()?;
+                let mut values = self.collection(receiver)?.0.to_vec();
+                values.push(value);
+                self.change_collection(receiver, values)?;
+                result.push(value);
+            }
+            "search(Ljava/lang/Object;)I" if method.class == "Ljava/util/Stack;" => {
+                let index = self.collection_find(receiver, arg(1)?, true)?;
+                let depth = match index {
+                    Some(index) => (self.collection(receiver)?.0.len() - index) as i32,
+                    None => -1,
+                };
+                result.push(Word::from(depth));
+            }
             "<init>(Ljava/util/Collection;)V" if list => {
                 let source = arg(1)?;
                 ensure!(
@@ -796,6 +949,18 @@ impl Runtime {
                     values: vec![],
                     version: 0,
                 }
+            }
+            "<init>(II)V" if method.class == "Ljava/util/Vector;" => {
+                if arg(1)?.int()? < 0 || arg(2)?.int()? < 0 {
+                    return Err(fault(
+                        "Ljava/lang/IllegalArgumentException;",
+                        "negative Vector capacity or increment",
+                    ));
+                }
+                self.heap.get_mut(receiver)?.data = Data::Collection {
+                    values: vec![],
+                    version: 0,
+                };
             }
             "<init>()V" | "<init>(Ljava/util/Comparator;)V" if tree_set => {
                 let comparator = if sig == "<init>()V" {
@@ -1421,5 +1586,51 @@ mod tests {
         let last = call(&mut vm, TREE_SET, "last", &[], "Ljava/lang/Object;", &[set])[0];
         assert_eq!(vm.heap.text(first).unwrap(), "a");
         assert_eq!(vm.heap.text(last).unwrap(), "z");
+    }
+
+    #[test]
+    fn arrays_binary_search_returns_java_index_and_insertion_point() {
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/intents.apk")).unwrap(),
+        )
+        .unwrap();
+        let array = vm.array("Ljava/lang/Object;".into(), 2).unwrap();
+        let values = [
+            vm.heap.string("br".into()).unwrap(),
+            vm.heap.string("div".into()).unwrap(),
+        ];
+        if let Data::Array { values: slots, .. } = &mut vm.heap.get_mut(array).unwrap().data {
+            for (slot, value) in slots.iter_mut().zip(values) {
+                *slot = vec![value];
+            }
+        }
+        let found = vm.heap.string("div".into()).unwrap();
+        let missing = vm.heap.string("p".into()).unwrap();
+        assert_eq!(
+            call(
+                &mut vm,
+                "Ljava/util/Arrays;",
+                "binarySearch",
+                &["[Ljava/lang/Object;", "Ljava/lang/Object;"],
+                "I",
+                &[array, found],
+            )[0]
+            .int()
+            .unwrap(),
+            1
+        );
+        assert_eq!(
+            call(
+                &mut vm,
+                "Ljava/util/Arrays;",
+                "binarySearch",
+                &["[Ljava/lang/Object;", "Ljava/lang/Object;"],
+                "I",
+                &[array, missing],
+            )[0]
+            .int()
+            .unwrap(),
+            -3
+        );
     }
 }

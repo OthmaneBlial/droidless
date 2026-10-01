@@ -4,7 +4,9 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import sqlite3
 import subprocess
+import tempfile
 
 root = Path(__file__).resolve().parents[1]
 p = argparse.ArgumentParser()
@@ -99,8 +101,43 @@ report = {
     "editable_fields": len(editable),
     "first_field_text": editable[0]["view"]["text"],
     "visible_labels": [label for label in labels if label],
-    "note_save_and_restart_verified": False,
 }
+probe_title = "Droidless persistence probe"
+with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
+    subprocess.run([
+        str(args.binary), "run", "--headless", "--size", "390x844",
+        "--data-dir", app_data, "--click", "＋", "--input", probe_title,
+        "--back", str(notepad),
+    ], text=True, capture_output=True, check=True, timeout=120)
+    database = Path(app_data) / "ir.cafebazaar.notepad/databases/AppDatabase.db"
+    with sqlite3.connect(database) as connection:
+        saved = connection.execute(
+            "SELECT id, title, body FROM Note WHERE title = ?", (probe_title,)
+        ).fetchall()
+    if len(saved) != 1 or saved[0][2] != "":
+        raise SystemExit("Notepad did not persist the edited title before restart")
+
+    restarted = subprocess.run([
+        str(args.binary), "run", "--headless", "--size", "390x844",
+        "--data-dir", app_data, str(notepad),
+    ], text=True, capture_output=True, check=True, timeout=120)
+    restarted_tree = json.loads(restarted.stdout)
+    restarted_labels = [node["view"]["text"] for node in flatten(restarted_tree)]
+    if "Notes" not in restarted_labels:
+        raise SystemExit("Notepad did not return to its Notes screen after restart")
+    with sqlite3.connect(database) as connection:
+        retained = connection.execute(
+            "SELECT title, body FROM Note WHERE id = ?", (saved[0][0],)
+        ).fetchone()
+    if retained != (probe_title, ""):
+        raise SystemExit("Notepad did not retain the note row after a fresh process")
+
+report["note_row_survives_fresh_process"] = True
+report["note_title_visible_in_reopened_list"] = probe_title in restarted_labels
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
-print("Note persistence/save behavior is not verified by this scenario.")
+print("PASS Notepad: saved title survives a fresh process restart in SQLite")
+if report["note_title_visible_in_reopened_list"]:
+    print("PASS Notepad: saved title appears in the reopened Notes list")
+else:
+    print("LIMITATION Notepad: reopened Notes list still shows its empty state")

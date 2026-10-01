@@ -1,8 +1,8 @@
 # Persistent preferences
 
-Current source implements a bounded `SharedPreferences` subset. The v0.1.0
-release archive predates this capability. General Java file APIs, filesDir,
-cacheDir, SQLite, preference listeners and String sets remain unsupported.
+Current source implements bounded `SharedPreferences` and SQLite subsets. The
+v0.1.0 release archive predates these capabilities. General Java file APIs,
+filesDir, cacheDir, preference listeners and String sets remain unsupported.
 
 ## Host-selected data root
 
@@ -67,3 +67,14 @@ target/release/droidless run --headless --data-dir artifacts/preferences-demo \
 `examples/preferences` is DROIDLESS-authored Java/XML conformance, not independent
 notes-app compatibility. Restart, typed values, staged edits, failed saves,
 corruption, case aliases and path/link isolation have executable regressions.
+
+## Limited SQLite support
+
+The runtime stores SQLite databases under the same per-package app-data root.
+Its current bridge covers `SQLiteOpenHelper`, `execSQL`, transactions,
+`compileStatement` binding/execution, `ContentValues` updates, `rawQuery`, and
+typed cursor reads. This is a method subset, not general Android database
+compatibility. The unchanged Notepad APK saves an edited title, and its `Note`
+row survives a fresh process. The reopened Notes screen still shows its empty
+state, so persistence is proven while list-row rendering remains incomplete.
+`tools/compatibility.py` checks this flow against the pinned upstream APK.
