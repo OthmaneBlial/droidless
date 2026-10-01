@@ -82,6 +82,7 @@ pub struct Runtime {
     pub(crate) database_transactions: BTreeMap<String, Vec<bool>>,
     pub(crate) preferences: BTreeMap<String, Word>,
     pub(crate) queue: crate::scheduling::MainQueue,
+    pub(crate) property_animations: crate::property_animations::PropertyAnimations,
     pub(crate) workers: crate::workers::Workers,
     pub(crate) sync_depth: usize,
     pub(crate) native_roots: Vec<Word>,
@@ -162,6 +163,7 @@ impl Runtime {
             database_transactions: BTreeMap::new(),
             preferences: BTreeMap::new(),
             queue: crate::scheduling::MainQueue::default(),
+            property_animations: crate::property_animations::PropertyAnimations::default(),
             workers: crate::workers::Workers::default(),
             sync_depth: 0,
             native_roots: vec![],
@@ -616,6 +618,7 @@ impl Runtime {
             .chain(self.preferences.values().copied())
             .chain(self.queue.pending.values().copied())
             .chain(self.queue.active)
+            .chain(self.property_animations.roots())
             .chain(self.interned.values().copied())
             .chain(self.failed_classes.values().flatten().copied())
             .chain(self.native_roots.iter().copied())
@@ -965,7 +968,8 @@ impl Runtime {
             "Landroid/graphics/drawable/LayerDrawable;"
             | "Landroid/graphics/drawable/RippleDrawable;"
             | "Landroid/graphics/drawable/InsetDrawable;" => "Landroid/graphics/drawable/Drawable;",
-            "Landroid/animation/ObjectAnimator;" => "Landroid/animation/Animator;",
+            "Landroid/animation/ObjectAnimator;" => "Landroid/animation/ValueAnimator;",
+            "Landroid/animation/ValueAnimator;" => "Landroid/animation/Animator;",
             "Ljava/lang/reflect/Constructor;" => "Ljava/lang/reflect/AccessibleObject;",
             "Landroid/view/ViewGroup$MarginLayoutParams;" => {
                 "Landroid/view/ViewGroup$LayoutParams;"

@@ -825,6 +825,7 @@ impl Runtime {
                         | "Ljava/util/concurrent/RunnableFuture;"
                         | "Landroid/animation/Animator$AnimatorListener;"
                         | "Landroid/animation/Animator$AnimatorPauseListener;"
+                        | "Landroid/animation/ValueAnimator$AnimatorUpdateListener;"
                         | "Landroid/animation/TimeInterpolator;"
                         | "Landroid/view/animation/Interpolator;"
                         | "Lorg/xml/sax/Attributes;"

@@ -81,7 +81,7 @@ impl Runtime {
         self.queue.time = time;
         self.poll_messages()
     }
-    /// Drain due messages in deadline/FIFO order at a host event-loop boundary.
+    /// Drain due messages in deadline/FIFO order and advance View property frames.
     pub fn poll_messages(&mut self) -> Result<usize> {
         ensure!(
             self.frames.is_empty() && self.queue.active.is_none(),
@@ -118,6 +118,8 @@ impl Runtime {
             count += 1;
             self.poll_workers(&mut worker_slices)?;
         }
+        count += self.poll_property_animations()?;
+        self.drain_navigation()?;
         if count > 0 {
             self.collect();
         }
@@ -125,6 +127,7 @@ impl Runtime {
     }
     pub(crate) fn stop_messages(&mut self) -> Result<()> {
         self.queue.closed = true;
+        self.stop_property_animations()?;
         self.stop_workers()?;
         if let Some(thread) = self
             .statics

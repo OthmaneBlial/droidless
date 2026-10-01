@@ -86,6 +86,10 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/animation/Animator$AnimatorListener;",
             "Landroid/animation/Animator$AnimatorPauseListener;",
             "Landroid/animation/ObjectAnimator;",
+            "Landroid/animation/ValueAnimator;",
+            "Landroid/animation/ValueAnimator$AnimatorUpdateListener;",
+            "Landroid/animation/TimeInterpolator;",
+            "Landroid/view/ViewPropertyAnimator;",
             "Landroid/animation/StateListAnimator;",
             "Landroid/animation/LayoutTransition;",
             "Ljava/lang/ThreadGroup;",
@@ -542,6 +546,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.animation_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.property_animation_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.enum_native(method, args)? {

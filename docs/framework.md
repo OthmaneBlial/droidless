@@ -238,7 +238,7 @@ native painting also excludes descendants of invisible ancestors.
 View translation and alpha reach native geometry/opacity. System UI flags are
 retained as app state; the desktop content profile has zero Android system-bar
 insets. requestApplyInsets requests layout, without full WindowInsets dispatch.
-No Android system bars, timed property animation, touch history or multi-touch
+No Android system bars, touch history or multi-touch
 are claimed. [API-21 GestureDetector reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/GestureDetector.java).
 
 References: [API-21 DocumentsContract](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/provider/DocumentsContract.java),
@@ -276,8 +276,8 @@ an independent copy. This metadata is separate from the fixed API-21 runtime
 profile. UID, paths, flags and other ApplicationInfo fields remain incomplete.
 
 AnimatorListenerAdapter implements both listener interfaces and its six empty
-API-21 defaults; APK callback overrides still execute in DEX. This does not add
-animation event delivery. OverScroller's timed-scroll mode uses the shared
+API-21 defaults; APK callback overrides still execute in DEX. Timed View property
+animations deliver their callbacks as described below. OverScroller's timed-scroll mode uses the shared
 monotonic runtime clock, Android's default viscous curve or a guest Interpolator,
 Java float rounding, final positions, forceFinished and abortAnimation. Guest
 interpolator failures propagate and temporary roots are released. Fling/springback
@@ -456,6 +456,34 @@ The real screenshot visibly reflects this subset.
 
 ## Input/native boundary
 
+### Timed View property animations
+
+View.animate retains one ViewPropertyAnimator per View. Alpha and translationX/Y
+targets are batched until the next host poll, or start immediately through start.
+Duration, start delay, null/guest interpolators and listener replacement are
+retained. The shared monotonic clock advances real render properties; native
+polling redraws frames even when no Handler message is due. Rendering continues
+to use the existing native alpha and translated geometry.
+
+Each batch owns a ValueAnimator progress token. Guest start, update, cancel and
+end callbacks receive that same token through DEX dispatch. Its duration/delay,
+interpolator, fraction and running/started state can be read; cancellation and
+changing its interpolator affect the actual batch. Per-property replacement
+keeps unrelated properties running. Active batches hold counted transient state;
+cancellation, completion, callback faults and runtime shutdown release it.
+Pending/running owners, tokens and interpolators are GC roots, and temporary
+callback roots unwind on success or failure.
+
+The compiled PropertyAnimationContract checks exact intermediate/final values
+and rendered geometry, automatic and delayed starts, partial replacement,
+reentrant cancellation/restart, dynamic interpolation, GC and callback faults.
+This is the bounded translation/alpha profile. Standalone ValueAnimator factories,
+rotation/scale/Z, repeats/keyframes, hardware layers/actions and full Choreographer
+frame-phase parity remain unsupported. Native ticks use the existing host event
+loop; no native animation interaction or Android differential result is claimed
+by the compiled check. The API shape follows the [ViewPropertyAnimator contract](https://developer.android.com/reference/android/view/ViewPropertyAnimator)
+and [API-21 implementation](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewPropertyAnimator.java).
+
 NSButton actions invoke the app's View.OnClickListener bytecode; XML onClick
 invokes an Activity method. NSTextField changes update EditText, which callbacks
 read through getText. Native controls supply focus/selection/accessibility.
@@ -480,7 +508,7 @@ bounds allow another pass. Translation is excluded from stored layout bounds
 and added once when rendering. Invalid input is rejected before layout and
 callback failures unwind temporary roots. This bounded pass rebuilds the View
 tree between callbacks; it is not a full Android ViewRoot or incremental layout
-engine. Native viewport resizing and property animation remain incomplete.
+engine. Native viewport resizing and the broader property-animation surface remain incomplete.
 
 TextView measurement now retains an owned Layout with text, available text width
 and calculated line count. getLayout is null before measurement and after text,
@@ -512,7 +540,7 @@ the separate layout-required state in the [API-21 View](https://android.googleso
 The existing unanimated support-RecyclerView profile is applied at the shared
 measure entry point, before ancestor callbacks can lay out the list. Its setter
 uses the bundled DEX method signature, including renamed animator classes; this
-does not implement ValueAnimator or general RecyclerView compatibility.
+does not implement standalone ValueAnimator factories or general RecyclerView compatibility.
 
 View retains whether padding was set with relative start/end values.
 setPaddingRelative and XML paddingStart/paddingEnd set that state; setPadding

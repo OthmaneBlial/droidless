@@ -19,6 +19,7 @@ mod looper;
 mod menus;
 mod parcel;
 mod preferences;
+mod property_animations;
 mod queues;
 mod reflection;
 mod regex_compat;
