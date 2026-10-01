@@ -1,6 +1,6 @@
 package org.droidless.counter;
 
-/** Portable float min/max contract, compiled to DEX and also run on desktop Java. */
+/** Portable float extrema and rounding contract, compiled to DEX and desktop Java. */
 public final class MathContract {
     static boolean same(float value, float expected) {
         return expected != expected ? value != value
@@ -20,10 +20,14 @@ public final class MathContract {
             if (!same(Math.min(values[0], values[1]), values[2])
                     || !same(Math.max(values[0], values[1]), values[3])) return 0;
         }
+        float[] rounds = {0f, -0f, 0.49999997f, 0.5f, -0.5f, -0.50000006f, 1.5f, -1.5f,
+            nan, infinity, -infinity, 2147483520f, 2147483648f};
+        int[] expected = {0, 0, 0, 1, 0, -1, 2, -1, 0, Integer.MAX_VALUE, Integer.MIN_VALUE, 2147483520, Integer.MAX_VALUE};
+        for (int i = 0; i < rounds.length; i++) if (Math.round(rounds[i]) != expected[i]) return 0;
         return 1;
     }
     public static void main(String[] args) {
         if (run() != 1) throw new IllegalStateException("Math contract failed");
-        System.out.println("Float min/max contract passed");
+        System.out.println("Float extrema and rounding contract passed");
     }
 }

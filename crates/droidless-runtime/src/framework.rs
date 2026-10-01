@@ -2213,6 +2213,11 @@ impl Runtime {
             ("Ljava/lang/Math;", "abs(F)F") => {
                 result.push(Word::Bits(f32::from_bits(arg(0)?.int()? as u32).abs().to_bits()));
             }
+            ("Ljava/lang/Math;", "round(F)I") => {
+                // Promote before adding: f32 addition misrounds the value just below 0.5.
+                let value = f64::from(f32::from_bits(arg(0)?.int()? as u32));
+                result.push(Word::from((value + 0.5).floor() as i32));
+            }
             ("Ljava/lang/Math;", "max(II)I") => {
                 result.push(Word::from(arg(0)?.int()?.max(arg(1)?.int()?)));
             }
