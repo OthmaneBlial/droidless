@@ -2,6 +2,35 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_text_paint_construction_flags_inheritance_fields_and_gc() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let paint = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/TextPaintContract;".into(),
+                name: "run".into(),
+                parameters: vec![],
+                returns: "Landroid/graphics/Paint;".into(),
+            },
+            vec![],
+            false,
+        )
+        .unwrap()[0];
+    assert_eq!(
+        vm.heap.get(paint).unwrap().class,
+        "Lorg/droidless/images/TextPaintContract$Probe;"
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(paint).is_err(),
+        "TextPaint construction leaked temporary roots"
+    );
+}
+
+#[test]
 fn compiled_touch_focus_default_clickability_cancellation_and_callback_gc() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

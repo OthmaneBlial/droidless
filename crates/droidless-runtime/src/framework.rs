@@ -209,6 +209,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/graphics/Matrix;",
             "Landroid/graphics/Path;",
             "Landroid/graphics/Paint;",
+            "Landroid/text/TextPaint;",
             "Landroid/graphics/PorterDuff$Mode;",
             "Landroid/text/TextUtils;",
             "Ljava/lang/CharSequence;",
@@ -3157,19 +3158,26 @@ impl Runtime {
                     self.heap.get_mut(receiver)?.fields.insert(name.into(), vec![value]);
                 }
             }
-            ("Landroid/graphics/Paint;", "<init>()V") => {
-                self.heap.get_mut(receiver)?.fields.insert(
-                    "droidless:paint:color".into(),
-                    vec![Word::from(0xff00_0000u32 as i32)],
-                );
-            }
-            ("Landroid/graphics/Paint;", "<init>(I)V") => {
+            ("Landroid/graphics/Paint;" | "Landroid/text/TextPaint;", "<init>()V" | "<init>(I)V") => {
+                let flags = if method.parameters.is_empty() { 0 } else { arg(1)?.int()? };
                 let fields = &mut self.heap.get_mut(receiver)?.fields;
-                fields.insert("droidless:paint:flags".into(), vec![arg(1)?]);
+                fields.insert("droidless:paint:flags".into(), vec![Word::from(flags | 0x500)]);
                 fields.insert(
                     "droidless:paint:color".into(),
                     vec![Word::from(0xff00_0000u32 as i32)],
                 );
+                if method.class == "Landroid/text/TextPaint;" {
+                    fields.insert("Landroid/text/TextPaint;->density:F".into(), vec![Word::Bits(1.0f32.to_bits())]);
+                }
+            }
+            ("Landroid/graphics/Paint;", "getFlags()I" | "setFlags(I)V") => {
+                if method.name == "setFlags" {
+                    let flags = Word::from(arg(1)?.int()?);
+                    self.heap.get_mut(receiver)?.fields.insert("droidless:paint:flags".into(), vec![flags]);
+                } else {
+                    result.push(self.heap.get(receiver)?.fields.get("droidless:paint:flags")
+                        .and_then(|values|values.first()).copied().unwrap_or(Word::from(0x500)));
+                }
             }
             ("Landroid/graphics/Paint;", "setColor(I)V") => {
                 self.heap

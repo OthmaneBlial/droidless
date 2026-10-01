@@ -820,6 +820,7 @@ impl Runtime {
                         "Landroid/content/res/Configuration;",
                         "Landroid/graphics/Rect;",
                         "Landroid/graphics/RectF;",
+                        "Landroid/text/TextPaint;",
                         "Landroid/view/ViewGroup$LayoutParams;",
                         "Landroid/view/ViewGroup$MarginLayoutParams;",
                         "Landroid/widget/LinearLayout$LayoutParams;",
@@ -904,6 +905,17 @@ impl Runtime {
                             ("smallestScreenWidthDp", "I"),
                             ("densityDpi", "I"),
                             ("fontScale", "F"),
+                        ]
+                        .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/text/TextPaint;"
+                        && [
+                            ("bgColor", "I"),
+                            ("baselineShift", "I"),
+                            ("linkColor", "I"),
+                            ("drawableState", "[I"),
+                            ("density", "F"),
+                            ("underlineColor", "I"),
+                            ("underlineThickness", "F"),
                         ]
                         .contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/graphics/Rect;"
@@ -1013,6 +1025,7 @@ impl Runtime {
         }
         let parent = match class {
             "Landroid/view/MotionEvent;" => "Landroid/view/InputEvent;",
+            "Landroid/text/TextPaint;" => "Landroid/graphics/Paint;",
             "Landroid/text/SpannableStringBuilder;" => "Landroid/text/Editable;",
             "Landroid/text/Editable;" => "Landroid/text/Spannable;",
             "Landroid/text/SpannableString;" => "Landroid/text/Spannable;",
