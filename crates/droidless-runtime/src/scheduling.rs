@@ -641,6 +641,15 @@ impl Runtime {
             (MESSAGE, "obtain()Landroid/os/Message;") => {
                 result.push(self.new_message(Word::ZERO, Word::ZERO, Word::ZERO)?)
             }
+            (MESSAGE, "obtain(Landroid/os/Handler;ILjava/lang/Object;)Landroid/os/Message;") => {
+                arg(1)?.int()?;
+                let message = self.new_message(arg(0)?, Word::ZERO, arg(2)?)?;
+                self.heap
+                    .get_mut(message)?
+                    .fields
+                    .insert(format!("{MESSAGE}->what:I"), vec![arg(1)?]);
+                result.push(message);
+            }
             (MESSAGE, "getTarget()Landroid/os/Handler;") => {
                 result.push(self.message_word(receiver, "target")?)
             }

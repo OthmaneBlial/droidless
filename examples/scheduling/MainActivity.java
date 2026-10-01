@@ -247,8 +247,12 @@ public class MainActivity extends Activity {
         handler.postDelayed(new Append("N"),-100);
         Message empty = handler.obtainMessage(123, null);
         if (empty.what != 123 || empty.obj != null || empty.getTarget() != handler) throw new IllegalStateException("null message payload");
+        Message untargeted = Message.obtain(null, -5, null);
+        if (untargeted.getTarget() != null || untargeted.what != -5 || untargeted.obj != null
+                || untargeted.arg1 != 0 || untargeted.arg2 != 0 || untargeted.getCallback() != null || untargeted.getWhen() != 0)
+            throw new IllegalStateException("static message defaults");
         Object payload = new StringBuilder().append("pay").append("load").toString();
-        queued = handler.obtainMessage(7, payload); queued.arg1=11; queued.arg2=12;
+        queued = Message.obtain(handler, 7, payload); queued.arg1=11; queued.arg2=12;
         System.gc();
         if (queued.obj != payload) throw new IllegalStateException("message payload identity/GC");
         if (queued.getTarget()!=handler || !handler.sendMessageAtTime(queued,10) || queued.getWhen()!=10) throw new IllegalStateException("message timing");
