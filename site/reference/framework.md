@@ -457,6 +457,14 @@ There is no APK-specific mathematical output or emulator fallback.
 
 ## Resource/layout subset
 
+Resources.getResourceEntryName reads the requested packaged resource's entry name
+from the compiled table without resolving its value. This preserves alias names
+and works for ID entries and complex style bags. Unknown IDs raise a guest
+Resources.NotFoundException, which also inherits RuntimeException. Compiled
+checks exercise these entry kinds, guest GC and invalid IDs including a missing
+framework entry. A full framework resource-name table remains unsupported.
+[API reference](https://developer.android.com/reference/android/content/res/Resources#getResourceEntryName(int)).
+
 resources.arsc parsing covers package/type/key pools, simple typed values,
 reference chains and map entries, including sparse/16-bit offsets. Default
 configuration wins; otherwise the first variant is used. Qualifier matching,

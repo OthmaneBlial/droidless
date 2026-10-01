@@ -2345,6 +2345,17 @@ impl Runtime {
                 let text = self.resource_text(arg(1)?.int()? as u32)?;
                 result.push(self.heap.string(text)?);
             }
+            ("Landroid/content/res/Resources;", "getResourceEntryName(I)Ljava/lang/String;") => {
+                let id = arg(1)?.int()? as u32;
+                // Names belong to the requested entry, including aliases and bags;
+                // resolving its value would return the wrong alias name.
+                let name = self.apk.resources.entries.get(&id)
+                    .and_then(|entry| entry.name.split_once('/'))
+                    .map(|(_, name)| name.to_owned())
+                    .ok_or_else(|| fault("Landroid/content/res/Resources$NotFoundException;",
+                        format!("Resource ID #0x{id:08x}")))?;
+                result.push(self.heap.string(name)?);
+            }
             ("Landroid/content/Context;", "getResources()Landroid/content/res/Resources;") => {
                 let resources = self
                     .heap

@@ -35,7 +35,8 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
             "Ljava/lang/IllegalArgumentException;"
         }
         "Ljava/lang/IllegalThreadStateException;" => "Ljava/lang/IllegalArgumentException;",
-        "Ljava/util/MissingResourceException;" => "Ljava/lang/RuntimeException;",
+        "Ljava/util/MissingResourceException;"
+        | "Landroid/content/res/Resources$NotFoundException;" => "Ljava/lang/RuntimeException;",
         "Ljava/util/concurrent/CancellationException;" => "Ljava/lang/IllegalStateException;",
         "Ljava/util/concurrent/ExecutionException;" | "Ljava/util/concurrent/TimeoutException;" => {
             "Ljava/lang/Exception;"

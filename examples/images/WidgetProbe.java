@@ -19,6 +19,25 @@ public final class WidgetProbe {
     private static ScrollFrame frame, hidden;
     public static void verify(Activity activity) {
         host = activity;
+        android.content.res.Resources resources = activity.getResources();
+        int[] resourceIds = {R.layout.main, R.id.source, R.style.ProbeText, R.drawable.sample_alias};
+        String[] entryNames = {"main", "source", "ProbeText", "sample_alias"};
+        for (int i = 0; i < resourceIds.length; i++) {
+            String name = resources.getResourceEntryName(resourceIds[i]);
+            System.gc();
+            if (!name.equals(entryNames[i])) throw new AssertionError("resource entry name");
+        }
+        for (int id : new int[] {0, -1, 0x7fffffff, 0x01030000}) {
+            try {
+                resources.getResourceEntryName(id);
+                throw new AssertionError("missing resource accepted");
+            } catch (RuntimeException error) {
+                System.gc();
+                if (!(error instanceof android.content.res.Resources.NotFoundException)
+                        || error.getMessage() == null || error.getMessage().length() == 0)
+                    throw new AssertionError("resource lookup fault");
+            }
+        }
         final int[] calls = {0};
         AnimatorListenerAdapter adapter = new AnimatorListenerAdapter() {
             public void onAnimationEnd(Animator animation) { super.onAnimationEnd(animation); calls[0]++; }
