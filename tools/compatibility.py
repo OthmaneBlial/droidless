@@ -300,3 +300,40 @@ report["reopened_body"] = body
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
 print("PASS Notepad: existing row reopened, title/body edited, list refreshed and both fields retained after restart")
+
+# The original APK stores XML metacharacters unescaped. Its own catch path must
+# log the actual exception and show !ERROR!, without rewriting the stored body.
+with tempfile.TemporaryDirectory(prefix="droidless-notepad-malformed-") as app_data:
+    title = "Malformed XML diagnostic"
+    raw_body = "Plain & <broken text"
+    command = [str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", app_data]
+    saved = subprocess.run(command + [
+        "--click", "＋", "--input", title, "--input-at", "1", raw_body,
+        "--back", str(notepad),
+    ], text=True, capture_output=True, check=True, timeout=120)
+    saved_labels = [node["view"]["text"] for node in flatten(json.loads(saved.stdout))]
+    if title not in saved_labels or "Notes" not in saved_labels:
+        raise SystemExit("Notepad did not return to its list after logging the malformed body")
+    database = Path(app_data) / "ir.cafebazaar.notepad/databases/AppDatabase.db"
+    with sqlite3.connect(database) as connection:
+        before = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+    if before != [(1, title, raw_body)]:
+        raise SystemExit("Notepad did not retain the original malformed body after save")
+    reopened = subprocess.run(command + ["--click", title, str(notepad)],
+        text=True, capture_output=True, check=True, timeout=120)
+    fields = [node["view"]["text"] for node in flatten(json.loads(reopened.stdout))
+        if node["view"]["kind"] == "EditText"]
+    if fields != [title, "!ERROR!"]:
+        raise SystemExit("Notepad did not show its own malformed XML fallback in the editor")
+    for process in (saved, reopened):
+        if "org.xml.sax.SAXException:" not in process.stderr or \
+            "\tat Lir/cafebazaar/notepad/d/l;->c()Landroid/text/Spannable; [classes.dex, PC 0x0033]" not in process.stderr:
+            raise SystemExit("Notepad did not log its retained XML-fault DEX location")
+    with sqlite3.connect(database) as connection:
+        after = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+    if before != after:
+        raise SystemExit("Opening Notepad's malformed body changed the stored row")
+report["malformed_body_guest_error_fallback_verified"] = True
+report["malformed_body_open_preserves_database_row"] = True
+(root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
+print("PASS Notepad: malformed XML logs original DEX fault, shows guest !ERROR! and preserves the stored row")

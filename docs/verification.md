@@ -1023,9 +1023,10 @@ Java; this is separate from Android-specific Bundle and text behavior.
 The body probe uses multiline text without XML metacharacters. An additional
 probe containing `&` and `<` is not a successful round trip: inspection of the
 unchanged APK shows its serializer replacing newlines but storing those
-characters unescaped. Its SAX loading path fails, then reaches unsupported
-printStackTrace. This is a current compatibility limit, not Android-device
-differential evidence. SAXException now retains its real Exception/Throwable
+characters unescaped. At this increment its SAX loading path fails, then reaches
+unsupported printStackTrace; the retained-diagnostics increment below now verifies
+the APK's actual error fallback. This is not a successful text round trip or
+Android-device differential evidence. SAXException retains its real Exception/Throwable
 ancestry. Rich formatting, drawing and full visual fidelity remain open.
 
 UNSPECIFIED measurement now preserves intrinsic card height, including nested
@@ -1144,4 +1145,41 @@ python3 tools/compatibility.py
 ```sh
 DROIDLESS_NATIVE_TRACE=1 target/release/droidless run --ephemeral fixtures/generated/scheduling.apk \
   --click "Sleep, join and finish" --trace-lifecycle
+```
+
+## Current-source retained Throwable diagnostics and Notepad error recovery
+
+No-argument printStackTrace now prints the original guest DEX method/module/PC
+locations, captured at construction or implicit Java fault creation. These remain
+available after unwind and GC; fillInStackTrace refreshes them. Cause chains use
+actual retained objects, honor guest getCause/toString/localization overrides,
+stop cycles and enforce output/depth limits. Callback failures still propagate.
+Compiled checks also verify constructor fillInStackTrace overrides and root
+cleanup. ThrowableContract's separate desktop Java driver passes; DROIDLESS uses
+DEX locations rather than source-file lines. Stream/writer overloads,
+StackTraceElement arrays and suppression remain unsupported.
+
+The pinned, unmodified public Notepad APK now completes its actual malformed XML
+catch path. A fresh headless process creates a note with body
+`Plain & <broken text`, saves through Back and returns to Notes. Its SAX fault is
+printed with the original c() call's PC 0x0033. Another fresh process opens that
+row and displays the APK's own !ERROR! body marker; both processes exit 0.
+Opening the row leaves its ID, title and raw database body unchanged.
+
+This verifies error recovery, not a successful XML-metacharacter round trip.
+The original serializer still stores those characters unescaped. No native
+interaction or Android reference-device comparison is claimed for this new
+error path. The permanent public replay checks the fault log, guest error marker
+and unchanged database row alongside the existing successful note/edit/restart
+and calculator/image-app cases.
+
+Full local CI passes 98 Rust tests, warning-free Clippy, both optimized builds
+and 4,096 seeded parser mutations. GitHub Actions remain disabled and the 50%
+checkpoint remains ahead.
+
+```sh
+sh tools/ci.sh
+cargo test -p droidless-runtime throwables::tests --locked
+java -cp examples/counter/build/classes org.droidless.counter.ThrowableContract
+python3 tools/compatibility.py
 ```
