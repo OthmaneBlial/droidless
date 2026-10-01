@@ -1,0 +1,7 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+  <group android:id="@+id/choices" android:checkableBehavior="single" android:enabled="false" android:visible="false">
+    <item android:id="@+id/choice_b" android:title="Literal B" android:orderInCategory="2" android:enabled="true" android:visible="true" />
+    <item android:id="@+id/choice_a" android:title="Literal A" android:titleCondensed="A" android:orderInCategory="1" android:checked="true" />
+  </group>
+  <item android:id="@+id/menu_tail" android:title="@string/app_name" android:orderInCategory="3" android:icon="@drawable/menu_icon" android:showAsAction="ifRoom" />
+</menu>

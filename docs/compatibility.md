@@ -27,6 +27,15 @@ per-side padding/click/key listeners, scroll offsets and the default scroll-chan
 callback; ViewGroup add/detach/attach child operations; LinearLayout orientation;
 TextView text/append/size/color/gravity; EditText text/null key listener/selection;
 KeyEvent action/keycode. Long.rotateRight(JI)J is implemented for 64-bit values.
+Platform Menu/MenuItem state and MenuInflater load packaged flat menu XML, with
+category ordering, resource titles/icons, group flags, exclusive checks and GC
+ownership verified by an authored compiled contract. Drawable.setTint delegates
+to virtual setTintList and retains tint metadata; it does not paint tinted icons.
+The unmodified Notepad constructs its delete menu through its own AppCompat code.
+Host menu presentation/selection and actual note deletion are not yet verified.
+Submenus, shortcuts, XML onClick/action Views/providers and theme references remain
+unsupported; each menu is bounded to 1,024 items. The ordering and XML defaults
+follow the [API-21 MenuInflater reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/MenuInflater.java).
 BitmapFactory decodes packaged PNG/JPEG/WebP through resource, stream and byte-array
 paths; Bitmap bounds options, dimensions and ImageView resource/bitmap/drawable
 assignment reach AppKit image views. `Resources.getXml` exposes a bounded binary

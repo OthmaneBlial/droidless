@@ -143,6 +143,10 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/os/Process;",
             "Landroid/os/Trace;",
             "Landroid/view/View$MeasureSpec;",
+            "Landroid/view/Menu;",
+            "Landroid/view/MenuItem;",
+            "Landroid/view/MenuInflater;",
+            "Landroid/view/MenuItem$OnMenuItemClickListener;",
             "Landroid/os/Build$VERSION;",
             "Landroid/net/LocalServerSocket;",
             "Landroid/net/LocalSocket;",
@@ -508,6 +512,9 @@ impl Runtime {
         }
         if self.trace.framework {
             eprintln!("framework: {} {args:?}", method.key());
+        }
+        if let Some(result) = self.menu_native(method, args)? {
+            return Ok(Some(result));
         }
         if let Some(result) = self.xml_resource_native(method, args)? {
             return Ok(Some(result));
@@ -1378,6 +1385,20 @@ impl Runtime {
             }
             ("Landroid/graphics/drawable/Drawable;", "invalidateSelf()V") => {
                 self.heap.get(receiver)?;
+            }
+            ("Landroid/graphics/drawable/Drawable;", "setTint(I)V") => {
+                let colors = self.invoke(Method {
+                    class: "Landroid/content/res/ColorStateList;".into(), name: "valueOf".into(),
+                    parameters: vec!["I".into()], returns: "Landroid/content/res/ColorStateList;".into(),
+                }, vec![arg(1)?], false)?.first().copied().context("missing tint color list")?;
+                let roots = self.native_roots.len();
+                self.native_roots.extend([receiver, colors]);
+                let tinted = self.invoke(Method {
+                    class: "Landroid/graphics/drawable/Drawable;".into(), name: "setTintList".into(),
+                    parameters: vec!["Landroid/content/res/ColorStateList;".into()], returns: "V".into(),
+                }, vec![receiver, colors], true);
+                self.native_roots.truncate(roots);
+                tinted?;
             }
             ("Landroid/graphics/drawable/Drawable;", "setTintList(Landroid/content/res/ColorStateList;)V" | "setTintMode(Landroid/graphics/PorterDuff$Mode;)V") => {
                 let value=arg(1)?;

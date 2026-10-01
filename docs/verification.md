@@ -1183,3 +1183,29 @@ cargo test -p droidless-runtime throwables::tests --locked
 java -cp examples/counter/build/classes org.droidless.counter.ThrowableContract
 python3 tools/compatibility.py
 ```
+
+## Current-source menu XML and item state
+
+The authored MenuContract, compiled with javac/D8 into the Counter APK, verifies
+flat packaged menu XML, resource/literal titles and drawable references, category
+precedence and stable ordering, duplicate-ID removal, group visibility/enabled
+flags and exclusive/nonexclusive checks. Invalid indices/category/action flags
+reach guest catch handlers. Unsupported XML onClick fails before adding any
+items; the 1,024-item cap preserves the existing menu. GC checks retain items,
+listeners, icons and color lists and release them after the last menu root drops.
+Drawable.setTint invokes actual guest setTintList overrides; a failing override
+propagates without leaking native roots. Tint metadata is retained, not painted.
+
+The pinned original Notepad APK's onCreateOptionsMenu callback also completes:
+its AppCompat inflater delegates to the platform inflater, loads the packaged
+delete item and executes its DrawableCompat tint path. This preparation probe
+is not yet evidence for native menu input or actual note deletion. Submenus,
+shortcuts, XML onClick, action Views/providers and theme references remain open.
+
+Full local CI passes 99 Rust tests, warning-free Clippy, both optimized builds
+and 4,096 seeded parser mutations. GitHub Actions remain disabled.
+
+```sh
+cargo test -p droidless-runtime --test menus --locked
+sh tools/ci.sh
+```

@@ -169,6 +169,7 @@ pub enum Data {
         values: Vec<Word>,
         version: u32,
     },
+    Menu(Vec<Word>),
     Map {
         entries: Vec<(Word, Word)>,
         version: u32,
@@ -398,6 +399,9 @@ impl Heap {
             }
             if let Data::Collection { values, .. } = &object.data {
                 work.extend(values.iter().copied());
+            }
+            if let Data::Menu(items) = &object.data {
+                work.extend(items.iter().copied());
             }
             if let Data::Map { entries, .. } = &object.data {
                 work.extend(entries.iter().flat_map(|(key, value)| [*key, *value]));
