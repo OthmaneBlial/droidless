@@ -4072,9 +4072,14 @@ impl Runtime {
                     self.heap.get(listener)?;
                     Some(listener)
                 };
+                self.view_mut(receiver)?.xml_click = None;
                 if listener != Word::ZERO {
                     self.heap.get_mut(receiver)?.fields.insert("droidless:touch:clickable".into(),vec![Word::from(1)]);
                 }
+            }
+            ("Landroid/view/View;", "hasOnClickListeners()Z") => {
+                let view = self.view_mut(receiver)?;
+                result.push(Word::from((view.listener.is_some() || view.xml_click.is_some()) as i32));
             }
             ("Landroid/view/View;", "setOnFocusChangeListener(Landroid/view/View$OnFocusChangeListener;)V") => {
                 let listener = arg(1)?;

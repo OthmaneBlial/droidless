@@ -2,6 +2,86 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn view_click_listener_query_gc_and_explicit_xml_listener_removal() {
+    let call = |vm: &mut Runtime, name: &str, parameters: &[&str], returns: &str, args| {
+        vm.invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: name.into(),
+                parameters: parameters.iter().map(|value| (*value).into()).collect(),
+                returns: returns.into(),
+            },
+            args,
+            true,
+        )
+        .unwrap()
+    };
+    for (bytes, text) in [
+        (
+            include_bytes!("../../../fixtures/generated/counter.apk").as_slice(),
+            "Increment",
+        ),
+        (
+            include_bytes!("../../../fixtures/generated/intents.apk").as_slice(),
+            "Open detail",
+        ),
+    ] {
+        let mut vm = Runtime::new(Apk::parse(bytes).unwrap()).unwrap();
+        vm.launch().unwrap();
+        let activity = vm.activity;
+        let root = vm.root.unwrap();
+        let tree = vm.snapshot().unwrap();
+        let button = Word::Ref(
+            tree.children
+                .iter()
+                .find(|node| node.view.text == text)
+                .unwrap()
+                .handle,
+        );
+        assert_eq!(
+            call(&mut vm, "hasOnClickListeners", &[], "Z", vec![root]),
+            [Word::ZERO]
+        );
+        call(
+            &mut vm,
+            "setClickable",
+            &["Z"],
+            "V",
+            vec![button, Word::ZERO],
+        );
+        vm.collect();
+        assert_eq!(
+            call(&mut vm, "hasOnClickListeners", &[], "Z", vec![button]),
+            [Word::from(1)]
+        );
+        if text == "Increment" {
+            assert_eq!(
+                call(&mut vm, "performClick", &[], "Z", vec![button]),
+                [Word::from(1)]
+            );
+            assert_eq!(vm.snapshot().unwrap().children[0].view.text, "1");
+        }
+        call(
+            &mut vm,
+            "setOnClickListener",
+            &["Landroid/view/View$OnClickListener;"],
+            "V",
+            vec![button, Word::ZERO],
+        );
+        vm.collect();
+        assert_eq!(
+            call(&mut vm, "hasOnClickListeners", &[], "Z", vec![button]),
+            [Word::ZERO]
+        );
+        assert_eq!(
+            call(&mut vm, "performClick", &[], "Z", vec![button]),
+            [Word::ZERO]
+        );
+        assert_eq!(vm.activity, activity);
+    }
+}
+
+#[test]
 fn compiled_focus_ownership_callbacks_gc_removal_and_fault_recovery() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
