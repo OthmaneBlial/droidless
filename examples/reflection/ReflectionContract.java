@@ -39,6 +39,14 @@ public class ReflectionContract {
     public static int run() throws Exception {
         Class<?> cls = Thing.class;
         if (initializations != 0 || !"org.droidless.reflection.ReflectionContract$Thing".equals(cls.getName())) return 0;
+        ClassLoader loader = ReflectionContract.class.getClassLoader();
+        if (loader.loadClass(cls.getName()) != cls || initializations != 0
+            || loader.loadClass("java.lang.String") != String.class) return 0;
+        System.gc();
+        if (loader.loadClass(cls.getName()) != cls || initializations != 0) return 0;
+        try { loader.loadClass("[I"); return 0; } catch (ClassNotFoundException expected) {}
+        try { loader.loadClass("absent.Class"); return 0; } catch (ClassNotFoundException expected) {}
+        try { loader.loadClass(null); return 0; } catch (NullPointerException expected) {}
         if (Class.forName(cls.getName()) != cls || initializations != 1) return 0;
         Thing first = (Thing) cls.newInstance();
         Thing second = (Thing) cls.newInstance();

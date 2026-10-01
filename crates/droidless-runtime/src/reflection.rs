@@ -346,10 +346,14 @@ impl Runtime {
                 "Ljava/lang/Class;",
                 "forName(Ljava/lang/String;)Ljava/lang/Class;"
                 | "forName(Ljava/lang/String;ZLjava/lang/ClassLoader;)Ljava/lang/Class;",
-            ) => {
+            )
+            | ("Ljava/lang/ClassLoader;", "loadClass(Ljava/lang/String;)Ljava/lang/Class;") => {
+                let loading = method.class == "Ljava/lang/ClassLoader;";
                 let explicit = method.parameters.len() == 3;
-                let initialize = if explicit { arg(1)?.int()? != 0 } else { true };
-                let loader = if explicit {
+                let initialize = !loading && (!explicit || arg(1)?.int()? != 0);
+                let loader = if loading {
+                    arg(0)?
+                } else if explicit {
                     arg(2)?
                 } else {
                     self.apk_class_loader()?
@@ -360,9 +364,12 @@ impl Runtime {
                         "foreign ClassLoader unsupported"
                     );
                 }
-                let name = self.heap.text(arg(0)?)?.to_owned();
+                let name = self.heap.text(arg(usize::from(loading))?)?.to_owned();
                 let descriptor = binary_descriptor(&name);
                 let exists = descriptor.as_ref().is_some_and(|class| {
+                    if loading && class.starts_with('[') {
+                        return false;
+                    }
                     let element = class.trim_start_matches('[');
                     (class.starts_with('[') && element.len() == 1)
                         || (loader != Word::ZERO && self.class_location(element).is_some())
