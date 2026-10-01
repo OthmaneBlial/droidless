@@ -334,9 +334,33 @@ ahead. This is explicit guest focus ownership rather than full input parity.
 [API-21 View](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/View.java),
 [ViewGroup](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
 
+ViewGroup.offsetDescendantRectToMyCoords and offsetRectIntoDescendantCoords
+translate a Rect in place through actual managed parents, layout positions and
+retained scroll offsets. The root's position and scroll are excluded. Java
+integer wrapping is retained for deltas and edges, including inverted or empty
+rectangles. Self conversion returns immediately, including a null Rect; a
+foreign ancestor raises IllegalArgumentException after any preceding translations.
+Chains beyond 128 steps or cycles are rejected, and worker calls retain the UI
+thread guard. Compiled checks cover nested groups, both directions, overflow,
+fault recovery and GC. Scroll setters, matrix transforms and clipping are outside
+this profile. Rect.width/height use signed wrapping subtraction; negative bounds
+are not normalized. The behavior follows the
+[API-21 ViewGroup reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
+
 View.setBackground invokes virtual setBackgroundDrawable, preserving APK
-overrides and retained Drawable identity, including null clearing. Rendering is
-still limited to the existing flat-color/raster subset. Content descriptions
+overrides and retained Drawable identity, including null clearing.
+setBackgroundResource loads through the View's actual Context; Context.getDrawable
+delegates to virtual getResources/getTheme and Resources.getDrawable(id, theme).
+Nonzero repeated resource IDs preserve identity and skip callbacks. Assigning a
+different Drawable or a flat background color clears that resource cache; assigning
+the same Drawable retains it. Zero clears through the virtual background setter.
+Resource IDs are recorded only after successful callbacks. Compiled checks cover
+Resources and View overrides, GC, lookup/setter faults and recovery.
+getBackgroundTintList/getBackgroundTintMode expose retained state and return null
+for untinted Views. Tint setters, XML tint application and native tint painting
+remain unsupported. Rendering is still limited to the existing flat-color/raster
+subset; general background callback, padding and color/Drawable coherence parity
+is incomplete. Content descriptions
 retain supported String/Spanned values through GC, preserve empty strings, compare
 through virtual equals, and clear on null. Nonempty labels promote automatic
 accessibility importance. XML labels and AppKit accessibility labels are wired;
