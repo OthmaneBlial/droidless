@@ -23,7 +23,7 @@ annotation coverage remains pending. Reserved/newer opcodes fail with method/PC.
 
 Activity constructors/lifecycle/content/title/findViewById/window metrics;
 Context/Resources strings/resources; View ID/visibility/enabled/background/
-uniform padding/click/key listeners, scroll offsets and the default scroll-change
+per-side padding/click/key listeners, scroll offsets and the default scroll-change
 callback; ViewGroup add/detach/attach child operations; LinearLayout orientation;
 TextView text/append/size/color/gravity; EditText text/null key listener/selection;
 KeyEvent action/keycode. Long.rotateRight(JI)J is implemented for 64-bit values.
@@ -56,9 +56,12 @@ Single/fixed/cached executors now queue real guest work, with Future results,
 cancellation, timed worker waits and actual shutdown state. Compiled contracts
 and an authored native wait/deliver/cancel flow pass; independent asynchronous
 APK workflows remain unproven. [Exact executor profile](threading.md#executors-and-future-results).
-A targeted support-RecyclerView layout pass renders two saved titles from the
-pinned Notepad APK after save and restart; item animations are omitted. This does
-not establish general RecyclerView or AndroidX compatibility.
+A bounded guest layout pass executes inherited APK onMeasure/onLayout callbacks,
+including support RecyclerView and DrawerLayout. It renders saved Notepad rows
+and moves its closed drawer offscreen; item animations are omitted. XML layout
+parameters, attached merge and ViewStub replacement pass compiled checks.
+[Guest layout scope and metadata-only drawable limits](framework.md#guest-layout-callbacks-and-xml-metadata).
+This does not establish general RecyclerView or AndroidX compatibility.
 Bounded GridView binds guest BaseAdapter cells, observer notifications, item-click
 callbacks with long IDs, auto-fit columns and four stretch modes. An authored
 native fixture verifies image clicks, disabled items and refresh. At most 1,024

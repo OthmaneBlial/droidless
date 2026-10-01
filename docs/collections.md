@@ -207,3 +207,9 @@ Queue semantics: [Java 8 LinkedBlockingQueue](https://docs.oracle.com/javase/8/d
 Bulk-copy and read-only view contracts: [Java 8 HashMap](https://docs.oracle.com/javase/8/docs/api/java/util/HashMap.html) and [Java 8 Collections](https://docs.oracle.com/javase/8/docs/api/java/util/Collections.html).
 
 Snapshot contract: [Java 17 CopyOnWriteArrayList](https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/CopyOnWriteArrayList.html).
+
+`Collections.reverse` swaps elements through virtual List get/set calls, bounded
+to 16,384 entries. Guest overrides and read-only faults remain observable;
+ArrayList element replacement preserves existing iterator versions. The compiled
+CustomLayout contract checks overridden setters with guest collection, nulls,
+retained iteration, empty input and read-only rejection.

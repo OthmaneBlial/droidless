@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Native Notepad now selects an existing row with the mouse, accepts keyboard
+  title/body edits, saves through Back and reopens both exact fields after a
+  fresh process. The original SQLite row ID is retained and native close exits
+  cleanly. AppKit hit testing keeps editable controls on native focus/selection.
+
+- Layout now calls real inherited APK onMeasure/onLayout callbacks before
+  native drawing and root touch. XML retains AttributeSet/Context, uses virtual
+  parent layout parameters and supports attached merge and ViewStub replacement.
+  The closed Notepad drawer is offscreen; invisible ancestors exclude native
+  descendants. Shared measurement/geometry, per-edge padding, resource color
+  selectors and reference-only reflected constructors pass compiled contracts.
+  Compound drawable/tint/checkmark painting and complete Android focus/styling
+  remain outside this profile.
+
 - The unchanged public Notepad APK now reopens an existing note, updates its
   title and multiline body, refreshes the list and restores both fields after
   restart without creating another row. Host text selection finds a label's
@@ -11,9 +25,8 @@
   bounded TextUtils search/replacement supports the body serialization path.
   Typed SharedPreferences retain their original storage representation.
   UNSPECIFIED measurement now preserves intrinsic card sizes; bounded
-  VelocityTracker support shares the gesture estimator. Native existing-note
-  selection/editing remains blocked by drawer geometry and CoordinatorLayout
-  drawing-order queries.
+  VelocityTracker support shares the gesture estimator. That earlier host-replay
+  checkpoint did not verify native existing-note selection/editing.
 
 - Executor.execute no longer runs tasks inline or reports fabricated shutdown
   success. Single/fixed/cached pools reuse guest workers; Callable and Runnable

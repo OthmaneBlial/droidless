@@ -164,7 +164,7 @@
       "native_keyboard_verified": true,
       "native_save_verified": true,
       "multi_note_restart_verified": true,
-      "notes": "Original release APK unmodified. Headless replay saves two notes, reopens one through its row listener, edits title and multiline body, refreshes the list and restores both fields after restart with the original row ID. A native AppKit window accepted keyboard text and saved it to SQLite. Bodies with XML metacharacters reach a SAX loading/printStackTrace limit; rich formatting, drawing, worker flow and visual fidelity remain unverified. Not redistributed. Native existing-note selection/editing remains unverified: the closed drawer captures root touch and an editor mouse event stops at CoordinatorLayout drawing-order queries.",
+      "notes": "Original release APK unmodified. Headless replay saves two notes, reopens one through its row listener, edits title and multiline body, refreshes the list and restores both fields after restart with the original row ID. Native AppKit checks select an existing row with the mouse, edit its title/body with keyboard input, save through Back and reopen both exact fields in a fresh process. Both native processes close with exit status zero. Bodies with XML metacharacters reach a SAX loading/printStackTrace limit; rich formatting, drawing, worker flow and visual fidelity remain unverified. Not redistributed.",
       "release_tag": "v1.0.0",
       "headless_viewport": [
         390,
@@ -178,8 +178,10 @@
       "headless_existing_note_edit_verified": true,
       "headless_title_body_restart_verified": true,
       "existing_note_row_id_retained": true,
-      "native_existing_note_selection_verified": false,
-      "native_existing_note_edit_verified": false
+      "native_existing_note_selection_verified": true,
+      "native_existing_note_edit_verified": true,
+      "native_title_body_restart_verified": true,
+      "native_close_exit_zero": true
     },
     {
       "package": "org.droidless.grids",

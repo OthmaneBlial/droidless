@@ -46,8 +46,9 @@ The original APK's SHA-256 is checked by `sh tools/fetch-notepad.sh`; DROIDLESS
 does not patch or redistribute it. After Back, the Notes list shows the saved
 titles; editing an existing note keeps its original row ID and refreshes the list.
 A fresh process restores its revised title and body. An earlier native AppKit
-run verified keyboard entry and saving a new note. Native existing-note selection
-and editing remain open.
+run verified keyboard entry and saving a new note. Native mouse selection now
+opens an existing note, keyboard input edits both fields, and Escape saves back
+to the list. A fresh native process reopens the exact revised title and body.
 [Exact evidence and limits](docs/verification.md#current-source-editing-an-existing-public-note).
 
 ```sh
@@ -174,7 +175,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Intents | [Authored Java/XML fixture](examples/intents/MainActivity.java) | Native screen transitions, retained input, Back and lifecycle observers; headless snapshot registration, GC during transitions and callback fault cleanup |
 | Preferences | [Authored Java/XML fixture](examples/preferences/MainActivity.java) | Native UTF-8 paste, save/restart/clear, typed values and package/path isolation |
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, snapshot iteration across mutation/GC/worker writes, guest equality, read-only views and limits; same normal list, snapshot, map-copy and immediate queue contracts pass on desktop Java |
-| Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup/construction, primitive TYPE identities, guest faults and inherited fields; pure Java contracts pass on desktop Java. SDK profile field checks are compiled DEX evidence |
+| Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup, reference constructors, runtime/inherited annotations, primitive TYPE identities, guest faults and inherited fields; portable contracts pass on desktop Java. SDK profile field checks are compiled DEX evidence |
 | Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native timer and Future wait/deliver/cancel flows; compiled worker, TimerTask and executor result/wait/shutdown contracts. [Exact scheduling scope](docs/threading.md) |
 | Images and XML | [Authored Java/XML fixture](examples/images/MainActivity.java) | XML pull traversal, typed attributes, PNG/JPEG/WebP decoding and four native AppKit ImageViews. Unmodified SwpieView also opens selected-folder images in its native full-screen viewer |
 | Activity results and folders | [Authored Java fixture](examples/results/MainActivity.java) | Actual request codes, copied return data, Back cancellation and native folder selection; stopped callers, GC and failure cleanup pass compiled checks. Bounded read-only document queries and streams are supported; writes and persistent grants remain open |
@@ -183,7 +184,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Touch and gestures | [Authored Java fixture](examples/touch/MainActivity.java) | Single-pointer dispatch, child coordinates/capture, click fallback, timed taps/double taps/presses, scroll/fling, cancellation and callback GC/error cleanup. SwpieView replay verifies actual next/previous images; native taps hide/show controls. Native drag verification remains pending |
 | Photo grid | [Authored Java/XML fixture](examples/grids/MainActivity.java) | Guest BaseAdapter cells, auto-fit and four stretch modes, observer updates and native photo clicks with 64-bit IDs; disabled items ignore clicks and Refresh replaces seven photos with four |
 | Widgets | [Authored Java contracts](examples/images/WidgetProbe.java) | Timed scrolling, manifest application metadata, listener overrides, virtual background dispatch and content-description retention; image accessibility labels verified in native AppKit |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Headless two-row save/restart, existing-row title/body edits and field restoration. Earlier native new-note typing and saving verified; native existing-note editing remains open |
+| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Headless two-row save/restart. Native existing-row mouse selection, keyboard title/body edits, Back save and exact field restoration after a fresh process; original SQLite ID retained |
 
 Authored fixtures test implementation; they do not establish arbitrary APK
 compatibility. [Evidence catalog](compatibility/catalog.json).
@@ -198,7 +199,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 92 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 95 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

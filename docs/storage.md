@@ -86,3 +86,6 @@ list refreshes. The original row ID remains unchanged and there are still two
 rows. A fresh process reopens the revised note with both edited fields intact.
 CLI `--input-at 1 TEXT` selects the second enabled visible editor field; like
 `--input`, it edits the View model and does not synthesize keyboard events.
+Separate native checks now select an existing row with the mouse, type both
+fields, save with Escape and reopen them in a fresh process. The row keeps its
+original ID. [Native evidence](verification.md#current-source-editing-an-existing-public-note).

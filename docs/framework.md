@@ -161,7 +161,7 @@ Reference: [API-21 TextUtils](https://github.com/aosp-mirror/platform_frameworks
 
 ImageView.ScaleType has canonical enum values and retained get/set state.
 FIT_XY, FIT_START/CENTER/END, CENTER, CENTER_CROP and CENTER_INSIDE render through
-AppKit with clipping and uniform padding; XML scaleType is also retained. MATRIX
+AppKit with clipping and per-side padding; XML scaleType is also retained. MATRIX
 and custom image matrices remain unsupported. The unmodified SwpieView APK now
 queries and decodes three selected-folder PNG/JPEG/WebP thumbnails and renders
 them natively with CENTER_CROP. Thumbnail selection now transfers the image stack
@@ -180,7 +180,7 @@ window for its coordinate drag; swipe evidence is host replay only.
 GIF animation, slideshow, lifecycle auto-hide and full Android styling remain open.
 
 FrameLayout now honors XML layout_gravity and explicit LayoutParams.gravity for
-top/center/bottom and left/center/right positions, including uniform padding and
+top/center/bottom and left/center/right positions, including per-side padding and
 the retained margins. START/END follow the profile's default left-to-right
 direction; RTL, foreground padding and full Android measurement remain open.
 This moves SwpieView's bottom controls below its toolbar and lets root touch
@@ -232,8 +232,8 @@ Reference: [VelocityTracker](https://developer.android.com/reference/android/vie
 
 The base ViewGroup/ViewParent onStartNestedScroll callback returns false, as on
 Android; guest overrides still execute from DEX. Accepted nested scrolling is
-not implemented. Closed-drawer geometry and CoordinatorLayout drawing-order
-queries still block native existing-note selection/editing in Notepad.
+not implemented. Guest layout now positions the closed Notepad drawer offscreen;
+native painting also excludes descendants of invisible ancestors.
 
 View translation and alpha reach native geometry/opacity. System UI flags are
 retained as app state; the desktop content profile has zero Android system-bar
@@ -416,7 +416,7 @@ installation. String/color/dimension/layout resolution belongs to DROIDLESS.
 
 Binary layouts create TextView, Button, EditText, LinearLayout and FrameLayout.
 TableLayout/TableRow use the basic linear model. Attributes include IDs, text,
-resource references, width/height, weight, orientation, uniform padding, margins,
+resource references, width/height, weight, orientation, per-side padding, margins,
 text size/color, image `src`/`srcCompat`, gravity, enabled/visibility and XML
 onClick. Recursive include is bounded. px/dp/sp resolve at density 1.
 `--size WIDTHxHEIGHT` selects logical host dimensions (128–4096 per axis; default 420×720).
@@ -470,3 +470,60 @@ executor. FFI copies strings synchronously
 and retains the host until the event loop ends. Callback errors/panics stop the
 loop and report errors. Rust unsafe sites describe their contracts; guest parser/
 VM memory uses checked Rust structures, never host pointers.
+
+## Guest layout callbacks and XML metadata
+
+Before rendering and root touch DOWN, layout_snapshot invokes inherited,
+APK-defined onMeasure/onLayout callbacks with current parent-relative bounds.
+Children laid out by a parent are not called twice; requestLayout and changed
+bounds allow another pass. Translation is excluded from stored layout bounds
+and added once when rendering. Invalid input is rejected before layout and
+callback failures unwind temporary roots. This bounded pass rebuilds the View
+tree between callbacks; it is not a full Android ViewRoot or incremental layout
+engine. Native viewport resizing and property animation remain incomplete.
+
+Inflation retains XML AttributeSet and Context, calls the actual parent's
+virtual generateLayoutParams, and attaches children incrementally. Native base,
+margin, frame, linear and table parameters retain sizes, margins, gravity and
+weight; legal TableRow dimension defaults are accepted. Attached merge layouts
+return their real parent; unattached merges fail. ViewStub inflates its XML
+resource, replaces itself at the same index and keeps the original parameters
+and inflated ID. Visibility is forwarded to the replacement. Indexed child removal retains parent links, guest hierarchy callbacks and index
+faults. Transient state is reference-counted and group queries include descendants;
+parent transient-state notification callbacks remain incomplete. Programmatic
+stub configuration and weak-reference collection parity remain unsupported.
+
+The compiled CustomLayout contract checks those callbacks and root touch,
+collection/failure recovery, per-side padding, measure specs/state bits, suggested
+minimum sizes, LTR/RTL Gravity resolution, canonical Rect/RectF fields,
+point containment, intersections and translated matrices. Window system-UI
+visibility is zero in the unconfigured desktop profile. Legacy fitSystemWindows
+applies padding and consumes a Rect only when fits-system-windows is enabled;
+WindowInsets/listener dispatch remains unsupported. Android font metrics remain approximate;
+TextView baseline uses the current approximate ascent. Relative margin getters
+use physical-edge fallback; relative-margin resolution is incomplete. Elevation
+and getZ retain guest state with zero translationZ; native shadow/Z-order rendering
+and custom child drawing-order configuration are unsupported.
+Unfocused groups return null from getFocusedChild. Guest requestFocus is still
+unsupported; native editor focus is not mirrored as Android focus state.
+
+CheckedTextView retains checked state. Drawable state uses current enabled and
+pressed flags, checked additions, virtual guest callbacks, duplicate-parent
+state and capacity-aware merging. Focus/window/selection/activation lifecycles
+are incomplete. Flat colors and bounded resource selectors expose genuine
+ordered positive/negative state matching, default colors and statefulness.
+TextView XML theme color references use the APK's existing theme styles; native
+text currently paints the default palette entry. Selector alpha/theme item
+values and dynamic native state colors remain unsupported. Compound drawable
+slots and tint values retain managed identity/metadata; their icon/checkmark/tint
+painting is not implemented. No general Android styling parity is claimed.
+
+SparseArray/SparseIntArray indexOfKey returns ordered signed-key ranks and
+complemented insertion points. Collections.reverse uses virtual List get/set,
+retaining guest overrides, read-only faults and nonstructural iterator behavior.
+Math.min(float,float) retains Java NaN and signed-zero behavior.
+
+AppKit hit testing converts mouse positions to the content view's superview
+coordinates; guest MotionEvents retain flipped content coordinates. This keeps
+editable native controls on their focus/text-selection route.
+[NSView hitTest contract](https://developer.apple.com/documentation/appkit/nsview/hittest(_:)).

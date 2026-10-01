@@ -1036,15 +1036,26 @@ timestamps, long-clock precision, event lifetime, GC and recycled-use checks.
 The base ViewGroup/ViewParent nested-scroll start callback declines the request;
 accepted nested scrolling remains unsupported.
 
-Native existing-note selection/editing is not verified. A real root MotionEvent
-DOWN/UP replay via `--tap 100 37` remains on Notes: the closed navigation drawer
-captures the input ahead of the measured card. Opening the row through its real
-APK callback before launching AppKit reaches the editor, but a native mouse
-press then fails at CoordinatorLayout.isChildrenDrawingOrderEnabled. No native
-keyboard change was completed in this attempt. The earlier native new-note
-keyboard/save evidence remains separate from this host-replay milestone.
+Native existing-note selection/editing is now verified separately from the CLI
+input helpers. In an AppKit window, a real mouse click on the existing note's
+row opened its editor. Native keyboard input replaced the title with
+`Native final note` and the body with `Native final body.`. Escape dispatched
+the APK's Back callback and returned to Notes with both strings visible.
+SQLite contained exactly one row, ID 1, with those exact values. After a clean
+exit and a fresh native process, another mouse click reopened both exact fields.
+Both native processes closed with exit status zero. These are controlled manual
+checks, not an automated native UI suite or Android reference-device comparison.
 
-Local CI passes 92 Rust tests, warning-free Clippy, optimized builds and 4,096
+Inherited APK onMeasure/onLayout callbacks now run before painting and root
+touch DOWN. Closed drawer children keep their zero-width guest layout and are
+not painted through an invisible ancestor. AppKit hitTest receives superview
+coordinates while guest MotionEvent retains flipped content coordinates, keeping
+editor clicks on native focus/selection. The compiled CustomLayout contract
+covers geometry, XML parameters/merge/ViewStub, state metadata, collection/fault
+cleanup and the bounded framework calls needed by those layouts.
+[Exact layout and styling limits](framework.md#guest-layout-callbacks-and-xml-metadata).
+
+Local CI passes 95 Rust tests, warning-free Clippy, optimized builds and 4,096
 seeded parser mutations. The optimized public compatibility replay verifies the
 existing-row edit/restart alongside the unchanged calculator and image checks.
 GitHub Actions remain disabled. The v0.1.0 archive predates this source milestone;

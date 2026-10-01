@@ -2,81 +2,52 @@
 
 ## Unreleased
 
-- Existing notes can now be reopened and edited through the original public
-  Notepad APK. The headless replay changes title and multiline body, returns to
-  the refreshed list and restores both fields after restart with the same row
-  ID. Boxed extras, stable object-array sorting and bounded text operations
-  support this flow. XML metacharacter loading, rich formatting and drawing
-  remain open; the v0.1.0 archive predates these additions.
+- Native Notepad now selects an existing row with the mouse, accepts keyboard
+  title/body edits, saves through Back and reopens both exact fields after a
+  fresh process. The original SQLite row ID is retained and native close exits
+  cleanly. AppKit hit testing keeps editable controls on native focus/selection.
 
-- Executor.execute now queues guest work instead of running inline.
-  Single/fixed/cached pools reuse workers; Future values/causes, cancellation,
-  timed waits and actual shutdown/termination state pass compiled checks.
-  The authored native flow waits for input, delivers Future result: payload
-  through the main Handler and cancels cleanly. Execution remains serial and
-  bounded; no independent asynchronous APK workflow is claimed.
+- Layout now calls real inherited APK onMeasure/onLayout callbacks before
+  native drawing and root touch. XML retains AttributeSet/Context, uses virtual
+  parent layout parameters and supports attached merge and ViewStub replacement.
+  The closed Notepad drawer is offscreen; invisible ancestors exclude native
+  descendants. Shared measurement/geometry, per-edge padding, resource color
+  selectors and reference-only reflected constructors pass compiled contracts.
+  Compound drawable/tint/checkmark painting and complete Android focus/styling
+  remain outside this profile.
 
-- Java Timer/TimerTask scheduling now owns one guest worker per Timer, with
-  long/Date deadlines, fixed-delay/fixed-rate tasks, cancellation/purge, catch-up,
-  serial blocking, GC retention and failure cleanup. Compiled tasks post UI
-  results through the main Handler; portable validation/serial checks also pass
-  on desktop Java. Timer finalization and JVM process-liveness parity remain open.
-- FrameLayout gravity positions SwpieView's controls below its toolbar. Root
-  touch replay diagnoses its original slideshow listener: DOWN starts a Timer,
-  UP cancels it, and a held DOWN reaches rejected worker UI access. This is
-  runtime/API evidence; usable public slideshow remains unproven.
+- The unchanged public Notepad APK now reopens an existing note, updates its
+  title and multiline body, refreshes the list and restores both fields after
+  restart without creating another row. Host text selection finds a label's
+  nearest click owner; --input-at selects another editor field. Boxed extras
+  retain shallow-copy identity and use ordinary Parcel value tags. Object-array
+  sorting shares stable guest comparison callbacks with Collections.sort;
+  bounded TextUtils search/replacement supports the body serialization path.
+  Typed SharedPreferences retain their original storage representation.
+  UNSPECIFIED measurement now preserves intrinsic card sizes; bounded
+  VelocityTracker support shares the gesture estimator. That earlier host-replay
+  checkpoint did not verify native existing-note selection/editing.
 
-- Single-pointer MotionEvent dispatch now reaches actual APK touch callbacks.
-  The unmodified SwpieView APK changes JPEG/PNG/WebP images through its onFling
-  handler in host replay, with first/last bounds checked. Confirmed mouse taps
-  hide and restore controls in the optimized native window; Escape returns to
-  thumbnails and close exits 0. Native drag verification is pending because the
-  UI tool could not target the window. Compiled gesture/timer/GC/error checks
-  pass; local CI passes 84 tests and 4,096 mutations. Multi-touch, full input
-  parity, GIF animation and slideshow remain open.
+- Executor.execute no longer runs tasks inline or reports fabricated shutdown
+  success. Single/fixed/cached pools reuse guest workers; Callable and Runnable
+  submissions retain real Future values/causes, cancellation and deadline waits.
+  Shutdown drains accepted work; shutdownNow returns actual queued tasks.
+  Compiled contracts cover GC, interrupts, replacement, capacity and close;
+  the authored native wait/deliver/cancel flow posts UI results to main.
 
-- SwpieView thumbnails now open the APK's full-screen static-image Activity;
-  native JPEG/PNG/WebP display and Escape back to the grid are verified. Actual
-  guest Parcelable writers/CREATORs transfer bounded Bundle/list state and isolate
-  launch/result payloads. URI image loading closes its stream; authored checks
-  cover mutation/GC, errors, cycles and malformed data. Local CI passes 83 tests
-  and 4,096 mutations. Gestures, GIF animation and slideshow remain unproven.
+- Java Timer/TimerTask scheduling now uses one stable guest worker per Timer,
+  with long/Date deadlines, fixed-delay/fixed-rate tasks, catch-up, cancellation,
+  purge, serial blocking, GC roots and failure cleanup. Compiled contracts cover
+  main Handler UI delivery, capacity and shutdown; the portable validation/serial
+  task contract also passes on desktop Java.
+- FrameLayout XML/parameter gravity now places SwpieView controls below its
+  toolbar. Root touch replay diagnoses the original APK's slideshow: DOWN starts
+  its timer, UP cancels it, and a held DOWN reaches a worker UI call that is
+  explicitly rejected. A usable public slideshow remains unproven.
 
-- The unmodified public SwpieView APK now loads a host-selected folder and
-  displays three PNG/JPEG/WebP thumbnails in AppKit, then closes cleanly. Bounded
-  read-only document queries/streams, encoded URI paths, natural guest sorting
-  and seven ImageView scale modes now work. Authored checks cover GC, file
-  confinement, links and oversized streams. Local CI passes 82 Rust tests and
-  4,096 parser mutations. Full-screen viewer state remains blocked at
-  Bundle.putParcelableArrayList; no GitHub Actions are installed.
-
-- Activity results now preserve actual callers/request codes, snapshot return data
-  at finish and deliver through guest callbacks before resume. Native folder
-  selection returns a real session-local URI; window attachment tokens are stable.
-  The authored native fixture and cancellation pass; SwpieView opens the chooser
-  and cancels cleanly. At this earlier milestone, host-API selection reached
-  getContentResolver; the document increment above resolves it. Local CI passed
-  81 Rust tests and 4,096 seeded
-  parser mutations, with no GitHub Actions.
-
-- Adapter-backed GridView now creates real guest cells and delivers item clicks,
-  long row IDs, disabled-item checks and data-set updates. The authored native
-  photo grid verifies seven images, four-cell refresh and clean close; headless
-  checks cover auto-fit/stretch modes, GC and failure recovery. Local CI passes
-  79 Rust tests at this milestone. SwpieView passed grid/adapter construction;
-  its independent image workflow remains open.
-- Packaged PNG/JPEG/WebP now flow through BitmapFactory resource, stream and
-  byte-array paths into AppKit ImageViews. An authored fixture verifies bounds,
-  sampling, XML src, drawable assignment and four native images. Independent
-  image-app workflows, bitmap pixel operations and Canvas remain open. Local
-  CI passes 69 Rust tests and 4,096 seeded parser mutations; GitHub Actions stay
-  disabled.
-- The unmodified public Notepad APK now saves two titles and renders both in
-  Notes after Back and a fresh DROIDLESS process. Native AppKit keyboard entry
-  also reaches the APK and persists through its save path. Targeted RecyclerView
-  support adds generic View scroll/child operations and `Long.rotateRight`; local
-  compatibility checks pass while broad list rendering remains limited. GitHub
-  Actions stay disabled.
+- The unmodified public Notepad APK now renders a saved title in the reopened
+  Notes list after Back and after a fresh DROIDLESS process. Local verification
+  also keeps the native-window boundary explicit; GitHub Actions stay disabled.
 - At the previous checkpoint, the unmodified public Notepad APK opened its
   editor and saved the edited title to SQLite; the row survived a fresh
   DROIDLESS process, but the reopened Notes list still showed its empty state.

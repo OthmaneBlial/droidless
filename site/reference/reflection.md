@@ -1,6 +1,6 @@
 # APK-local class lookup and construction
 
-Current source implements `Class.forName(String)`, `Object.getClass`,
+Current source implements both `Class.forName` overloads, `Object.getClass`,
 `Class.getName`, `Class.getPackage`, `Package.getName` and a subset of
 `Class.newInstance`. Class objects have canonical, GC-rooted identity. Lookup
 searches the APK's parsed DEX modules and the runtime's known framework subset;
@@ -14,7 +14,7 @@ host Java classes and external DEX remain unavailable.
 Binary names and array names are converted to descriptors. Unknown/invalid names
 raise ClassNotFoundException; null raises NullPointerException. Array names are
 limited to 255 dimensions and loading an array does not initialize its component.
-Ordinary forName initializes the requested class through the guest VM.
+Ordinary forName initializes the requested class through the guest VM. The three-argument overload honors `initialize=false`; its loader must be null (bootstrap only) or the canonical APK token. Context.getClassLoader returns that token. Foreign loaders fail explicitly.
 
 No-argument construction executes the APK's own constructor. DEX class and
 constructor access flags supply public/package/private checks against the caller.
@@ -45,9 +45,8 @@ wrong-kind and wrong-type references. This is separate from the desktop Java
 contracts. [Virtual API profile](framework.md#virtual-api-profile).
 
 This is a narrow API subset, not complete reflection or a full Java verifier.
-Custom class loaders, external DEX loading, three-argument forName, reflective
-method/field invocation, annotation/nest access rules and Class.toString remain
-unsupported. Framework construction still requires an implemented constructor.
+Custom class loaders, external DEX loading, reflective method/field invocation,
+full annotation/nest access rules and Class.toString remain unsupported. Framework construction still requires an implemented constructor.
 
 ```sh
 cargo test -p droidless-runtime --test reflection --locked
@@ -71,4 +70,35 @@ Reference contract: [Java 8 Class API](https://docs.oracle.com/javase/8/docs/api
 mkdir -p artifacts/primitive-java-contract
 javac -source 8 -target 8 -Xlint:-options -d artifacts/primitive-java-contract examples/reflection/PrimitiveContract.java
 java -cp artifacts/primitive-java-contract org.droidless.reflection.PrimitiveContract
+```
+
+## Reflected constructors and class annotations
+
+`Class.getConstructor` selects an exact public constructor declared on that
+class; `getDeclaredConstructor` includes non-public declarations. Constructors
+are not inherited. `Constructor.newInstance` accepts APK-local reference
+arguments, checks count/type/access, honors setAccessible, roots arguments and
+objects through guest collection, initializes the class and executes its actual
+DEX constructor. A constructor-thrown guest Throwable is wrapped in
+InvocationTargetException with the original cause identity. Initialization
+faults occur before that invocation and retain their existing behavior.
+Primitive unboxing/widening and native framework constructors are unsupported.
+
+Class annotations now survive DEX parsing. `Class.getAnnotation` returns runtime
+annotations, follows superclass declarations only for an APK annotation marked
+Inherited and lets the nearest declaration win. CLASS retention is excluded;
+interfaces are not searched. Annotation defaults, nested values and full
+annotation equality/hash behavior remain incomplete.
+
+The compiled ConstructorContract covers deferred initialization, loader identity,
+public/declared lookup, access and argument faults, collection during
+constructors, original causes and runtime/inherited annotations. Its portable
+contract also passes on Java 17 with Java 8 source/target; this is not an Android
+reference-device run. String.indexOf overloads use UTF-16 indices, including
+supplementary code points and empty-string boundary behavior.
+
+```sh
+javac -source 8 -target 8 -Xlint:-options -d artifacts/constructor-contract \
+  examples/reflection/ConstructorContract.java examples/reflection/ForeignAccess.java
+java -cp artifacts/constructor-contract org.droidless.reflection.ConstructorContract
 ```
