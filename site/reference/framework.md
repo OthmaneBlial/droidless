@@ -63,6 +63,37 @@ and missing-super enforcement remain unsupported. This is a platform Fragment
 subset, not general support-library or AndroidX Fragment compatibility. SwpieView
 attaches and creates its bundled ReportFragment before its next startup blocker.
 
+## Application metadata and widget state
+
+Context.getApplicationInfo retains a canonical managed ApplicationInfo shared by
+Activity and Application contexts. Package name, qualified application name,
+resource label/icon IDs and targetSdkVersion come from the APK manifest; a missing
+target defaults to minSdkVersion, then 1. PackageManager.getActivityInfo receives
+an independent copy. This metadata is separate from the fixed API-21 runtime
+profile. UID, paths, flags and other ApplicationInfo fields remain incomplete.
+
+AnimatorListenerAdapter implements both listener interfaces and its six empty
+API-21 defaults; APK callback overrides still execute in DEX. This does not add
+animation event delivery. OverScroller's timed-scroll mode uses the shared
+monotonic runtime clock, Android's default viscous curve or a guest Interpolator,
+Java float rounding, final positions, forceFinished and abortAnimation. Guest
+interpolator failures propagate and temporary roots are released. Fling/springback
+physics and gesture delivery remain unsupported.
+
+View.setBackground invokes virtual setBackgroundDrawable, preserving APK
+overrides and retained Drawable identity, including null clearing. Rendering is
+still limited to the existing flat-color/raster subset. Content descriptions
+retain supported String/Spanned values through GC, preserve empty strings, compare
+through virtual equals, and clear on null. Nonempty labels promote automatic
+accessibility importance. XML labels and AppKit accessibility labels are wired;
+accessibility events, general guest CharSequence implementations and full
+accessibility-node behavior remain incomplete.
+
+References: [API-21 adapter](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/animation/AnimatorListenerAdapter.java),
+[OverScroller](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/OverScroller.java),
+[default interpolator](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/Scroller.java),
+[View](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/View.java).
+
 ## Preferences subset
 
 Context.getSharedPreferences, Activity.getPreferences and getApplicationContext

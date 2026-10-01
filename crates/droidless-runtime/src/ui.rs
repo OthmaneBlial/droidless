@@ -7,6 +7,7 @@ pub struct View {
     pub kind: String,
     pub id: u32,
     pub text: String,
+    pub content_description: Option<String>,
     pub children: Vec<Word>,
     pub listener: Option<Word>,
     pub key_listener: Option<Word>,
@@ -84,6 +85,7 @@ impl View {
                 String::new()
             },
             children: vec![],
+            content_description: None,
             listener: None,
             key_listener: None,
             xml_click: None,

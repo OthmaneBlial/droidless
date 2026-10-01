@@ -9,6 +9,48 @@ use droidless_formats::dex::Method;
 use std::collections::BTreeMap;
 
 impl Runtime {
+    fn apk_application_info(&mut self) -> Result<Word> {
+        let application = self
+            .apk
+            .manifest
+            .document
+            .children
+            .iter()
+            .find(|node| node.name == "application")
+            .context("manifest application missing")?;
+        let label = application
+            .attr("label")
+            .filter(|value| value.kind == 1)
+            .map_or(0, |value| value.data);
+        let icon = application.number("icon").unwrap_or(0);
+        let target = self
+            .apk
+            .manifest
+            .target_sdk
+            .or(self.apk.manifest.min_sdk)
+            .unwrap_or(1);
+        let class = self.apk.manifest.application.clone();
+        let package = self.heap.string(self.apk.manifest.package.clone())?;
+        let name = if let Some(class) = class {
+            self.heap.string(class)?
+        } else {
+            Word::ZERO
+        };
+        let info = self.heap.instance("Landroid/content/pm/ApplicationInfo;")?;
+        for (name, ty, value) in [
+            ("packageName", "Ljava/lang/String;", package),
+            ("name", "Ljava/lang/String;", name),
+            ("targetSdkVersion", "I", Word::from(target as i32)),
+            ("labelRes", "I", Word::from(label as i32)),
+            ("icon", "I", Word::from(icon as i32)),
+        ] {
+            self.heap.get_mut(info)?.fields.insert(
+                format!("Landroid/content/pm/ApplicationInfo;->{name}:{ty}"),
+                vec![value],
+            );
+        }
+        Ok(info)
+    }
     pub(crate) fn component_name_object(&mut self, package: String, class: String) -> Result<Word> {
         let object = self.heap.instance("Landroid/content/ComponentName;")?;
         let package = self.heap.string(package)?;
@@ -643,6 +685,26 @@ impl Runtime {
             }
             (
                 "Landroid/content/Context;",
+                "getApplicationInfo()Landroid/content/pm/ApplicationInfo;",
+            ) => {
+                self.heap.get(receiver)?;
+                let key = "droidless:application-info";
+                let info = if let Some(info) = self
+                    .statics
+                    .get(key)
+                    .and_then(|values| values.first())
+                    .copied()
+                {
+                    info
+                } else {
+                    let info = self.apk_application_info()?;
+                    self.statics.insert(key.into(), vec![info]);
+                    info
+                };
+                result.push(info);
+            }
+            (
+                "Landroid/content/Context;",
                 "getPackageManager()Landroid/content/pm/PackageManager;",
             ) => {
                 let manager = self
@@ -676,12 +738,7 @@ impl Runtime {
                     ));
                 };
                 let info = self.heap.instance("Landroid/content/pm/ActivityInfo;")?;
-                let app_info = self.heap.instance("Landroid/content/pm/ApplicationInfo;")?;
-                let app_package = self.heap.string(package.clone())?;
-                self.heap.get_mut(app_info)?.fields.insert(
-                    "Landroid/content/pm/ApplicationInfo;->packageName:Ljava/lang/String;".into(),
-                    vec![app_package],
-                );
+                let app_info = self.apk_application_info()?;
                 let meta_data = self.new_bundle()?;
                 for metadata in element
                     .children

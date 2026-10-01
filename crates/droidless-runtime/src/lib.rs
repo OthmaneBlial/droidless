@@ -18,6 +18,7 @@ mod reflection;
 mod regex_compat;
 mod sax;
 mod scheduling;
+mod scrolling;
 mod sqlite;
 mod storage;
 mod string_format;

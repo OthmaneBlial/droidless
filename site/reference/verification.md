@@ -623,7 +623,10 @@ vector-drawable configuration check successfully: Java String hashing now
 finds its delegate, resource maps provide real typed XML attributes, and the
 APK's own `VectorDrawableCompat` inflater executes in guest DEX. With platform
 fragment support, it also attaches and creates its APK-local ReportFragment. The
-next failure is `AnimatorListenerAdapter.<init>` while creating the action bar. This proves
+startup now also passes AnimatorListenerAdapter, manifest ApplicationInfo, timed
+OverScroller construction, virtual background setting and toolbar content
+descriptions. The next failure is the unsupported `android.widget.GridView`
+class while inflating the app layout. This proves
 startup progress, not vector rendering or a usable image-viewer workflow. [APK source](https://github.com/err4nt/SwpieView).
 
 ```sh
@@ -666,7 +669,21 @@ repeat commit, changed tags, active arguments, duplicate add, recursive executio
 and a throwing callback. Existing Activity/observer checks still pass. These are
 authored headless contracts, not a native fragment UI or Android reference run.
 
-Full local CI passes 77 Rust tests, warning-free Clippy, the optimized release
+The Images fixture now also runs authored widget contracts: manifest metadata
+identity/copy/default SDK checks, listener adapter interfaces and virtual callbacks,
+background override/clear with guest GC, and content-description identity,
+equality, empty/null semantics and accessibility importance. The Rust widget replay
+checks linear/default timed scrolling, half rounding, large float deltas,
+force/abort/final states, zero duration, and throwing-interpolator root cleanup.
+These are deterministic headless checks; fling physics and animation delivery
+remain unsupported.
+
+A fresh native AppKit run exposed four image nodes and the exact labels
+`Packaged PNG source` and `Decoded PNG image` through the accessibility tree.
+The four raster images remained visible and closing the window exited with code 0.
+This is authored-fixture native evidence, not a usable SwpieView workflow.
+
+Full local CI passes 78 Rust tests, warning-free Clippy, the optimized release
 build and 4,096 seeded APK/DEX/XML/resource mutations. The compatibility replay
 also checks packaged XML pull traversal and passes all 17 calculator scenarios
 and the unchanged Notepad list/editor, two-row save and fresh-process restart

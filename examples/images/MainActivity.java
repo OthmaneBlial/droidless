@@ -16,6 +16,7 @@ import java.io.InputStream;
 public class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        WidgetProbe.verify(this);
         XmlResourceParser parser = getResources().getXml(R.xml.pull_probe);
         try {
             if (parser.next() != XmlPullParser.START_TAG || !"probe".equals(parser.getName())
@@ -93,12 +94,14 @@ public class MainActivity extends Activity {
         }
         setContentView(R.layout.main);
         ImageView source = (ImageView) findViewById(R.id.source);
+        if (!"Packaged PNG source".equals(source.getContentDescription())) throw new AssertionError("XML content description");
         if (source.getDrawable() == null) throw new IllegalStateException("XML src did not create a Drawable");
         source.setImageResource(R.drawable.sample);
         source.setImageDrawable(getResources().getDrawable(R.drawable.sample));
         source.setImageDrawable(new BitmapDrawable(getResources(), png));
         if (source.getDrawable() == null) throw new IllegalStateException("ImageView lost its Drawable");
         ImageView pngView = (ImageView) findViewById(R.id.png);
+        pngView.setContentDescription("Decoded PNG image");
         pngView.setImageBitmap(png);
         if (pngView.getDrawable() == null) throw new IllegalStateException("ImageView lost its Bitmap Drawable");
         ((ImageView) findViewById(R.id.jpeg)).setImageBitmap(jpeg);

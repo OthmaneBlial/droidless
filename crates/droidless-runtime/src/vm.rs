@@ -973,6 +973,15 @@ impl Runtime {
             if current == "Ljava/lang/Thread;" {
                 work.push("Ljava/lang/Runnable;".into());
             }
+            if current == "Landroid/animation/AnimatorListenerAdapter;" {
+                work.extend(
+                    [
+                        "Landroid/animation/Animator$AnimatorListener;",
+                        "Landroid/animation/Animator$AnimatorPauseListener;",
+                    ]
+                    .map(String::from),
+                );
+            }
             if current == "Landroid/app/Activity;" {
                 work.push("Landroid/view/Window$Callback;".into());
             }

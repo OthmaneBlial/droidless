@@ -9,8 +9,8 @@ The following are objectives, not completed capability claims.
    weighted measurement remain open. Packaged PNG/JPEG/WebP decoding, native
    ImageView rendering and a bounded `Resources.getXml` pull cursor pass authored
    fixtures. SwpieView now passes AppCompat's bundled vector resource check in
-   guest DEX and attaches its platform lifecycle fragment, then stops at
-   AnimatorListenerAdapter construction. Independent-app
+   guest DEX, attaches its platform lifecycle fragment and constructs its toolbar,
+   then stops at unsupported GridView. Independent-app
    image workflows, vector/animated drawables, pixel operations and Canvas remain
    open. Gate: complete an image workflow in an independent app and compare it
    with expected Android behavior.

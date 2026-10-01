@@ -9,6 +9,7 @@ typedef struct {
     uint32_t kind, enabled, editable, visible, foreground, background, has_background, gravity, key_listener;
     float x, y, width, height, text_size;
     const char *text;
+    const char *description;
     const uint8_t *image;
     size_t image_len;
 } NativeView;
@@ -126,8 +127,10 @@ void dl_view(void *opaque, const NativeView *node) {
     view.frame = NSMakeRect(node->x,node->y,node->width,node->height);
     view.hidden = node->visible != 0;
     view.wantsLayer = YES;
-    if (node->has_background) view.layer.backgroundColor = color(node->background).CGColor;
+    view.layer.backgroundColor = node->has_background ? color(node->background).CGColor : NULL;
     NSString *text = [NSString stringWithUTF8String:node->text];
+    NSString *description = node->description ? [NSString stringWithUTF8String:node->description] : nil;
+    view.accessibilityLabel = description;
     NSData *imageData = node->image_len ? [NSData dataWithBytes:node->image length:node->image_len] : nil;
     NSImage *image = imageData ? [[NSImage alloc] initWithData:imageData] : nil;
     if ([view isKindOfClass:[NSButton class]]) {
@@ -138,9 +141,10 @@ void dl_view(void *opaque, const NativeView *node) {
         button.title = text;
         button.image = image;
         button.imagePosition = text.length ? NSImageLeading : NSImageOnly;
-        if (node->has_background) {button.bordered = NO;button.layer.cornerRadius = 5;}
+        button.bordered = !node->has_background;
+        button.layer.cornerRadius = node->has_background ? 5 : 0;
         button.attributedTitle = [[NSAttributedString alloc] initWithString:text attributes:@{NSForegroundColorAttributeName:color(node->foreground),NSFontAttributeName:button.font}];
-        button.accessibilityLabel = text;
+        button.accessibilityLabel = description ?: text;
     } else if ([view isKindOfClass:[NSTextField class]]) {
         NSTextField *field = (NSTextField *)view;
         field.tag = (NSInteger)node->handle;
@@ -152,7 +156,7 @@ void dl_view(void *opaque, const NativeView *node) {
         field.backgroundColor = node->has_background ? color(node->background) : NSColor.clearColor;
         field.alignment = (node->gravity&7)==5 ? NSTextAlignmentRight : ((node->gravity&7)==1 ? NSTextAlignmentCenter : NSTextAlignmentLeft);
         if (![field.stringValue isEqualToString:text]) field.stringValue = text;
-        field.accessibilityLabel = text;
+        field.accessibilityLabel = description ?: text;
     } else if ([view isKindOfClass:[NSImageView class]]) {
         ((NSImageView *)view).image = image;
     }

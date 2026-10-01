@@ -32,7 +32,7 @@ paths; Bitmap bounds options, dimensions and ImageView resource/bitmap/drawable
 assignment reach AppKit image views. `Resources.getXml` exposes a bounded binary
 XML pull cursor and resource-ID-backed typed attributes, tested by an authored
 APK. SwpieView passes its bundled vector configuration check and attaches its
-platform ReportFragment, then stops at AnimatorListenerAdapter construction. Bitmap pixel manipulation, Android Canvas/vector
+platform ReportFragment, then constructs its toolbar and stops at unsupported GridView. Bitmap pixel manipulation, Android Canvas/vector
 drawing and an independent image workflow remain unproven.
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does

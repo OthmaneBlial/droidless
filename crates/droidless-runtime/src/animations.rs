@@ -13,6 +13,7 @@ const LINEAR: &str = "Landroid/view/animation/LinearInterpolator;";
 const ANIMATION: &str = "Landroid/view/animation/Animation;";
 const ANIMATION_UTILS: &str = "Landroid/view/animation/AnimationUtils;";
 const LAYOUT_TRANSITION: &str = "Landroid/animation/LayoutTransition;";
+const LISTENER_ADAPTER: &str = "Landroid/animation/AnimatorListenerAdapter;";
 
 impl Runtime {
     pub(crate) fn animation_native(
@@ -28,6 +29,22 @@ impl Runtime {
         };
         let class = method.class.as_str();
         let signature = method.signature();
+        if class == LISTENER_ADAPTER
+            && [
+                "<init>()V",
+                "onAnimationCancel(Landroid/animation/Animator;)V",
+                "onAnimationEnd(Landroid/animation/Animator;)V",
+                "onAnimationRepeat(Landroid/animation/Animator;)V",
+                "onAnimationStart(Landroid/animation/Animator;)V",
+                "onAnimationPause(Landroid/animation/Animator;)V",
+                "onAnimationResume(Landroid/animation/Animator;)V",
+            ]
+            .contains(&signature.as_str())
+        {
+            // Android's adapter defaults are empty; APK overrides still dispatch through guest DEX.
+            self.heap.get(receiver)?;
+            return Ok(Some(vec![]));
+        }
         if class == LAYOUT_TRANSITION {
             let result = match signature.as_str() {
                 "<init>()V" => {

@@ -63,6 +63,9 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/util/concurrent/ThreadPoolExecutor;",
             "Ljava/util/concurrent/ConcurrentHashMap;",
             "Landroid/animation/Animator;",
+            "Landroid/animation/AnimatorListenerAdapter;",
+            "Landroid/animation/Animator$AnimatorListener;",
+            "Landroid/animation/Animator$AnimatorPauseListener;",
             "Landroid/animation/ObjectAnimator;",
             "Landroid/animation/StateListAnimator;",
             "Landroid/animation/LayoutTransition;",
@@ -431,6 +434,9 @@ impl Runtime {
     }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
         if let Some(result) = self.fragment_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.scrolling_native(method, args)? {
             return Ok(Some(result));
         }
         if method.class.starts_with("Landroid/view/")
@@ -4072,6 +4078,29 @@ impl Runtime {
             ("Landroid/view/View;", "setBackgroundColor(I)V") => {
                 self.view_mut(receiver)?.background = Some(arg(1)?.int()? as u32)
             }
+            ("Landroid/view/View;", "setContentDescription(Ljava/lang/CharSequence;)V") => {
+                let description = arg(1)?;
+                self.view_mut(receiver)?;
+                let previous = self.heap.get(receiver)?.fields.get("droidless:view:content-description").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO);
+                if previous == description { return Ok(Some(vec![])); }
+                if previous != Word::ZERO {
+                    let roots = self.native_roots.len();
+                    self.native_roots.extend([receiver, previous, description]);
+                    let equal = self.invoke(Method { class: "Ljava/lang/Object;".into(), name: "equals".into(), parameters: vec!["Ljava/lang/Object;".into()], returns: "Z".into() }, vec![previous, description], true);
+                    self.native_roots.truncate(roots);
+                    if equal?.first().context("description equality result missing")?.truth() { return Ok(Some(vec![])); }
+                }
+                let text = if description == Word::ZERO { None } else { Some(self.heap.text(description)?.to_owned()) };
+                if text.as_ref().is_some_and(|text| !text.is_empty()) && self.heap.get(receiver)?.fields.get("droidless:important-for-accessibility").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO) == Word::ZERO {
+                    self.heap.get_mut(receiver)?.fields.insert("droidless:important-for-accessibility".into(), vec![Word::from(1)]);
+                }
+                self.view_mut(receiver)?.content_description = text;
+                self.heap.get_mut(receiver)?.fields.insert("droidless:view:content-description".into(), vec![description]);
+            }
+            ("Landroid/view/View;", "getContentDescription()Ljava/lang/CharSequence;") => {
+                self.view_mut(receiver)?;
+                result.push(self.heap.get(receiver)?.fields.get("droidless:view:content-description").and_then(|values| values.first()).copied().unwrap_or(Word::ZERO));
+            }
             ("Landroid/view/View;", "getBackground()Landroid/graphics/drawable/Drawable;")
             | ("Landroid/support/v7/widget/bs;", "getBackground()Landroid/graphics/drawable/Drawable;") => {
                 let drawable = self
@@ -4099,6 +4128,7 @@ impl Runtime {
             ("Landroid/view/View;", "setBackgroundDrawable(Landroid/graphics/drawable/Drawable;)V")
             | ("Landroid/support/v7/widget/bs;", "setBackgroundDrawable(Landroid/graphics/drawable/Drawable;)V") => {
                 let drawable = arg(1)?;
+                if drawable != Word::ZERO { ensure!(self.is_a(&self.heap.get(drawable)?.class, "Landroid/graphics/drawable/Drawable;"), "background requires Drawable"); }
                 let color = if drawable == Word::ZERO {
                     None
                 } else if let Some(id) = self
@@ -4129,6 +4159,17 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .insert("droidless:view:background-drawable".into(), vec![drawable]);
+            }
+            ("Landroid/view/View;", "setBackground(Landroid/graphics/drawable/Drawable;)V") => {
+                let drawable = arg(1)?;
+                let roots = self.native_roots.len();
+                self.native_roots.extend([receiver, drawable]);
+                let changed = self.invoke(Method {
+                    class: "Landroid/view/View;".into(), name: "setBackgroundDrawable".into(),
+                    parameters: vec!["Landroid/graphics/drawable/Drawable;".into()], returns: "V".into(),
+                }, vec![receiver, drawable], true);
+                self.native_roots.truncate(roots);
+                changed?;
             }
             ("Landroid/view/View;", "setElevation(F)V") => {
                 self.heap
@@ -4549,6 +4590,31 @@ impl Runtime {
                     } else {
                         raw.display()
                     }
+                }
+                "contentDescription" => {
+                    let text = if raw.kind == 0 {
+                        None
+                    } else if raw.kind == 1 {
+                        Some(self.resource_text(raw.data)?)
+                    } else {
+                        Some(raw.display())
+                    };
+                    let description = if let Some(text) = &text {
+                        self.heap.string(text.clone())?
+                    } else {
+                        Word::ZERO
+                    };
+                    if text.as_ref().is_some_and(|text| !text.is_empty()) {
+                        self.heap.get_mut(word)?.fields.insert(
+                            "droidless:important-for-accessibility".into(),
+                            vec![Word::from(1)],
+                        );
+                    }
+                    view.content_description = text;
+                    self.heap.get_mut(word)?.fields.insert(
+                        "droidless:view:content-description".into(),
+                        vec![description],
+                    );
                 }
                 "layout_width" => view.width = dimension(&self.attribute(raw)?)?,
                 "layout_height" => view.height = dimension(&self.attribute(raw)?)?,
