@@ -65,9 +65,12 @@ Shared binary XML inflation invokes the APK's installed AppCompat Factory2, so
 its ImageButton becomes the actual guest AppCompatImageButton without patching the
 APK or aliasing the class. The compiled inflater contract checks cloning, merged
 callback order, AttributeSet identity, ViewStubs, GC, faults and bounded chains.
-Starting folder creation reaches RecyclerView.requestChildFocus, then rejects the
-missing ViewGroup.offsetDescendantRectToMyCoords bridge. Exact note rows remain
-unchanged. Folder creation/editing and physical folder input remain unverified.
+Starting folder creation now passes descendant Rect conversion, signed Rect
+dimensions, resource backgrounds and untinted background queries. The next gap is
+Log.e(String, String, Throwable) while the original left-button callback logs a
+keyboard-service error. Both exact seed/copy note rows remain unchanged and no
+folder is written. Folder creation/editing and physical folder input remain
+unverified; no software-keyboard support is claimed.
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree

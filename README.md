@@ -53,9 +53,11 @@ to the list. A fresh native process reopens the exact revised title and body.
 
 🗂️ Current source also opens the original Edit Folders screen in headless replay.
 Installed AppCompat inflater callbacks construct its own widgets and bind its
-editor/listener. Creation still needs a ViewGroup coordinate bridge during child
-focus; folder editing and native folder input remain unverified.
-[Inflater evidence and next blocker](docs/verification.md#current-source-layoutinflater-factory-dispatch).
+editor/listener. Starting creation now passes child coordinates, Rect dimensions
+and resource backgrounds. It next stops in the original keyboard-error logging
+callback; both exact note rows remain unchanged and no folder is written. Folder
+editing and native folder input remain unverified.
+[Coordinate and background evidence](docs/verification.md#current-source-descendant-coordinates-and-resource-backgrounds).
 
 ```sh
 sh tools/fetch-notepad.sh

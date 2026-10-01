@@ -70,8 +70,10 @@ The following are objectives, not completed capability claims.
    APK's AppCompat Factory2 and construct its actual AppCompatImageButton; no APK
    patch or class alias is used. Compiled checks cover service routing, cloned and
    merged factories, attributes, ViewStubs, GC and callback faults. Starting folder
-   creation reaches a missing offsetDescendantRectToMyCoords bridge during
-   RecyclerView child focus. Folder creation/editing and native input remain ahead.
+   creation now passes descendant coordinates, signed Rect dimensions and resource
+   backgrounds. The next gap is the throwable Log.e overload used to report a
+   keyboard-service error; both exact note rows remain unchanged and no folder is
+   written. Folder creation/editing, IME and native input remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

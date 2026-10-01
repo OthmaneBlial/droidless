@@ -1809,3 +1809,51 @@ preservation still pass. The new original Edit Folders editor/listener binding
 and Back checks pass with both exact note rows retained on copied data. The
 optimized creation probe confirms the same missing coordinate bridge and exact
 row retention; creation/editing remain unverified.
+
+## Current-source descendant coordinates and resource backgrounds
+
+Date: 2026-10-02. Shared ViewGroup descendant Rect conversion now follows actual
+managed parents, layout positions and retained scroll offsets in both directions.
+Java wrapping arithmetic preserves inverted/empty bounds and overflowing edges.
+Self conversion is a no-op; invalid ancestry retains preceding translations before
+raising the guest fault. Cyclic/overlong chains are bounded at 128 steps. Rect
+width/height use signed wrapping subtraction. The compiled CoordinateContract
+checks nested groups, both directions, self/null, overflow, invalid ancestry and
+GC; its runtime check also covers stored scroll offsets, cycles and recovery.
+This does not implement scroll setters, matrix transforms or clipping.
+
+View.setBackgroundResource loads through the actual Context and dispatches the
+virtual Resources.getDrawable(id, theme) and View background callbacks. Nonzero
+repeated resource IDs retain Drawable identity, while changing the Drawable or
+flat background color clears the cache. Zero clears through the actual callback;
+resource IDs are retained only after success. BackgroundResourceContract checks
+lookup/cache identity, real Resources/View overrides, callback GC, faults and
+recovery. Untinted background list/mode queries return null. Tint setters/XML tint
+application, native tint painting and full background coherence remain unsupported.
+
+The unchanged pinned Notepad APK now passes the former child-coordinate bridge,
+Rect dimensions, resource background and untinted queries when its original folder
+left-button listener runs. It next rejects Log.e(String, String, Throwable) while
+that listener reports a keyboard-service error. A copied-data replay retains both
+exact seed/copy note rows and writes no Folder row. The permanent compatibility
+suite diagnoses this exact callback and verifies those data boundaries; it marks
+folder creation false. Opening Edit Folders and returning through Back remain
+separate successful workflows. Folder creation/editing, software keyboard support
+and fresh native folder input remain unverified. No APK patch or class alias is
+used, and the original APK SHA-256 remains
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+
+The full local gate passes 111 Rust tests, Clippy with warnings rejected,
+optimized workspace/document-replay builds and 4,096 seeded parser mutations
+without panics. The full optimized compatibility replay passes the unchanged
+public calculators, SwpieView folder/viewer/Back/gestures and slideshow diagnosis,
+plus Notepad save/restart, existing-note edit, Delete, timed feedback, Undo,
+drawer settlement/Back, folder opening/Back and malformed-body preservation.
+The new folder-creation diagnosis passes with exact original/copy rows retained
+and no Folder row written. A separate fresh optimized copied-data probe confirms
+the same next logging gap and unchanged immutable seed.
+
+The rebuilt unsigned development bundle matches the optimized CLI byte for byte
+(SHA-256 `15a69674f8f78b72ac5402b83a1270745f0e0da8275199fb4b6c427121856c73`). No fresh
+native folder interaction or public-release update is claimed. GitHub Actions
+remain disabled, and the 50% checkpoint remains active.
