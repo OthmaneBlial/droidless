@@ -1,6 +1,6 @@
 # First interactive milestone evidence
 
-Latest local source gate: 102 Rust tests, warning-free Clippy, optimized builds
+Latest local source gate: 103 Rust tests, warning-free Clippy, optimized builds
 and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
 
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
@@ -1409,3 +1409,43 @@ Complete delete/return/restart and native menu input remain unverified.
 Full local CI passes 102 Rust tests, warning-free Clippy, optimized CLI/replay
 builds and 4,096 seeded parser mutations. All existing public APK compatibility
 replays pass. GitHub Actions remain disabled.
+
+## Current-source timed View property animations
+
+The authored, compiled PropertyAnimationContract uses actual ViewPropertyAnimator
+instances and the shared monotonic runtime clock. At 50 ms of a 100 ms linear
+batch, translationX is 50 and alpha is 0.5; the rendered snapshot carries those
+exact values. At completion, translationX is 100 and alpha is zero. Automatic
+start, delayed start, cancellation before/after the deadline and pending-only
+cancellation execute their guest callbacks. Partial replacement keeps the other
+property running and preserves counted transient state until all batches end.
+
+The check also cancels recursively from start/cancel callbacks, restarts from an
+end callback and changes the underlying progress token's interpolator. The latter
+changes actual intermediate values while leaving the cached View animator's
+future configuration intact. Guest callbacks/interpolators collect the heap.
+Start, update, cancel, end and curve faults propagate with clean VM frames and
+released transient state; runtime close releases active batches without invented
+completion callbacks. Releasing guest static references and collecting reclaims
+the View tree and Activity, checking temporary-root cleanup.
+
+This is the alpha and translationX/Y profile. Standalone ValueAnimator factories,
+rotation/scale/Z, repeats/keyframes, hardware layers/actions and full Android
+Choreographer frame-phase parity remain outside it. Host polls advance the actual
+render state; this compiled check does not claim a fresh native interaction or an
+Android differential run.
+
+The pinned, unmodified Notepad APK now gets past View.animate and starts its
+original Snackbar translation/alpha callbacks. The headless replay creates two
+notes with distinct bodies, invokes the APK's original Delete menu, returns to
+Notes, and checks that only the chosen SQLite row disappeared. The survivor
+retains its original ID/title/body, appears after a fresh process and reopens with
+its exact fields. The permanent compatibility replay covers the same flow after
+editing another existing row. Native menu input and the complete public timed
+feedback/dismissal remain unverified; the authored clock contract above does not
+substitute for those observations.
+
+Full local CI passes 103 Rust tests, warning-free Clippy, optimized CLI/replay
+builds and 4,096 seeded parser mutations. All public APK compatibility replays,
+including the new Delete regression, pass. GitHub Actions remain disabled; the
+50% everyday-app checkpoint remains ahead.

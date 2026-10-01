@@ -218,12 +218,15 @@ report = {
     "visible_labels": [label for label in labels if label],
 }
 probe_titles = ["Hello, desktop", "Native desktop test"]
+survivor_body = "Retained body from the original APK."
+expected_saved = sorted([(probe_titles[0], ""), (probe_titles[1], survivor_body)])
 with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
     saved_process = subprocess.run([
         str(args.binary), "run", "--headless", "--size", "390x844",
         "--data-dir", app_data,
         "--click", "＋", "--input", probe_titles[0], "--back",
-        "--click", "＋", "--input", probe_titles[1], "--back", str(notepad),
+        "--click", "＋", "--input", probe_titles[1], "--input-at", "1", survivor_body,
+        "--back", str(notepad),
     ], text=True, capture_output=True, check=True, timeout=120)
     saved_tree = json.loads(saved_process.stdout)
     saved_labels = [node["view"]["text"] for node in flatten(saved_tree)]
@@ -235,7 +238,7 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             "SELECT title, body FROM Note WHERE title IN (?, ?) ORDER BY title",
             probe_titles,
         ).fetchall()
-    if saved != sorted((title, "") for title in probe_titles):
+    if saved != expected_saved:
         raise SystemExit("Notepad did not persist both edited titles before restart")
 
     restarted = subprocess.run([
@@ -253,7 +256,7 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             "SELECT title, body FROM Note WHERE title IN (?, ?) ORDER BY title",
             probe_titles,
         ).fetchall()
-    if retained != sorted((title, "") for title in probe_titles):
+    if retained != expected_saved:
         raise SystemExit("Notepad did not retain both note rows after a fresh process")
 
     with sqlite3.connect(database) as connection:
@@ -287,6 +290,28 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
     if fields != [revised_title, body]:
         raise SystemExit("Notepad title/body did not survive restart and reopen in the editor")
 
+    survivor = next(row for row in rows if row[0] != original_id)
+    command = [str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", app_data]
+    for label, actions in [
+        ("delete", ["--click", revised_title, "--menu-item", "Delete"]),
+        ("restart", []),
+        ("reopen survivor", ["--click", probe_titles[1]]),
+    ]:
+        process = subprocess.run(command + actions + [str(notepad)],
+            text=True, capture_output=True, check=True, timeout=120)
+        nodes = list(flatten(json.loads(process.stdout)))
+        labels = [node["view"]["text"] for node in nodes]
+        with sqlite3.connect(database) as connection:
+            remaining = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+        if remaining != [survivor] or revised_title in labels:
+            raise SystemExit(f"Notepad {label} did not preserve only the original survivor row")
+        if label == "reopen survivor":
+            fields = [node["view"]["text"] for node in nodes if node["view"]["kind"] == "EditText"]
+            if fields != [probe_titles[1], survivor_body]:
+                raise SystemExit("Notepad did not reopen the surviving title/body after deletion")
+        elif "Notes" not in labels or probe_titles[1] not in labels:
+            raise SystemExit(f"Notepad {label} did not render the surviving note in its Notes list")
+
 report["note_row_survives_fresh_process"] = True
 report["note_title_visible_after_save"] = True
 report["note_title_visible_in_reopened_list"] = True
@@ -296,10 +321,14 @@ report["existing_note_id_retained"] = True
 report["edited_note_fields_survive_restart"] = True
 report["revised_title"] = revised_title
 report["reopened_body"] = body
+report["headless_note_delete_workflow_verified"] = True
+report["delete_survivor_id_title_body_retained"] = True
+report["delete_return_restart_reopen_verified"] = True
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
 print("PASS Notepad: existing row reopened, title/body edited, list refreshed and both fields retained after restart")
+print("PASS Notepad: original Delete menu returns to Notes; survivor ID/title/body survive restart and reopen")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.

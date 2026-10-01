@@ -48,8 +48,11 @@ The following are objectives, not completed capability claims.
    child binding through onFinishInflate and delivers its queued confirmation
    callback and completes detached-child removal. Snackbar child measurement now
    creates its actual text Layout and reads its line count. Relative-padding state
-   now resolves and Snackbar enters onLayout. View property animation is the next
-   observed blocker; complete delete/restart and native menu input remain ahead.
+   now resolves and Snackbar starts its original translation/alpha callbacks.
+   Clock-driven View property frames, cancellation and callback cleanup pass a
+   compiled contract. Headless Delete returns to Notes, preserves the survivor's
+   ID/title/body after restart and reopens its exact fields. Native menu input and
+   the complete public timed feedback/dismissal remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
