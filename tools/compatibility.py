@@ -96,6 +96,22 @@ if image_status["text_size"] != 20 or image_status["text_color"] != 0xff202a36:
 }, indent=2) + "\n")
 print("PASS Images fixture: typed XML attributes, PNG/JPEG/WebP decoding; four ImageViews")
 
+grids = root / "fixtures/generated/grids.apk"
+for clicks, count, label in [
+    (["Photo 3"], 7, "Selected photo 3 · id 3000000002"),
+    (["Refresh photos"], 4, "4 photos · refreshed from adapter"),
+]:
+    cmd = [str(args.binary), "run", "--headless", "--ephemeral", str(grids)]
+    for click in clicks:
+        cmd.extend(["--click", click])
+    process = subprocess.run(cmd, text=True, capture_output=True, check=True, timeout=120)
+    nodes = list(flatten(json.loads(process.stdout)))
+    if sum(node["view"]["kind"] == "ImageView" for node in nodes) != count:
+        raise SystemExit("Grid fixture did not bind the expected image cells")
+    if label not in [node["view"]["text"] for node in nodes]:
+        raise SystemExit("Grid fixture callback or refresh did not run in guest DEX")
+print("PASS Grid fixture: seven image cells, accessible item click, long row ID and four-cell refresh")
+
 notepad = root / "artifacts/apks/notepad-v1.0.0.apk"
 notepad_digest = "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f"
 if not notepad.exists():

@@ -25,6 +25,7 @@ pub struct View {
     pub text_color: u32,
     pub background: Option<u32>,
     pub gravity: u32,
+    pub grid: Option<Grid>,
     #[serde(skip)]
     pub image: Option<Vec<u8>>,
 }
@@ -71,6 +72,7 @@ impl View {
             "EditText",
             "TableLayout",
             "TableRow",
+            "GridView",
         ]
         .contains(&name)
         {
@@ -102,9 +104,79 @@ impl View {
             text_color: 0xff222222,
             background: None,
             gravity: 0,
+            grid: (name == "GridView").then(Grid::default),
             image: None,
         })
     }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct Grid {
+    pub columns: i32,
+    pub column_width: i32,
+    pub horizontal_spacing: i32,
+    pub vertical_spacing: i32,
+    pub stretch: i32,
+}
+impl Default for Grid {
+    fn default() -> Self {
+        Self {
+            columns: 1,
+            column_width: 0,
+            horizontal_spacing: 0,
+            vertical_spacing: 0,
+            stretch: 2,
+        }
+    }
+}
+pub(crate) struct GridMetrics {
+    pub columns: usize,
+    pub width: f32,
+    pub spacing: f32,
+    pub inset: f32,
+}
+pub(crate) fn grid_metrics(view: &View, available: f32) -> Result<GridMetrics> {
+    let grid = view.grid.as_ref().context("expected GridView")?;
+    let available = available.max(0.0) as i64;
+    let (width, spacing) = (
+        i64::from(grid.column_width),
+        i64::from(grid.horizontal_spacing),
+    );
+    let columns = if grid.columns == -1 {
+        if width > 0 {
+            (available + spacing)
+                .checked_div(width + spacing)
+                .context("invalid grid column spacing")?
+        } else {
+            2
+        }
+    } else {
+        i64::from(grid.columns)
+    }
+    .max(1);
+    ensure!(columns <= 1024, "GridView column limit exceeded");
+    let extra = available - columns * width - (columns - 1) * spacing;
+    let (width, spacing) = match grid.stretch {
+        0 => (width, spacing),
+        1 => (width, spacing + extra / (columns - 1).max(1)),
+        2 => (width + extra / columns, spacing),
+        3 => (
+            width,
+            spacing + extra / if columns > 1 { columns + 1 } else { 1 },
+        ),
+        _ => anyhow::bail!("unsupported GridView stretch mode"),
+    };
+    ensure!(width >= 0, "negative GridView column width is unsupported");
+    Ok(GridMetrics {
+        columns: columns as usize,
+        width: width as f32,
+        spacing: spacing as f32,
+        inset: if grid.stretch == 3 {
+            spacing as f32
+        } else {
+            0.0
+        },
+    })
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -120,6 +192,44 @@ pub struct Node {
     pub view: View,
     pub rect: Rect,
     pub children: Vec<Node>,
+}
+
+fn params_field(heap: &Heap, word: Word, field: &str) -> Result<Option<Word>> {
+    let params = heap
+        .get(word)?
+        .fields
+        .get("droidless:view:layout-params")
+        .and_then(|v| v.first())
+        .copied()
+        .unwrap_or(Word::ZERO);
+    if params == Word::ZERO {
+        return Ok(None);
+    }
+    Ok(Some(
+        heap.get(params)?
+            .fields
+            .get(field)
+            .and_then(|v| v.first())
+            .copied()
+            .unwrap_or(Word::ZERO),
+    ))
+}
+fn weight(heap: &Heap, word: Word) -> Result<f32> {
+    let value = if let Some(value) = params_field(
+        heap,
+        word,
+        "Landroid/widget/LinearLayout$LayoutParams;->weight:F",
+    )? {
+        f32::from_bits(value.int()? as u32)
+    } else {
+        heap.get(word)?
+            .view
+            .as_ref()
+            .context("expected View")?
+            .weight
+    };
+    ensure!(value.is_finite() && value >= 0.0, "invalid layout weight");
+    Ok(value)
 }
 
 pub fn layout(heap: &Heap, root: Word, width: f32, height: f32) -> Result<Node> {
@@ -167,12 +277,22 @@ fn build(heap: &Heap, word: Word, rect: Rect, path: &mut Vec<usize>) -> Result<N
         "cyclic or too deep View hierarchy"
     );
     path.push(handle);
-    let view = heap
+    let mut view = heap
         .get(word)?
         .view
         .as_ref()
         .context("expected a View")?
         .clone();
+    for (field, size) in [("width", &mut view.width), ("height", &mut view.height)] {
+        if let Some(value) = params_field(
+            heap,
+            word,
+            &format!("Landroid/view/ViewGroup$LayoutParams;->{field}:I"),
+        )? {
+            *size = value.int()? as f32;
+        }
+    }
+    view.weight = weight(heap, word)?;
     let mut children = vec![];
     let available = Rect {
         x: rect.x + view.padding,
@@ -180,7 +300,38 @@ fn build(heap: &Heap, word: Word, rect: Rect, path: &mut Vec<usize>) -> Result<N
         width: (rect.width - 2.0 * view.padding).max(0.0),
         height: (rect.height - 2.0 * view.padding).max(0.0),
     };
-    if view.kind == "FrameLayout" || view.kind == "View" {
+    if let Some(grid) = &view.grid {
+        let metrics = grid_metrics(&view, available.width)?;
+        let mut top = available.y;
+        for row in view.children.chunks(metrics.columns) {
+            let mut row_height: f32 = 0.0;
+            for (column, child) in row.iter().enumerate() {
+                let width = dimension(heap, *child, true, metrics.width)?;
+                let height = dimension(heap, *child, false, available.height)?;
+                row_height = row_height.max(height);
+                let alignment = match view.gravity & 7 {
+                    1 => (metrics.width - width) / 2.0,
+                    5 => metrics.width - width,
+                    _ => 0.0,
+                };
+                children.push(build(
+                    heap,
+                    *child,
+                    Rect {
+                        x: available.x
+                            + metrics.inset
+                            + column as f32 * (metrics.width + metrics.spacing)
+                            + alignment,
+                        y: top,
+                        width,
+                        height,
+                    },
+                    path,
+                )?);
+            }
+            top += row_height + grid.vertical_spacing as f32;
+        }
+    } else if view.kind == "FrameLayout" || view.kind == "View" {
         for child in &view.children {
             let c = heap.get(*child)?.view.as_ref().context("non-View child")?;
             if c.visible == 8 {
@@ -208,8 +359,9 @@ fn build(heap: &Heap, word: Word, rect: Rect, path: &mut Vec<usize>) -> Result<N
             if c.visible == 8 {
                 continue;
             }
-            weights += c.weight;
-            fixed += if c.weight > 0.0 {
+            let child_weight = weight(heap, *child)?;
+            weights += child_weight;
+            fixed += if child_weight > 0.0 {
                 0.0
             } else {
                 dimension(heap, *child, !vertical, size)?
@@ -226,8 +378,9 @@ fn build(heap: &Heap, word: Word, rect: Rect, path: &mut Vec<usize>) -> Result<N
             if c.visible == 8 {
                 continue;
             }
-            let length = if c.weight > 0.0 {
-                (size - fixed).max(0.0) * c.weight / weights
+            let child_weight = weight(heap, *child)?;
+            let length = if child_weight > 0.0 {
+                (size - fixed).max(0.0) * child_weight / weights
             } else {
                 dimension(heap, *child, !vertical, size)?
             };
@@ -279,12 +432,50 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
     ) -> Result<f32> {
         ensure!(depth < 128, "View measurement nesting limit");
         let v = heap.get(word)?.view.as_ref().context("expected View")?;
-        let value = if horizontal { v.width } else { v.height };
+        let field = if horizontal { "width" } else { "height" };
+        let value = if let Some(value) = params_field(
+            heap,
+            word,
+            &format!("Landroid/view/ViewGroup$LayoutParams;->{field}:I"),
+        )? {
+            value.int()? as f32
+        } else if horizontal {
+            v.width
+        } else {
+            v.height
+        };
         if value == -1.0 {
             return Ok(parent);
         }
         if value >= 0.0 {
             return Ok(value.min(parent));
+        }
+        if let Some(grid) = &v.grid {
+            if horizontal {
+                return Ok(parent);
+            }
+            let columns = heap
+                .get(word)?
+                .fields
+                .get("droidless:grid:columns")
+                .and_then(|values| values.first())
+                .copied()
+                .map(|word| word.int())
+                .transpose()?
+                .unwrap_or(grid.columns.max(1))
+                .max(1) as usize;
+            let mut height = 2.0 * v.padding;
+            for (index, row) in v.children.chunks(columns).enumerate() {
+                if index > 0 {
+                    height += grid.vertical_spacing as f32;
+                }
+                let mut row_height: f32 = 0.0;
+                for child in row {
+                    row_height = row_height.max(measure(heap, *child, false, parent, depth + 1)?);
+                }
+                height += row_height;
+            }
+            return Ok(height.min(parent));
         }
         if v.children.is_empty() {
             return Ok(if horizontal {

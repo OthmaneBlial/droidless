@@ -94,6 +94,35 @@ References: [API-21 adapter](https://github.com/aosp-mirror/platform_frameworks_
 [default interpolator](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/Scroller.java),
 [View](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/View.java).
 
+## Adapter-backed grids
+
+GridView constructors, XML column/spacing/stretch attributes and programmatic
+geometry setters feed a two-dimensional native layout. AUTO_FIT and the four
+stretch modes retain requested values separately from measured values.
+BaseAdapter cells are created by real guest getView calls; getCount, view types,
+isEnabled and 64-bit getItemId also dispatch into the APK. Item clicks reach the
+actual OnItemClickListener. AppKit image/container clicks use the same runtime
+callback path, preserving the host's own gesture recognizers.
+
+DataSetObservable uses the existing managed Observable registry with reverse
+live-list delivery, including self-removal and guest GC. Adapter replacement
+unregisters the previous observer and clears its children. Changed/invalidated
+notifications trigger deferred rebinding; binding faults retain the previous
+cells and release temporary roots. Public child mutations are rejected because
+the adapter owns the children. Native XML constructors now run, and unfinished
+inflation trees stay rooted across guest constructors/class initialization.
+Basic LayoutParams width, height and LinearLayout weight are read live.
+
+Limits: 1,024 materialized cells, 256 view types and 32 nested binding passes.
+getView receives null convertView; viewport recycling, selection, touch scrolling,
+complete Android measurement and advanced LayoutParams remain unsupported.
+Adapter changes during binding are explicitly rejected. These are authored
+headless/native contracts; the independent SwpieView image workflow remains open.
+
+References: [API-21 GridView](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/GridView.java),
+[BaseAdapter](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/BaseAdapter.java),
+[DataSetObservable](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/database/DataSetObservable.java).
+
 ## Preferences subset
 
 Context.getSharedPreferences, Activity.getPreferences and getApplicationContext

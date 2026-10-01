@@ -1,0 +1,6 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="16dp">
+  <org.droidless.grids.GcLabel android:id="@+id/status" android:layout_width="match_parent" android:layout_height="56dp" android:textSize="20sp" android:text="7 photos · second item disabled" />
+  <GridView android:id="@+id/grid" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:columnWidth="100dp" android:numColumns="auto_fit" android:horizontalSpacing="8dp" android:verticalSpacing="8dp" android:stretchMode="columnWidth" android:gravity="center" />
+  <Button android:id="@+id/refresh" android:layout_width="match_parent" android:layout_height="52dp" android:text="Refresh photos" />
+  <View android:id="@+id/plain" android:layout_width="0dp" android:layout_height="0dp" />
+</LinearLayout>

@@ -8,7 +8,8 @@ use droidless_formats::{
     xml::{Element, Value},
 };
 
-const OBSERVERS: &str = "Landroid/database/Observable;->mObservers:Ljava/util/ArrayList;";
+pub(crate) const OBSERVERS: &str =
+    "Landroid/database/Observable;->mObservers:Ljava/util/ArrayList;";
 
 pub(crate) fn graphics_enum_names(class: &str) -> Option<&'static [&'static str]> {
     Some(match class {
@@ -105,6 +106,18 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/database/sqlite/SQLiteStatement;",
             "Landroid/database/Cursor;",
             "Landroid/database/Observable;",
+            "Landroid/database/DataSetObservable;",
+            "Landroid/database/DataSetObserver;",
+            "Landroid/widget/BaseAdapter;",
+            "Landroid/widget/Adapter;",
+            "Landroid/widget/ListAdapter;",
+            "Landroid/widget/SpinnerAdapter;",
+            "Landroid/widget/AdapterView;",
+            "Landroid/widget/AbsListView;",
+            "Landroid/widget/AbsListView$LayoutParams;",
+            "Landroid/widget/AdapterView$OnItemClickListener;",
+            "Ldroidless/runtime/GridObserver;",
+            "Ldroidless/runtime/GridClick;",
             "Landroid/content/ContentValues;",
             "Landroid/os/Handler;",
             "Landroid/os/Message;",
@@ -437,6 +450,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.scrolling_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.grid_native(method, args)? {
             return Ok(Some(result));
         }
         if method.class.starts_with("Landroid/view/")
@@ -3129,6 +3145,7 @@ impl Runtime {
                 result.push(context);
             }
             ("Landroid/view/ViewGroup$LayoutParams;", "<init>(II)V")
+            | ("Landroid/widget/AbsListView$LayoutParams;", "<init>(II)V")
             | ("Landroid/view/ViewGroup$MarginLayoutParams;", "<init>(II)V") => {
                 let fields = &mut self.heap.get_mut(receiver)?.fields;
                 fields.insert("Landroid/view/ViewGroup$LayoutParams;->width:I".into(), vec![arg(1)?]);
@@ -3213,6 +3230,8 @@ impl Runtime {
                 | "Landroid/widget/RelativeLayout;"
                 | "Landroid/widget/ScrollView;"
                 | "Landroid/widget/HorizontalScrollView;"
+                | "Landroid/widget/TableLayout;"
+                | "Landroid/widget/TableRow;"
                 | "Landroid/widget/Space;",
                 "<init>(Landroid/content/Context;Landroid/util/AttributeSet;)V",
             )
@@ -3307,6 +3326,8 @@ impl Runtime {
             | ("Landroid/widget/RelativeLayout;", "<init>(Landroid/content/Context;)V")
             | ("Landroid/widget/ScrollView;", "<init>(Landroid/content/Context;)V")
             | ("Landroid/widget/HorizontalScrollView;", "<init>(Landroid/content/Context;)V")
+            | ("Landroid/widget/TableLayout;", "<init>(Landroid/content/Context;)V")
+            | ("Landroid/widget/TableRow;", "<init>(Landroid/content/Context;)V")
             | ("Landroid/widget/Space;", "<init>(Landroid/content/Context;)V")
             | ("Landroid/widget/EditText;", "<init>(Landroid/content/Context;)V") => {
                 self.view_mut(receiver)?;
@@ -4483,26 +4504,36 @@ impl Runtime {
         context: Word,
         element: &Element,
     ) -> Result<()> {
-        let Some((dex, index)) = self.class_location(class) else {
-            return Ok(());
-        };
-        let definition = &self.apk.dex[dex].classes[index];
         let context_type = "Landroid/content/Context;";
         let attributes_type = "Landroid/util/AttributeSet;";
-        let constructor = [
-            vec![context_type, attributes_type],
-            vec![context_type, attributes_type, "I"],
-            vec![context_type],
-        ]
-        .into_iter()
-        .find_map(|parameters| {
-            definition
-                .methods
-                .iter()
-                .map(|encoded| &self.apk.dex[dex].methods[encoded.index])
-                .find(|method| method.name == "<init>" && method.parameters == parameters)
-                .cloned()
-        });
+        let constructor = if let Some((dex, index)) = self.class_location(class) {
+            let definition = &self.apk.dex[dex].classes[index];
+            [
+                vec![context_type, attributes_type],
+                vec![context_type, attributes_type, "I"],
+                vec![context_type],
+            ]
+            .into_iter()
+            .find_map(|parameters| {
+                definition
+                    .methods
+                    .iter()
+                    .map(|encoded| &self.apk.dex[dex].methods[encoded.index])
+                    .find(|method| method.name == "<init>" && method.parameters == parameters)
+                    .cloned()
+            })
+        } else if class.starts_with("Landroid/widget/")
+            || ["Landroid/view/View;", "Landroid/view/ViewGroup;"].contains(&class)
+        {
+            Some(Method {
+                class: class.into(),
+                name: "<init>".into(),
+                parameters: vec![context_type.into(), attributes_type.into()],
+                returns: "V".into(),
+            })
+        } else {
+            None
+        };
         let Some(constructor) = constructor else {
             return Ok(());
         };
@@ -4541,9 +4572,17 @@ impl Runtime {
         }
     }
     fn inflate(&mut self, element: &Element, depth: usize, context: Word) -> Result<Word> {
+        let roots = self.native_roots.len();
+        self.native_roots.push(context);
+        let result = self.inflate_inner(element, depth, context);
+        self.native_roots.truncate(roots);
+        result
+    }
+    fn inflate_inner(&mut self, element: &Element, depth: usize, context: Word) -> Result<Word> {
         ensure!(depth < 64, "layout XML nesting limit");
         if element.name == "merge" {
             let container = self.new_instance("Landroid/widget/FrameLayout;")?;
+            self.native_roots.push(container);
             let mut view = self
                 .heap
                 .get(container)?
@@ -4552,6 +4591,7 @@ impl Runtime {
                 .context("FrameLayout is not a ViewGroup")?;
             for child in &element.children {
                 let child = self.inflate(child, depth + 1, context)?;
+                self.native_roots.push(child);
                 self.heap
                     .get_mut(child)?
                     .fields
@@ -4570,10 +4610,13 @@ impl Runtime {
         }
         let class = if element.name.contains('.') {
             crate::vm::descriptor(&element.name)
+        } else if ["View", "ViewGroup"].contains(&element.name.as_str()) {
+            format!("Landroid/view/{};", element.name)
         } else {
             format!("Landroid/widget/{};", element.name)
         };
         let word = self.new_instance(&class)?;
+        self.native_roots.push(word);
         self.construct_inflated_view(word, &class, context, element)?;
         let mut view = self
             .heap
@@ -4623,6 +4666,21 @@ impl Runtime {
                         f32::from_bits(raw.data)
                     } else {
                         raw.data as f32
+                    }
+                }
+                "numColumns" if view.grid.is_some() => {
+                    view.grid.as_mut().unwrap().columns = raw.data as i32;
+                }
+                "stretchMode" if view.grid.is_some() => {
+                    view.grid.as_mut().unwrap().stretch = raw.data as i32;
+                }
+                "columnWidth" | "horizontalSpacing" | "verticalSpacing" if view.grid.is_some() => {
+                    let value = dimension(&self.attribute(raw)?)? as i32;
+                    let grid = view.grid.as_mut().unwrap();
+                    match name.as_str() {
+                        "columnWidth" => grid.column_width = value,
+                        "horizontalSpacing" => grid.horizontal_spacing = value,
+                        _ => grid.vertical_spacing = value,
                     }
                 }
                 "orientation" => view.orientation = raw.data as i32,
@@ -4690,6 +4748,7 @@ impl Runtime {
         );
         for child in &element.children {
             let child = self.inflate(child, depth + 1, context)?;
+            self.native_roots.push(child);
             self.heap
                 .get_mut(child)?
                 .fields

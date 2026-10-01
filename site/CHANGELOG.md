@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Adapter-backed GridView now creates real guest cells and delivers item clicks,
+  long row IDs, disabled-item checks and data-set updates. The authored native
+  photo grid verifies seven images, four-cell refresh and clean close; headless
+  checks cover auto-fit/stretch modes, GC and failure recovery. Local CI passes
+  79 Rust tests. SwpieView passes grid/adapter construction and now stops at
+  Intent.getType; its independent image workflow remains open.
 - Packaged PNG/JPEG/WebP now flow through BitmapFactory resource, stream and
   byte-array paths into AppKit ImageViews. An authored fixture verifies bounds,
   sampling, XML src, drawable assignment and four native images. Independent

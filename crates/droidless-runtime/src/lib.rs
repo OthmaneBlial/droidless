@@ -10,6 +10,7 @@ mod file_io;
 mod fragments;
 mod framework;
 mod graphics;
+mod grids;
 pub mod heap;
 mod interpreter;
 mod preferences;

@@ -625,8 +625,9 @@ APK's own `VectorDrawableCompat` inflater executes in guest DEX. With platform
 fragment support, it also attaches and creates its APK-local ReportFragment. The
 startup now also passes AnimatorListenerAdapter, manifest ApplicationInfo, timed
 OverScroller construction, virtual background setting and toolbar content
-descriptions. The next failure is the unsupported `android.widget.GridView`
-class while inflating the app layout. This proves
+descriptions. GridView inflation, BaseAdapter construction and item-listener
+registration now complete. The next failure is the unsupported
+`Intent.getType()Ljava/lang/String;` call. This proves
 startup progress, not vector rendering or a usable image-viewer workflow. [APK source](https://github.com/err4nt/SwpieView).
 
 ```sh
@@ -683,9 +684,32 @@ A fresh native AppKit run exposed four image nodes and the exact labels
 The four raster images remained visible and closing the window exited with code 0.
 This is authored-fixture native evidence, not a usable SwpieView workflow.
 
-Full local CI passes 78 Rust tests, warning-free Clippy, the optimized release
-build and 4,096 seeded APK/DEX/XML/resource mutations. The compatibility replay
-also checks packaged XML pull traversal and passes all 17 calculator scenarios
-and the unchanged Notepad list/editor, two-row save and fresh-process restart
-checks. GitHub Actions remain disabled; the 50% everyday-app checkpoint remains
-ahead.
+## Current source: adapter-backed photo grids
+
+Verified 2026-10-01 with the authored `org.droidless.grids` APK. Compiled DEX
+creates seven PNG cells through BaseAdapter, checks reverse observer delivery
+and self-removal, and runs GC during XML inflation, binding and item callbacks.
+The Rust replay checks auto-fit, all four stretch modes, 64-bit row IDs,
+replacement/invalidation, stale-observer detachment, limits and recovery from
+binding/click faults, including temporary-cell root release.
+
+The native AppKit window displays seven labeled images. Clicking Photo 3 shows
+`Selected photo 3 · id 3000000002`; clicking disabled Photo 2 leaves that value
+unchanged. Refresh replaces the cells with four images, and Photo 4 then shows
+`Selected photo 4 · id 3000000003`. Normal close exits 0. An initial host crash
+was traced to casting AppKit's own gesture recognizer; the bridge now finds and
+updates only its own recognizer and preserves the system recognizers.
+
+Full local CI passes 79 Rust tests, Clippy, the optimized build and 4,096 seeded
+parser mutations. The optimized compatibility replay adds grid click/refresh
+checks alongside all 17 calculator scenarios, images and Notepad two-row
+save/restart checks. GitHub Actions remain disabled; the 50% checkpoint remains ahead.
+The checksum-pinned SwpieView APK reaches `Intent.getType()` in its own onCreate;
+directory picking and its image-viewer workflow are still unsupported.
+
+```sh
+cargo test -p droidless-runtime --test grids
+sh tools/ci.sh
+python3 tools/compatibility.py
+target/release/droidless run --ephemeral fixtures/generated/grids.apk
+```

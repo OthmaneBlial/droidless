@@ -270,6 +270,7 @@ impl Runtime {
         )
     }
     pub fn layout_snapshot(&mut self) -> Result<Node> {
+        self.bind_grids()?;
         fn collect(node: &Node, parent: (f32, f32), out: &mut Vec<(Word, [i32; 4])>) {
             let left = (node.rect.x - parent.0) as i32;
             let top = (node.rect.y - parent.1) as i32;
@@ -407,7 +408,7 @@ impl Runtime {
     }
     pub fn click_text(&mut self, text: &str) -> Result<bool> {
         fn find(node: &Node, text: &str) -> Option<usize> {
-            if node.view.text == text
+            if (node.view.text == text || node.view.content_description.as_deref() == Some(text))
                 && (node.view.listener.is_some() || node.view.xml_click.is_some())
             {
                 Some(node.handle)
@@ -416,7 +417,7 @@ impl Runtime {
             }
         }
         let handle = find(&self.layout_snapshot()?, text)
-            .with_context(|| format!("no clickable View with text {text:?}"))?;
+            .with_context(|| format!("no clickable View with text or description {text:?}"))?;
         self.click(handle)
     }
     pub fn edit(&mut self, handle: usize, text: &str) -> Result<()> {
@@ -877,6 +878,7 @@ impl Runtime {
             "Landroid/widget/FrameLayout$LayoutParams;" => {
                 "Landroid/view/ViewGroup$MarginLayoutParams;"
             }
+            "Landroid/widget/AbsListView$LayoutParams;" => "Landroid/view/ViewGroup$LayoutParams;",
             "Ljava/util/concurrent/ThreadPoolExecutor;" => "Ljava/util/concurrent/ExecutorService;",
             "Ljava/util/concurrent/ExecutorService;" => "Ljava/util/concurrent/Executor;",
             "Ljava/util/HashSet;" => "Ljava/util/AbstractSet;",
@@ -897,6 +899,14 @@ impl Runtime {
             | "Ljava/util/AbstractQueue;" => "Ljava/util/AbstractCollection;",
             "Landroid/widget/Button;" | "Landroid/widget/EditText;" => "Landroid/widget/TextView;",
             "Landroid/widget/ImageButton;" => "Landroid/widget/ImageView;",
+            "Landroid/widget/GridView;" => "Landroid/widget/AbsListView;",
+            "Landroid/widget/AbsListView;" => "Landroid/widget/AdapterView;",
+            "Landroid/widget/AdapterView;" => "Landroid/view/ViewGroup;",
+            "Landroid/widget/ListAdapter;" | "Landroid/widget/SpinnerAdapter;" => {
+                "Landroid/widget/Adapter;"
+            }
+            "Landroid/database/DataSetObservable;" => "Landroid/database/Observable;",
+            "Ldroidless/runtime/GridObserver;" => "Landroid/database/DataSetObserver;",
             "Landroid/widget/RelativeLayout;"
             | "Landroid/widget/ScrollView;"
             | "Landroid/widget/HorizontalScrollView;" => "Landroid/view/ViewGroup;",
@@ -981,6 +991,18 @@ impl Runtime {
                     ]
                     .map(String::from),
                 );
+            }
+            if current == "Landroid/widget/BaseAdapter;" {
+                work.extend(
+                    [
+                        "Landroid/widget/ListAdapter;",
+                        "Landroid/widget/SpinnerAdapter;",
+                    ]
+                    .map(String::from),
+                );
+            }
+            if current == "Ldroidless/runtime/GridClick;" {
+                work.push("Landroid/view/View$OnClickListener;".into());
             }
             if current == "Landroid/app/Activity;" {
                 work.push("Landroid/view/Window$Callback;".into());

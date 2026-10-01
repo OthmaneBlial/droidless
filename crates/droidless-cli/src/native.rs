@@ -21,6 +21,7 @@ struct NativeView {
     text_size: f32,
     text: *const c_char,
     description: *const c_char,
+    click_target: usize,
     image: *const u8,
     image_len: usize,
 }
@@ -99,7 +100,12 @@ extern "C" fn event(context: *mut c_void, kind: u32, handle: usize, text: *const
     if consumed { 2 } else { 1 }
 }
 fn draw(context: &mut ContextData<'_>) -> Result<()> {
-    fn node(host: *mut c_void, n: &Node) -> Result<()> {
+    fn node(host: *mut c_void, n: &Node, ancestor_click: usize) -> Result<()> {
+        let click_target = if n.view.listener.is_some() || n.view.xml_click.is_some() {
+            n.handle
+        } else {
+            ancestor_click
+        };
         let text = CString::new(n.view.text.as_str())
             .context("NUL in UI text is unsupported by AppKit bridge")?;
         let description = n
@@ -136,6 +142,7 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
             description: description
                 .as_ref()
                 .map_or(std::ptr::null(), |label| label.as_ptr()),
+            click_target,
             image: image.as_ptr(),
             image_len: image.len(),
         };
@@ -144,7 +151,7 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
             dl_view(host, &view);
         }
         for child in &n.children {
-            node(host, child)?;
+            node(host, child, click_target)?;
         }
         Ok(())
     }
@@ -154,7 +161,7 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
     unsafe {
         dl_begin(context.host, title.as_ptr());
     }
-    node(context.host, &tree)?;
+    node(context.host, &tree, 0)?;
     // SAFETY: same live host as above.
     unsafe {
         dl_end(context.host);

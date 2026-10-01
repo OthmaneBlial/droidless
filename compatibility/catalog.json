@@ -168,6 +168,29 @@
       "headless_text_input_verified": true,
       "save_restart_verified": true,
       "saved_title_visible_after_restart": true
+    },
+    {
+      "package": "org.droidless.grids",
+      "origin": "droidless-fixture",
+      "status": "interactive-fixture",
+      "source": "examples/grids",
+      "native_ui": true,
+      "native_mouse": true,
+      "native_images_verified": true,
+      "native_close_exit_zero": true,
+      "headless_conformance_verified": true,
+      "android_reference_verified": false,
+      "notes": "Authored compiled fixture: seven PNG cells, native item clicks with long IDs, disabled item and four-cell refresh. Headless checks cover observer self-removal, auto-fit and all stretch modes, replacement/invalidation, GC, limits and failure recovery. At most 1024 materialized cells; viewport recycling, selection and touch scrolling remain unsupported. Not independent image-app evidence."
+    },
+    {
+      "package": "org.voidptr.swpieview",
+      "version": "1.3.2",
+      "origin": "third-party",
+      "artifact_url": "https://f-droid.org/repo/org.voidptr.swpieview_15.apk",
+      "sha256": "7c7a17ddf254e6f7adb53786ab3928937a4de499785475278df2fe5a034f50f3",
+      "status": "startup-blocked",
+      "native_ui": false,
+      "notes": "Original F-Droid APK unmodified and not redistributed. Its guest vector configuration check, platform ReportFragment, toolbar, GridView and BaseAdapter construction complete. Startup stops at unsupported Intent.getType()Ljava/lang/String;. Directory picking and an independent image-viewer workflow remain unproven."
     }
   ]
 }

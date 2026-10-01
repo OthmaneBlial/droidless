@@ -10,6 +10,7 @@ typedef struct {
     float x, y, width, height, text_size;
     const char *text;
     const char *description;
+    size_t click_target;
     const uint8_t *image;
     size_t image_len;
 } NativeView;
@@ -18,6 +19,12 @@ typedef struct {
 @end
 @implementation FlippedView
 - (BOOL)isFlipped { return YES; }
+@end
+
+@interface DroidlessClick : NSClickGestureRecognizer
+@property size_t handle;
+@end
+@implementation DroidlessClick
 @end
 
 @interface DroidlessHost : NSObject <NSWindowDelegate, NSTextFieldDelegate>
@@ -29,6 +36,7 @@ typedef struct {
 @property BOOL running;
 @property size_t keyTarget;
 - (void)clicked:(NSControl *)sender;
+- (void)cellClicked:(DroidlessClick *)sender;
 - (void)quit:(id)sender;
 @end
 
@@ -36,6 +44,9 @@ typedef struct {
 - (void)quit:(id)sender { (void)sender; self.running = NO; }
 - (void)clicked:(NSControl *)sender {
     if (!self.callback(self.context, 1, (size_t)sender.tag, NULL)) self.running = NO;
+}
+- (void)cellClicked:(DroidlessClick *)sender {
+    if (!self.callback(self.context, 1, sender.handle, NULL)) self.running = NO;
 }
 - (void)controlTextDidChange:(NSNotification *)notification {
     NSTextField *field = notification.object;
@@ -135,7 +146,7 @@ void dl_view(void *opaque, const NativeView *node) {
     NSImage *image = imageData ? [[NSImage alloc] initWithData:imageData] : nil;
     if ([view isKindOfClass:[NSButton class]]) {
         NSButton *button = (NSButton *)view;
-        button.tag = (NSInteger)node->handle;
+        button.tag = (NSInteger)(node->click_target ?: node->handle);
         button.enabled = node->enabled != 0;
         button.font = [NSFont systemFontOfSize:node->text_size];
         button.title = text;
@@ -159,6 +170,25 @@ void dl_view(void *opaque, const NativeView *node) {
         field.accessibilityLabel = description ?: text;
     } else if ([view isKindOfClass:[NSImageView class]]) {
         ((NSImageView *)view).image = image;
+    }
+    if (![view isKindOfClass:[NSButton class]]) {
+        DroidlessClick *click = nil;
+        for (NSGestureRecognizer *recognizer in view.gestureRecognizers) {
+            if ([recognizer isKindOfClass:[DroidlessClick class]]) {
+                click = (DroidlessClick *)recognizer;
+                break;
+            }
+        }
+        if (node->click_target && !node->editable) {
+            if (!click) {
+                click = [[DroidlessClick alloc] initWithTarget:host action:@selector(cellClicked:)];
+                [view addGestureRecognizer:click];
+            }
+            click.handle = node->click_target;
+            click.enabled = node->enabled != 0;
+        } else if (click) {
+            [view removeGestureRecognizer:click];
+        }
     }
 }
 void dl_end(void *opaque) {

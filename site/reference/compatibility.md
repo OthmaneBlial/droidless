@@ -32,11 +32,17 @@ paths; Bitmap bounds options, dimensions and ImageView resource/bitmap/drawable
 assignment reach AppKit image views. `Resources.getXml` exposes a bounded binary
 XML pull cursor and resource-ID-backed typed attributes, tested by an authored
 APK. SwpieView passes its bundled vector configuration check and attaches its
-platform ReportFragment, then constructs its toolbar and stops at unsupported GridView. Bitmap pixel manipulation, Android Canvas/vector
+platform ReportFragment, then constructs its toolbar, GridView and BaseAdapter and
+stops at unsupported `Intent.getType()`. Bitmap pixel manipulation, Android Canvas/vector
 drawing and an independent image workflow remain unproven.
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does
 not establish general RecyclerView or AndroidX compatibility.
+Bounded GridView binds guest BaseAdapter cells, observer notifications, item-click
+callbacks with long IDs, auto-fit columns and four stretch modes. An authored
+native fixture verifies image clicks, disabled items and refresh. At most 1,024
+cells are materialized; viewport recycling, selection and touch scrolling remain
+unsupported. [Grid scope](framework.md#adapter-backed-grids).
 String valueOf/toString/length/hashCode/equals/startsWith/contains/
 substring/concat/charAt; StringBuilder constructors/append/toString; Integer
 parseInt/toString; Float parseFloat (decimal); Double parseDouble/valueOf(D)/doubleValue/toString/isNaN(D); Long toString(J)/rotateRight(JI); Math sqrt/cbrt/sin/cos/tan/log/
