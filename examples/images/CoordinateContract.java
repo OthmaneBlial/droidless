@@ -17,6 +17,13 @@ public final class CoordinateContract {
         root.addView(branch); branch.addView(child);
         root.layout(100, 200, 500, 700); branch.layout(10, 20, 110, 120); child.layout(7, 9, 47, 49);
         branch.setTranslationX(100); // The API-21 integer helper ignores matrices.
+        Rect dimensions = new Rect(9, 8, 3, 2);
+        if (dimensions.width()!=-6 || dimensions.height()!=-6 || dimensions.centerX()!=6 || dimensions.centerY()!=5)
+            throw new IllegalStateException("inverted rectangle dimensions");
+        dimensions.set(Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE);
+        if (dimensions.width()!=-1 || dimensions.height()!=1) throw new IllegalStateException("wrapped rectangle dimensions");
+        dimensions.set(4, 5, 4, 5);
+        if (dimensions.width()!=0 || dimensions.height()!=0) throw new IllegalStateException("empty rectangle dimensions");
         Rect rect = new Rect(1, 2, 5, 6);
         System.gc(); root.offsetDescendantRectToMyCoords(child, rect);
         check(rect, 18, 31, 22, 35);

@@ -3216,14 +3216,14 @@ impl Runtime {
                     self.heap.get_mut(receiver)?.fields.insert(format!("Landroid/graphics/RectF;->{edge}:F"), vec![Word::Bits(value.to_bits())]);
                 }
             }
-            ("Landroid/graphics/Rect;", "centerX()I" | "centerY()I") => {
-                let (first, last) = if method.name == "centerX" { ("left", "right") } else { ("top", "bottom") };
+            ("Landroid/graphics/Rect;", "centerX()I" | "centerY()I" | "width()I" | "height()I") => {
+                let (first, last) = if matches!(method.name.as_str(), "centerX" | "width") { ("left", "right") } else { ("top", "bottom") };
                 let fields = &self.heap.get(receiver)?.fields;
                 let edge = |name: &str| -> Result<i32> {
                     fields.get(&format!("Landroid/graphics/Rect;->{name}:I"))
                         .and_then(|values| values.first()).copied().unwrap_or(Word::ZERO).int()
                 };
-                result.push(Word::from(edge(first)?.wrapping_add(edge(last)?) >> 1));
+                result.push(Word::from(if method.name.starts_with("center") { edge(first)?.wrapping_add(edge(last)?) >> 1 } else { edge(last)?.wrapping_sub(edge(first)?) }));
             }
             ("Landroid/graphics/Rect;", "contains(II)Z" | "intersects(IIII)Z" | "intersect(IIII)Z") => {
                 let fields = &self.heap.get(receiver)?.fields;
