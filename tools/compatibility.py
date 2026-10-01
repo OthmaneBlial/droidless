@@ -355,6 +355,26 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             if retained != rows:
                 raise SystemExit(f"Notepad folder {phase} changed an existing note row")
 
+    # Diagnose the next original callback gap without touching the saved seed.
+    with tempfile.TemporaryDirectory(prefix="droidless-notepad-folder-create-") as folder_root:
+        folder_data = Path(folder_root) / "apps"
+        shutil.copytree(app_data, folder_data)
+        process = subprocess.run([
+            str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(folder_data),
+            "--tap", "24", "22", "--advance-ms", "1000", "--click", "Create or edit folders",
+            "--tap", "28", "72", "--input", "Runtime folder", "--tap", "362", "72", str(notepad),
+        ], text=True, capture_output=True, timeout=120)
+        folder_blocker = "unsupported method Landroid/util/Log;->e(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I"
+        if process.returncode == 0 or folder_blocker not in process.stderr or "NewFolderViewHolder;->clickLeftButton" not in process.stderr:
+            raise SystemExit("Notepad folder creation did not reach its diagnosed original keyboard-error logging callback")
+        with sqlite3.connect(folder_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
+            retained = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+            folders = connection.execute("SELECT id FROM Folder").fetchall()
+        with sqlite3.connect(database) as connection:
+            original = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+        if retained != rows or original != rows or folders:
+            raise SystemExit("Notepad failed folder creation changed a saved note or created a folder")
+
     survivor = next(row for row in rows if row[0] != original_id)
     # Original Undo calls note.save(); the APK's INSERT omits its auto-increment ID.
     restored_id = max(row[0] for row in rows) + 1
@@ -453,6 +473,9 @@ report["drawer_open_close_steps_ms"] = [1000, 1000]
 report["headless_folder_open_back_verified"] = True
 report["headless_folder_existing_note_rows_retained"] = True
 report["native_folder_input_verified"] = False
+report["headless_folder_creation_verified"] = False
+report["folder_creation_blocker"] = folder_blocker
+report["failed_folder_creation_existing_note_rows_retained"] = True
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
@@ -464,6 +487,7 @@ print("PASS Notepad: original navigation tap reveals an on-screen drawer animati
 print("PASS Notepad: original drawer settles at 1000ms; Back closes it, retains Notes and preserves both exact rows")
 
 print("PASS Notepad: original Edit Folders binds its editor/listener; Back retains both exact note rows")
+print("PASS Notepad diagnosis: folder creation reaches keyboard-error logging; no folder written and both exact seed/copy notes retained")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.
