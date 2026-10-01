@@ -2,6 +2,76 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_focus_ownership_callbacks_gc_removal_and_fault_recovery() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    let call = |vm: &mut Runtime, name: &str, parameters: Vec<String>, returns: &str, args| {
+        vm.invoke(
+            Method {
+                class: "Lorg/droidless/images/FocusContract;".into(),
+                name: name.into(),
+                parameters,
+                returns: returns.into(),
+            },
+            args,
+            false,
+        )
+    };
+    assert_eq!(
+        call(
+            &mut vm,
+            "run",
+            vec!["Landroid/app/Activity;".into()],
+            "I",
+            vec![activity]
+        )
+        .unwrap(),
+        [Word::from(1)]
+    );
+    let root = call(&mut vm, "root", vec![], "Landroid/view/View;", vec![]).unwrap()[0];
+    let error = call(&mut vm, "fault", vec![], "V", vec![]).unwrap_err();
+    assert!(format!("{error:#}").contains("focus callback failure"));
+    assert_eq!(vm.stack_depth(), 0);
+    call(&mut vm, "recover", vec![], "V", vec![]).unwrap();
+    let error = call(&mut vm, "cycle", vec![], "V", vec![]).unwrap_err();
+    assert!(format!("{error:#}").contains("cyclic or too deep View focus parent hierarchy"));
+    let error = vm
+        .invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: "requestFocus".into(),
+                parameters: vec!["I".into()],
+                returns: "Z".into(),
+            },
+            vec![root],
+            true,
+        )
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("missing focus argument"));
+    assert_eq!(vm.stack_depth(), 0);
+    call(&mut vm, "startWorkerFocus", vec![], "V", vec![]).unwrap();
+    let error = vm.poll_messages().unwrap_err();
+    assert!(format!("{error:#}").contains("unsupported UI access from a guest worker"));
+    assert_eq!(
+        call(&mut vm, "workerFocusPreserved", vec![], "Z", vec![]).unwrap(),
+        [Word::from(1)]
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    call(&mut vm, "release", vec![], "V", vec![]).unwrap();
+    vm.collect();
+    assert!(
+        vm.heap.get(activity).is_err(),
+        "focus callback leaked temporary roots"
+    );
+    assert!(
+        vm.heap.get(root).is_err(),
+        "focus ownership retained the released hierarchy"
+    );
+}
+
+#[test]
 fn compiled_text_layout_measurement_invalidation_and_callback_gc() {
     let mut vm = Runtime::new(
         Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),

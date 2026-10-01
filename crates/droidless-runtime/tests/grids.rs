@@ -61,6 +61,85 @@ fn compiled_grid_cells_notifications_geometry_clicks_gc_and_failures() {
         3_000_000_002
     );
 
+    let focused_cell = Word::Ref(cells[0].handle);
+    call(
+        &mut vm,
+        "keepFocusCell",
+        &["Landroid/view/View;"],
+        "V",
+        vec![focused_cell],
+    )
+    .unwrap();
+    let view_call = |vm: &mut Runtime,
+                     view,
+                     name: &str,
+                     parameters: Vec<String>,
+                     returns: &str,
+                     values: Vec<Word>| {
+        vm.invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: name.into(),
+                parameters,
+                returns: returns.into(),
+            },
+            std::iter::once(view).chain(values).collect(),
+            true,
+        )
+        .unwrap()
+    };
+    view_call(
+        &mut vm,
+        focused_cell,
+        "setFocusable",
+        vec!["Z".into()],
+        "V",
+        vec![Word::from(1)],
+    );
+    assert_eq!(
+        view_call(&mut vm, focused_cell, "requestFocus", vec![], "Z", vec![]),
+        [Word::from(1)]
+    );
+    let root = vm.root.unwrap();
+    assert_eq!(
+        view_call(
+            &mut vm,
+            root,
+            "findFocus",
+            vec![],
+            "Landroid/view/View;",
+            vec![]
+        ),
+        [focused_cell]
+    );
+    call(&mut vm, "resize", &["I"], "V", vec![Word::from(7)]).unwrap();
+    vm.layout_snapshot().unwrap();
+    assert_ne!(
+        view_call(
+            &mut vm,
+            root,
+            "findFocus",
+            vec![],
+            "Landroid/view/View;",
+            vec![]
+        ),
+        [focused_cell]
+    );
+    assert_eq!(
+        view_call(&mut vm, focused_cell, "isFocused", vec![], "Z", vec![]),
+        [Word::ZERO]
+    );
+    assert_eq!(
+        call(&mut vm, "focusChanges", &[], "I", vec![]).unwrap(),
+        [Word::from(11)]
+    );
+    call(&mut vm, "releaseFocusCell", &[], "V", vec![]).unwrap();
+    vm.collect();
+    assert!(
+        vm.heap.get(focused_cell).is_err(),
+        "adapter replacement retained its former focused cell"
+    );
+
     assert!(vm.click_text("Refresh photos").unwrap());
     assert_eq!(grid(&vm.layout_snapshot().unwrap()).children.len(), 4);
     for (mode, step, metric) in [
@@ -143,8 +222,40 @@ fn compiled_grid_cells_notifications_geometry_clicks_gc_and_failures() {
     assert_eq!(vm.stack_depth(), 0);
     call(&mut vm, "resize", &["I"], "V", vec![Word::from(3)]).unwrap();
     vm.layout_snapshot().unwrap();
+    let focused_cell = Word::Ref(photo(&mut vm, 0));
+    call(
+        &mut vm,
+        "keepFocusCell",
+        &["Landroid/view/View;"],
+        "V",
+        vec![focused_cell],
+    )
+    .unwrap();
+    view_call(
+        &mut vm,
+        focused_cell,
+        "setFocusable",
+        vec!["Z".into()],
+        "V",
+        vec![Word::from(1)],
+    );
+    view_call(&mut vm, focused_cell, "requestFocus", vec![], "Z", vec![]);
     call(&mut vm, "detach", &[], "V", vec![]).unwrap();
     assert!(grid(&vm.layout_snapshot().unwrap()).children.is_empty());
+    assert_eq!(
+        view_call(&mut vm, focused_cell, "isFocused", vec![], "Z", vec![]),
+        [Word::ZERO]
+    );
+    assert_eq!(
+        call(&mut vm, "focusChanges", &[], "I", vec![]).unwrap(),
+        [Word::from(11)]
+    );
+    call(&mut vm, "releaseFocusCell", &[], "V", vec![]).unwrap();
+    vm.collect();
+    assert!(
+        vm.heap.get(focused_cell).is_err(),
+        "setAdapter retained its former focused cell"
+    );
     call(&mut vm, "reattach", &[], "V", vec![]).unwrap();
     assert_eq!(grid(&vm.layout_snapshot().unwrap()).children.len(), 3);
     vm.close().unwrap();

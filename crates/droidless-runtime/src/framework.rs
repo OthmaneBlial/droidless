@@ -494,6 +494,14 @@ impl Runtime {
         Ok(object)
     }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+        // Keep recursive focus notifications out of the large fallback dispatcher's
+        // debug stack frame; focus_native retains the same UI-thread guard.
+        if let Some(result) = self.focus_native(method, args)? {
+            return Ok(Some(result));
+        }
+        self.native_framework(method, args)
+    }
+    fn native_framework(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
         if let Some(result) = self.throwable_native(method, args)? {
             return Ok(Some(result));
         }
@@ -864,6 +872,7 @@ impl Runtime {
                     let fields = &mut self.heap.get_mut(child)?.fields;
                     fields.insert("droidless:view:parent".into(), vec![receiver]);
                     fields.insert("droidless:view:layout-params".into(), vec![params]);
+                    self.focus_hierarchy_change(receiver, child, true)?;
                     return Ok(Some(result));
                 }
                 _ => {}
@@ -3754,10 +3763,19 @@ impl Runtime {
             }
             ("Landroid/view/ViewGroup;", "removeAllViews()V") => {
                 let children = std::mem::take(&mut self.view_mut(receiver)?.children);
-                for child in children {
-                    self.heap.get_mut(child)?.fields.remove("droidless:view:parent");
-                    self.hierarchy_change(receiver, child, false)?;
-                }
+                let roots = self.native_roots.len();
+                self.native_roots.push(receiver);
+                self.native_roots.extend(children.iter().copied());
+                let removed = (|| -> Result<()> {
+                    for child in children {
+                        self.focus_before_remove(receiver, child)?;
+                        self.heap.get_mut(child)?.fields.remove("droidless:view:parent");
+                        self.hierarchy_change(receiver, child, false)?;
+                    }
+                    Ok(())
+                })();
+                self.native_roots.truncate(roots);
+                removed?;
             }
             ("Landroid/view/ViewGroup;", "removeView(Landroid/view/View;)V" | "removeViewInLayout(Landroid/view/View;)V" | "removeViewAt(I)V") => {
                 let child = if method.name=="removeViewAt" {
@@ -3765,11 +3783,15 @@ impl Runtime {
                     self.view_mut(receiver)?.children.get(usize::try_from(index).map_err(|_|fault("Ljava/lang/IndexOutOfBoundsException;","child index"))?).copied()
                         .ok_or_else(||fault("Ljava/lang/IndexOutOfBoundsException;","child index"))?
                 } else {arg(1)?};
-                let children = &mut self.view_mut(receiver)?.children;
-                if let Some(index) = children.iter().position(|view| *view == child) {
-                    children.remove(index);
-                    self.heap.get_mut(child)?.fields.remove("droidless:view:parent");
-                    self.hierarchy_change(receiver, child, false)?;
+                if self.view_mut(receiver)?.children.contains(&child) {
+                    self.focus_before_remove(receiver, child)?;
+                    // A focus-loss callback may already have removed this child.
+                    let children = &mut self.view_mut(receiver)?.children;
+                    if let Some(index) = children.iter().position(|view| *view == child) {
+                        children.remove(index);
+                        self.heap.get_mut(child)?.fields.remove("droidless:view:parent");
+                        self.hierarchy_change(receiver, child, false)?;
+                    }
                 }
             }
             ("Landroid/view/ViewGroup;", "setMotionEventSplittingEnabled(Z)V") => {
@@ -4470,13 +4492,6 @@ impl Runtime {
                 arg(3)?.int()?;
                 result.push(Word::ZERO);
             }
-            ("Landroid/view/ViewGroup;", "getFocusedChild()Landroid/view/View;") => {
-                self.view_mut(receiver)?;
-                // ponytail: no guest focus requests are implemented, so the group's
-                // initial focused child is null. Add focus ownership with requestFocus;
-                // AppKit editor focus is not mirrored as Android focus state yet.
-                result.push(Word::ZERO);
-            }
             ("Landroid/view/ViewGroup;", "isChildrenDrawingOrderEnabled()Z") => {
                 self.view_mut(receiver)?;
                 // Android's base group uses insertion order until explicitly configured.
@@ -4582,6 +4597,11 @@ impl Runtime {
                 let v = arg(1)?.int()?;
                 ensure!([0, 4, 8].contains(&v), "invalid View visibility");
                 self.view_mut(receiver)?.visible = v;
+                if self.find_focus(receiver)? != Word::ZERO
+                    && (v == 8 || (v == 4 && self.focus_root(receiver)? != receiver)) {
+                    self.invoke(Method { class: "Landroid/view/View;".into(), name: "clearFocus".into(),
+                        parameters: vec![], returns: "V".into() }, vec![receiver], true)?;
+                }
             }
             ("Landroid/view/View;", "hasTransientState()Z") => {
                 let mut pending=vec![receiver];
@@ -4623,7 +4643,8 @@ impl Runtime {
                 let mut states = vec![];
                 if self.view_mut(receiver)?.enabled { states.push(Word::from(16842910)); }
                 if pressed { states.push(Word::from(16842919)); }
-                // ponytail: enabled/pressed states for the current View profile; add focus/window/selection states with their native lifecycle.
+                if self.focus_field(receiver, "droidless:view:focused")?.truth() { states.push(Word::from(16842908)); }
+                // ponytail: enabled/pressed/focused states; add selection/window states with their event lifecycle.
                 let array = self.array("I".into(),states.len()+extra)?;
                 let Data::Array { values, .. } = &mut self.heap.get_mut(array)?.data else { bail!("drawable state is not array"); };
                 for (slot, value) in values.iter_mut().zip(states) { *slot=vec![value]; }
@@ -4709,13 +4730,6 @@ impl Runtime {
             | ("Landroid/support/v7/widget/ViewStubCompat;", "setWillNotDraw(Z)V") => {
                 self.view_mut(receiver)?;
             }
-            ("Landroid/view/View;", "setDescendantFocusability(I)V")
-            | ("Landroid/support/v4/widget/DrawerLayout;", "setDescendantFocusability(I)V") => {
-                self.heap
-                    .get_mut(receiver)?
-                    .fields
-                    .insert("droidless:descendant-focusability".into(), vec![arg(1)?]);
-            }
             ("Landroid/view/View;", "setFocusableInTouchMode(Z)V")
             | ("Landroid/support/v4/widget/DrawerLayout;", "setFocusableInTouchMode(Z)V")
             | ("Landroid/view/View;", "setFocusable(Z)V")
@@ -4728,13 +4742,11 @@ impl Runtime {
                     self.heap.get_mut(receiver)?.fields.insert("droidless:setFocusable".into(), vec![Word::from(1)]);
                 } else if method.name == "setFocusable" && !arg(1)?.truth() {
                     self.heap.get_mut(receiver)?.fields.insert("droidless:setFocusableInTouchMode".into(), vec![Word::ZERO]);
+                    if self.focus_field(receiver, "droidless:view:focused")?.truth() {
+                        self.invoke(Method { class: "Landroid/view/View;".into(), name: "clearFocus".into(),
+                            parameters: vec![], returns: "V".into() }, vec![receiver], true)?;
+                    }
                 }
-            }
-            ("Landroid/view/View;", "isFocusable()Z" | "isFocusableInTouchMode()Z") => {
-                self.view_mut(receiver)?;
-                let key = if method.name == "isFocusable" { "droidless:setFocusable" } else { "droidless:setFocusableInTouchMode" };
-                result.push(self.heap.get(receiver)?.fields.get(key).and_then(|values| values.first())
-                    .copied().unwrap_or(Word::ZERO));
             }
             ("Landroid/view/View;", "setImportantForAccessibility(I)V")
             | ("Landroid/support/v4/widget/DrawerLayout;", "setImportantForAccessibility(I)V") => {
@@ -5010,32 +5022,39 @@ impl Runtime {
             .context("framework method expects a View")
     }
     fn hierarchy_change(&mut self, parent: Word, child: Word, added: bool) -> Result<()> {
-        let listener = self
-            .heap
-            .get(parent)?
-            .fields
-            .get("droidless:view:hierarchy-listener")
-            .and_then(|values| values.first())
-            .copied()
-            .unwrap_or(Word::ZERO);
-        if listener != Word::ZERO {
-            self.invoke(
-                Method {
-                    class: "Landroid/view/ViewGroup$OnHierarchyChangeListener;".into(),
-                    name: if added {
-                        "onChildViewAdded"
-                    } else {
-                        "onChildViewRemoved"
-                    }
-                    .into(),
-                    parameters: vec!["Landroid/view/View;".into(); 2],
-                    returns: "V".into(),
-                },
-                vec![listener, parent, child],
-                true,
-            )?;
-        }
-        Ok(())
+        let roots = self.native_roots.len();
+        self.native_roots.extend([parent, child]);
+        let result = (|| -> Result<()> {
+            self.focus_hierarchy_change(parent, child, added)?;
+            let listener = self
+                .heap
+                .get(parent)?
+                .fields
+                .get("droidless:view:hierarchy-listener")
+                .and_then(|values| values.first())
+                .copied()
+                .unwrap_or(Word::ZERO);
+            if listener != Word::ZERO {
+                self.invoke(
+                    Method {
+                        class: "Landroid/view/ViewGroup$OnHierarchyChangeListener;".into(),
+                        name: if added {
+                            "onChildViewAdded"
+                        } else {
+                            "onChildViewRemoved"
+                        }
+                        .into(),
+                        parameters: vec!["Landroid/view/View;".into(); 2],
+                        returns: "V".into(),
+                    },
+                    vec![listener, parent, child],
+                    true,
+                )?;
+            }
+            Ok(())
+        })();
+        self.native_roots.truncate(roots);
+        result
     }
     pub(crate) fn resource_text(&self, id: u32) -> Result<String> {
         // Android's stable public framework string IDs, not application-specific output.
@@ -5782,6 +5801,28 @@ impl Runtime {
                     self.heap.get_mut(word)?.fields.insert(
                         "droidless:setFocusable".into(),
                         vec![Word::from(i32::from(raw.data != 0))],
+                    );
+                }
+                "focusableInTouchMode" => {
+                    self.heap.get_mut(word)?.fields.insert(
+                        "droidless:setFocusableInTouchMode".into(),
+                        vec![Word::from(i32::from(raw.data != 0))],
+                    );
+                    if raw.data != 0 {
+                        self.heap
+                            .get_mut(word)?
+                            .fields
+                            .insert("droidless:setFocusable".into(), vec![Word::from(1)]);
+                    }
+                }
+                "descendantFocusability" => {
+                    let mode = [0x20000, 0x40000, 0x60000]
+                        .get(raw.data as usize)
+                        .copied()
+                        .context("invalid XML descendant focusability")?;
+                    self.heap.get_mut(word)?.fields.insert(
+                        "droidless:descendant-focusability".into(),
+                        vec![Word::from(mode)],
                     );
                 }
                 "inputType" if raw.data == 0 => {

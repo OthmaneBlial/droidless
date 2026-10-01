@@ -18,6 +18,8 @@ public class MainActivity extends Activity implements AdapterView.OnItemClickLis
     private static Photos adapter, oldAdapter;
     private static TextView status;
     private static View failedCell;
+    private static View focusedCell;
+    private static int focusGains, focusLosses;
     private static int clicks;
     private static long selectedId;
     private static boolean throwClick;
@@ -102,6 +104,19 @@ public class MainActivity extends Activity implements AdapterView.OnItemClickLis
     public static int clickCount() { return clicks; }
     public static long selectedId() { return selectedId; }
     public static void resize(int count) { adapter.count = count; adapter.notifyDataSetChanged(); }
+    public static void keepFocusCell(View cell) {
+        focusedCell = cell; focusGains = focusLosses = 0;
+        cell.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            public void onFocusChange(View view, boolean gain) {
+                System.gc();
+                if (view != focusedCell || view.isFocused() != gain || view.getParent() != grid)
+                    throw new AssertionError("grid focus callback identity/state/parent");
+                if (gain) focusGains++; else focusLosses++;
+            }
+        });
+    }
+    public static int focusChanges() { return 10 * focusGains + focusLosses; }
+    public static void releaseFocusCell() { focusedCell = null; }
     public static void invalidate() { adapter.notifyDataSetInvalidated(); }
     public static void failBind(int mode) { adapter.mode = mode; adapter.notifyDataSetChanged(); }
     public static View takeFailedCell() { View cell = failedCell; failedCell = null; return cell; }

@@ -121,8 +121,11 @@ impl Runtime {
                     .context("expected GridView")?
                     .children,
             );
+            self.native_roots.extend(children.iter().copied());
             for child in children {
+                self.focus_before_remove(grid, child)?;
                 self.grid_put(child, "droidless:view:parent", Word::ZERO)?;
+                self.focus_hierarchy_change(grid, child, false)?;
             }
             self.grid_put(grid, ADAPTER_FIELD, adapter)?;
             if adapter != Word::ZERO {
@@ -525,6 +528,7 @@ impl Runtime {
                 .context("expected GridView")?
                 .children
                 .clone();
+            self.native_roots.extend(old.iter().copied());
             let mut cells = vec![];
             if adapter != Word::ZERO && !self.grid_word(grid, "droidless:grid:invalid")?.truth() {
                 self.native_roots.push(adapter);
@@ -590,6 +594,7 @@ impl Runtime {
                 "adapter changed during binding"
             );
             for cell in old.iter().filter(|cell| !cells.contains(cell)) {
+                self.focus_before_remove(grid, *cell)?;
                 self.grid_put(*cell, "droidless:view:parent", Word::ZERO)?;
             }
             for cell in &cells {
@@ -600,8 +605,15 @@ impl Runtime {
                 .view
                 .as_mut()
                 .context("expected GridView")?
-                .children = cells;
-            self.grid_put(grid, DIRTY, Word::ZERO)
+                .children = cells.clone();
+            self.grid_put(grid, DIRTY, Word::ZERO)?;
+            for cell in old.iter().filter(|cell| !cells.contains(cell)) {
+                self.focus_hierarchy_change(grid, *cell, false)?;
+            }
+            for cell in cells {
+                self.focus_hierarchy_change(grid, cell, true)?;
+            }
+            Ok(())
         })();
         self.grid_put(grid, BINDING, Word::ZERO)?;
         self.native_roots.truncate(roots);
