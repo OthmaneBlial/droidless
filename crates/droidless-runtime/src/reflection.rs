@@ -507,6 +507,22 @@ impl Runtime {
                     source == target || self.is_a(&source, &target),
                 )));
             }
+            ("Ljava/lang/Class;", "asSubclass(Ljava/lang/Class;)Ljava/lang/Class;") => {
+                let class = self.reflected_class(arg(0)?)?;
+                let parent = self.reflected_class(arg(1)?)?;
+                ensure!(
+                    self.is_a(&class, &parent),
+                    fault(
+                        "Ljava/lang/ClassCastException;",
+                        format!(
+                            "{} is not a subclass of {}",
+                            class_name(&class),
+                            class_name(&parent)
+                        )
+                    )
+                );
+                result.push(arg(0)?);
+            }
             (
                 "Ljava/lang/Class;",
                 "getDeclaredMethod(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;",

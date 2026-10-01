@@ -40,6 +40,9 @@ public class ReflectionContract {
         Class<?> cls = Thing.class;
         if (initializations != 0 || !"org.droidless.reflection.ReflectionContract$Thing".equals(cls.getName())) return 0;
         ClassLoader loader = ReflectionContract.class.getClassLoader();
+        if (cls.asSubclass(Object.class) != cls || cls.asSubclass(Thing.class) != cls || initializations != 0) return 0;
+        try { cls.asSubclass(String.class); return 0; } catch (ClassCastException expected) {}
+        try { cls.asSubclass(null); return 0; } catch (NullPointerException expected) {}
         if (loader.loadClass(cls.getName()) != cls || initializations != 0
             || loader.loadClass("java.lang.String") != String.class) return 0;
         System.gc();
