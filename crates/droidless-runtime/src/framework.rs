@@ -2803,8 +2803,21 @@ impl Runtime {
                     vec![string],
                 );
             }
-            ("Landroid/content/Context;", "getDrawable(I)Landroid/graphics/drawable/Drawable;")
-            | ("Landroid/content/res/Resources;", "getDrawable(I)Landroid/graphics/drawable/Drawable;")
+            ("Landroid/content/Context;", "getDrawable(I)Landroid/graphics/drawable/Drawable;") => {
+                let id = arg(1)?;
+                let roots=self.native_roots.len();
+                self.native_roots.push(receiver);
+                let loaded=(|| -> Result<Vec<Word>> {
+                    let resources=*self.invoke(Method {class:"Landroid/content/Context;".into(),name:"getResources".into(),parameters:vec![],returns:"Landroid/content/res/Resources;".into()},vec![receiver],true)?.first().context("Context resources missing")?;
+                    self.native_roots.push(resources);
+                    let theme=*self.invoke(Method {class:"Landroid/content/Context;".into(),name:"getTheme".into(),parameters:vec![],returns:"Landroid/content/res/Resources$Theme;".into()},vec![receiver],true)?.first().context("Context theme missing")?;
+                    self.native_roots.push(theme);
+                    self.invoke(Method {class:"Landroid/content/res/Resources;".into(),name:"getDrawable".into(),parameters:vec!["I".into(),"Landroid/content/res/Resources$Theme;".into()],returns:"Landroid/graphics/drawable/Drawable;".into()},vec![resources,id,theme],true)
+                })();
+                self.native_roots.truncate(roots);
+                return Ok(Some(loaded?));
+            }
+            ("Landroid/content/res/Resources;", "getDrawable(I)Landroid/graphics/drawable/Drawable;")
             | ("Landroid/content/res/Resources;", "getDrawable(ILandroid/content/res/Resources$Theme;)Landroid/graphics/drawable/Drawable;") => {
                 let id = arg(1)?;
                 let drawable = self.heap.instance("Landroid/graphics/drawable/Drawable;")?;
@@ -4830,8 +4843,32 @@ impl Runtime {
                     .fields
                     .insert("droidless:accessibility-delegate".into(), vec![arg(1)?]);
             }
+            ("Landroid/view/View;", "setBackgroundResource(I)V") => {
+                self.view_mut(receiver)?;
+                let id = arg(1)?.int()?;
+                let key = "droidless:view:background-resource";
+                if id != 0 && self.heap.get(receiver)?.fields.get(key).and_then(|values|values.first()).copied() == Some(Word::from(id)) {
+                    return Ok(Some(vec![]));
+                }
+                let roots = self.native_roots.len();
+                self.native_roots.push(receiver);
+                let changed = (|| -> Result<()> {
+                    let drawable = if id == 0 { Word::ZERO } else {
+                        let context = self.heap.get(receiver)?.fields.get("droidless:view:context").and_then(|values|values.first()).copied().context("View has no Context")?;
+                        self.native_roots.push(context);
+                        *self.invoke(Method { class:"Landroid/content/Context;".into(), name:"getDrawable".into(), parameters:vec!["I".into()], returns:"Landroid/graphics/drawable/Drawable;".into() }, vec![context,Word::from(id)],true)?.first().context("Context drawable missing")?
+                    };
+                    self.native_roots.push(drawable);
+                    self.invoke(Method {class:"Landroid/view/View;".into(),name:"setBackground".into(),parameters:vec!["Landroid/graphics/drawable/Drawable;".into()],returns:"V".into()},vec![receiver,drawable],true)?;
+                    self.heap.get_mut(receiver)?.fields.insert(key.into(),vec![Word::from(id)]);
+                    Ok(())
+                })();
+                self.native_roots.truncate(roots);
+                changed?;
+            }
             ("Landroid/view/View;", "setBackgroundColor(I)V") => {
-                self.view_mut(receiver)?.background = Some(arg(1)?.int()? as u32)
+                self.view_mut(receiver)?.background = Some(arg(1)?.int()? as u32);
+                self.heap.get_mut(receiver)?.fields.remove("droidless:view:background-resource");
             }
             ("Landroid/view/View;", "setContentDescription(Ljava/lang/CharSequence;)V") => {
                 let description = arg(1)?;
@@ -4884,6 +4921,8 @@ impl Runtime {
             | ("Landroid/support/v7/widget/bs;", "setBackgroundDrawable(Landroid/graphics/drawable/Drawable;)V") => {
                 let drawable = arg(1)?;
                 if drawable != Word::ZERO { ensure!(self.is_a(&self.heap.get(drawable)?.class, "Landroid/graphics/drawable/Drawable;"), "background requires Drawable"); }
+                if self.heap.get(receiver)?.fields.get("droidless:view:background-drawable").and_then(|values|values.first()).copied() == Some(drawable) { return Ok(Some(vec![])); }
+                self.heap.get_mut(receiver)?.fields.remove("droidless:view:background-resource");
                 let color = if drawable == Word::ZERO {
                     None
                 } else if let Some(id) = self

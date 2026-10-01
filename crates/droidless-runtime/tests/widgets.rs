@@ -2,6 +2,37 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_background_resources_dispatch_cache_gc_and_fault_recovery() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    let view = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/BackgroundResourceContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "Landroid/view/View;".into(),
+            },
+            vec![activity],
+            false,
+        )
+        .unwrap()[0];
+    assert_eq!(
+        vm.heap.get(view).unwrap().view.as_ref().unwrap().background,
+        Some(42)
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(vm.heap.get(activity).is_err());
+    assert!(
+        vm.heap.get(view).is_err(),
+        "resource callback leaked temporary roots"
+    );
+}
+
+#[test]
 fn compiled_descendant_coordinates_scroll_overflow_faults_and_hierarchy_bound() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
