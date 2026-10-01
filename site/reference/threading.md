@@ -59,9 +59,13 @@ Headless execution starts at zero and advances only through `--advance-ms` or
 Runtime.advance_time. Immediate posts drain after launch and each replay action.
 Before each CLI time step, the current View tree is laid out and polled at its
 existing time, so guest onLayout callbacks and automatic animations start before
-the clock moves. Runtime.advance_time itself does not perform layout.
+the clock moves. The CLI then renders the advanced frame and drains its immediate
+callbacks before the next action, so Back observes the updated guest state.
+Runtime.advance_time itself does not perform layout.
 Native AppKit execution uses Rust Instant and polls at event-loop boundaries,
 with an idle wait of up to 50 ms. It redraws after callbacks mutate guest Views.
+Attached View.postInvalidateOnAnimation requests also trigger a coalesced redraw;
+rendering runs the visible hierarchy's virtual computeScroll callbacks.
 This does not model Android device boot time, deep sleep or precise timer latency.
 Switching to the native clock disables manual advancement.
 

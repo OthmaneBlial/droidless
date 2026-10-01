@@ -52,8 +52,17 @@ timeout/dismissal callbacks and removes the Snackbar, retaining the exact surviv
 row. Headless Undo runs the original listener, restores the title/body with a fresh
 auto-increment ID, preserves the survivor and reopens the restored fields after a
 fresh process; advancing past the old timeout causes no further change. Native
-Delete/Undo input and native timed feedback/dismissal remain unverified. Generic
-`<view class="…">` layout inflation invokes the
+Delete/Undo input and native timed feedback/dismissal remain unverified.
+Headless navigation taps reveal the original drawer's menu entry partly on screen
+at 100 ms, retaining both exact ID/title/body rows. Rendering invokes guest
+computeScroll; attached postInvalidateOnAnimation requests drive host redraw
+polling. Advancing to 1000 ms stops in the drawer's settlement callback at
+unsupported View.requestFocus. Full settlement, Back closure and native drawer
+input remain unverified. Selecting Create or edit folders from the 100 ms frame
+reaches its own Activity and then fails during NewFolderViewHolder binding at
+unsupported Resources.getResourceEntryName; folder creation/editing remains
+unverified.
+Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree
 through callback GC. View live-region mode bits are retained; Android accessibility

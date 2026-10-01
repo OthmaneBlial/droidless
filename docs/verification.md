@@ -1553,3 +1553,56 @@ The full local gate passes 104 Rust tests, Clippy, optimized CLI/document replay
 builds and 4,096 seeded parser mutations. The expanded optimized public replay
 passes restoration, fresh-ID, survivor, old-timeout, restart and reopen checks.
 GitHub Actions remain disabled and the 50% checkpoint remains active.
+
+## Current-source original Notepad drawer frames
+
+Date: 2026-10-01. Shared headless/AppKit rendering now invokes virtual
+View.computeScroll after layout. The Android base callback is empty; APK
+overrides execute in DEX. The traversal skips hidden subtrees, follows children
+after parent callbacks, skips children removed during callbacks and retains
+temporary roots through GC. Callback faults propagate and release those roots.
+Attached View.postInvalidateOnAnimation requests coalesce into one notification
+for the next host poll; detached Views and a closed queue request none. Rendering
+still uses full snapshots rather than dirty rectangles or precise vsync.
+
+The compiled Images scroll-frame contract checks 0/50/100 positions on the shared
+clock, callback counts, hidden and removed siblings, callback GC, final redraw
+delivery, faults and recovery. CLI time advancement now also renders the advanced
+frame before delivering the next input action. A Scheduling fixture's Back
+callback observes its updated animation state; the prior CLI reported stale state.
+
+View.hasWindowFocus now reads the host focus flag only for Views attached to the
+foreground Activity's window token. AppKit samples its actual key-window state
+before drawing and dispatch; headless starts false. Compiled contracts verify
+host-state changes, detached Views, child Activity launch and return. Guest focus
+ownership, focus-change callbacks and native editor focus synchronization remain
+outside this getter's scope.
+
+The original Notepad v1.0.0 APK is unchanged, with SHA-256
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+At 390×844, tapping its navigation button at (24,22) and advancing 100 ms makes
+the original Create or edit folders entry visible partly on screen: x=-96,
+width=236, y=191, height=60, with visible ancestors and alpha=1. This is an
+animation frame, not verified full drawer settlement. The permanent public replay
+checks visibility, viewport intersection and preservation of both exact SQLite
+ID/title/body rows against a disposable copy of its saved notes.
+
+Advancing to 1000 ms reaches the original drawer settlement Runnable, then stops
+at unsupported `Landroid/view/View;->requestFocus()Z`. The diagnostic retains
+`Landroid/support/v4/widget/x;->a(I)V [classes.dex, PC 0x00c5]` and the upstream
+queued callback locations. The copied and source note rows remain unchanged.
+Full settlement, Back closure and physical native drawer input remain unverified.
+Selecting Create or edit folders from the 100 ms frame reaches its Activity, then
+stops during NewFolderViewHolder binding at unsupported
+`Resources.getResourceEntryName(I)`. Folder creation/editing remains unverified;
+this diagnostic alone does not establish the underlying binding cause.
+
+The full local gate passes 105 Rust tests, warning-free Clippy, optimized
+CLI/document replay builds and 4,096 seeded parser mutations. The optimized
+public APK replay passes, including the new 100 ms drawer frame and exact-row
+check, alongside the existing calculator, image/document, Activity result,
+SwpieView and Notepad save/edit/Delete/Undo/restart/malformed-body checks.
+The unsigned development bundle was rebuilt; its executable matches the optimized CLI
+byte-for-byte. This is build evidence; no fresh physical drawer input or normal
+native close is claimed. GitHub Actions remain disabled and the 50% checkpoint
+remains active.

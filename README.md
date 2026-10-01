@@ -126,10 +126,14 @@ physical menu input remains unverified. [Menu scope](docs/compatibility.md).
 Timed headless replay also shows the original delete feedback, removes its
 Snackbar after timeout, and runs Undo to restore both fields with a fresh row ID
 that survives restart and reopen. Native Delete/Undo input remains unverified.
+Headless navigation taps now reveal an on-screen drawer animation frame at 100 ms,
+retaining both exact note rows. Settling the drawer stops at unsupported
+`View.requestFocus()`; drawer Back closure and native input remain unverified.
+Folder editing also reaches a binding blocker. [Current checks](docs/verification.md#current-source-original-notepad-drawer-frames).
 Current source adds `--input TEXT` for the first visible EditText, per-package
 preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only runs.
-`--advance-ms MILLISECONDS` lays out and polls the current frame
-before advancing the deterministic clock and delivering due APK callbacks.
+`--advance-ms MILLISECONDS` lays out and polls the current frame, advances the
+deterministic clock, then renders the advanced frame before the next action.
 
 </details>
 

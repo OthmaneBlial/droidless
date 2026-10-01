@@ -283,6 +283,27 @@ Java float rounding, final positions, forceFinished and abortAnimation. Guest
 interpolator failures propagate and temporary roots are released. Fling/springback
 physics remain unsupported; single-pointer gesture delivery is described above.
 
+Shared headless/AppKit rendering now invokes virtual View.computeScroll after
+layout. The base implementation is empty; APK overrides execute in DEX. The
+traversal skips hidden subtrees, respects child removal during callbacks and
+retains temporary roots through GC, releasing them on success or failure.
+View.postInvalidateOnAnimation coalesces attached-View requests into a redraw
+notification for the next host poll. Detached Views and a closed queue request
+none. This redraws the full snapshot; dirty rectangles, precise vsync and general
+Canvas/onDraw rendering remain outside this profile. The compiled scroll-frame
+probe checks midpoint/final geometry, hidden and detached children, callback GC,
+fault propagation and recovery. The original Notepad drawer now reveals an
+on-screen animation frame at 100 ms through its own callbacks. Its 1000 ms
+settlement callback stops at unsupported View.requestFocus; full settlement,
+Back closure and native drawer input remain unverified.
+
+View.hasWindowFocus reads the embedding host's focus flag for Views attached to
+the foreground Activity's window token. AppKit samples its actual key-window
+state before drawing and dispatch; headless starts false. Compiled contracts
+check host-state changes, detached Views and child Activity transitions. This
+getter does not implement guest focus ownership, onWindowFocusChanged delivery
+or native editor focus synchronization.
+
 View.setBackground invokes virtual setBackgroundDrawable, preserving APK
 overrides and retained Drawable identity, including null clearing. Rendering is
 still limited to the existing flat-color/raster subset. Content descriptions

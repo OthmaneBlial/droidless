@@ -60,6 +60,14 @@ The following are objectives, not completed capability claims.
    restores title/body with a fresh auto-increment ID, preserves the survivor and
    reopens the restored fields after restart. The old timeout causes no further
    change. Physical Delete/Undo input remains ahead.
+   Headless navigation taps now reveal the APK's drawer animation frame at 100 ms,
+   retaining both exact note rows. Shared rendering runs guest
+   computeScroll callbacks and attached animation redraw requests reach host
+   polling. The 1000 ms settlement callback stops at unsupported View.requestFocus;
+   full settlement, Back closure and native drawer input remain ahead. Create or
+   edit folders selected from the partial frame reaches its Activity, then stops
+   in NewFolderViewHolder binding at unsupported Resources.getResourceEntryName;
+   folder editing remains ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
