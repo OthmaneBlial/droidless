@@ -51,6 +51,12 @@ opens an existing note, keyboard input edits both fields, and Escape saves back
 to the list. A fresh native process reopens the exact revised title and body.
 [Exact evidence and limits](docs/verification.md#current-source-editing-an-existing-public-note).
 
+🗂️ Current source also opens the original Edit Folders screen in headless replay.
+Installed AppCompat inflater callbacks construct its own widgets and bind its
+editor/listener. Creation still needs a ViewGroup coordinate bridge during child
+focus; folder editing and native folder input remain unverified.
+[Inflater evidence and next blocker](docs/verification.md#current-source-layoutinflater-factory-dispatch).
+
 ```sh
 sh tools/fetch-notepad.sh
 target/release/droidless run --headless --ephemeral --size 390x844 \

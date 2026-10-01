@@ -59,11 +59,15 @@ computeScroll; attached postInvalidateOnAnimation requests drive host redraw
 polling. Advancing to 1000 ms now completes the original settlement callback and
 its View.requestFocus call. Back closes the drawer while retaining Notes and both
 exact rows. Native drawer input remains unverified. Selecting Create or edit
-folders reaches its own Activity. Resource-entry lookup and the message/cause
-exception constructor now execute. The original binder reports that left_button
-has the wrong type for leftButton. Its compiled XML declares ImageButton, while
-the tagged field expects AppCompatImageButton; inflater factories are currently
-retained without callback dispatch. Folder creation/editing remains unverified.
+folders now opens Edit Folders and binds the original editor and button listener.
+Back returns to Notes with both exact rows retained.
+Shared binary XML inflation invokes the APK's installed AppCompat Factory2, so
+its ImageButton becomes the actual guest AppCompatImageButton without patching the
+APK or aliasing the class. The compiled inflater contract checks cloning, merged
+callback order, AttributeSet identity, ViewStubs, GC, faults and bounded chains.
+Starting folder creation reaches RecyclerView.requestChildFocus, then rejects the
+missing ViewGroup.offsetDescendantRectToMyCoords bridge. Exact note rows remain
+unchanged. Folder creation/editing and physical folder input remain unverified.
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree
@@ -174,7 +178,9 @@ and isolated persistence are verified. Apply is synchronous; preference listener
 String sets and general file APIs remain unsupported. [Storage limits](storage.md).
 HashSet/ArrayList/HashMap and basic LinkedHashMap add bounded operations using
 guest equals; lists preserve duplicates/order and support indexed operations.
-Native HashMap/LinkedHashMap putAll copies bounded entries with snapshot GC roots.
+Native HashMap/LinkedHashMap/Hashtable putAll copies bounded entries with snapshot GC roots.
+Hashtable rejects null keys/values and holds its guest monitor through stored-key
+equality callbacks; enumeration, cloning and serialization remain unsupported.
 ArrayList/Set iterators
 support removal and fail-fast next/remove. Collections.unmodifiableSet/unmodifiableList stay live
 and reject mutation. Canonical Class literals work as Map keys, with basic package

@@ -1702,6 +1702,9 @@ disabled; the 50% checkpoint is still active.
 
 ## Current-source exception causes and original folder type error
 
+The [inflater checkpoint](#current-source-layout-inflater-factory-dispatch)
+below supersedes this checkpoint's factory-dispatch scope and folder diagnostic.
+
 Date: 2026-10-01. The message/cause constructor now retains the actual guest
 references for Throwable, Exception, RuntimeException and IllegalStateException,
 including null arguments. Virtual fillInStackTrace still executes with rooted
@@ -1734,3 +1737,58 @@ exact retained rows. The rebuilt unsigned bundle matches the optimized CLI
 (SHA-256 `b32148b7cf78b40b4c819a5cc174b45fd3e55254b4b41bb64a531575d42dc81e`).
 No fresh native folder interaction is claimed. GitHub Actions remain disabled
 and the 50% checkpoint remains active.
+
+## Current-source LayoutInflater factory dispatch
+
+Date: 2026-10-02. Shared binary XML inflation now calls the installed guest
+Factory/Factory2 before default construction. The actual inflater instance flows
+through Activity content, include/merge children and native ViewStub replacement.
+One managed AttributeSet reaches the callback and fallback constructor. A factory
+View is adopted directly without calling its constructor twice. Factories receive
+the supplied parent even when the root is detached.
+
+LayoutInflater.from resolves virtual Context.getSystemService. cloneInContext
+copies factories and resets one-setter state. New clone factories precede inherited
+callbacks, with null fallback; Factory2 retains inflation priority when a clone
+sets only Factory. Native ViewStub captures a clone and supports an explicit
+replacement inflater, whose own context controls construction. Private factories,
+filters, theme wrapping and full custom-inflater subclass behavior remain outside
+the profile. These semantics follow the
+[API-21 reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/LayoutInflater.java).
+
+The authored compiled InflaterContract checks service identity and virtual routing,
+missing services, null/repeated setters, factory identities and dispatch overloads,
+widget substitution, include/merge children, detached parent parameters, constructor
+and onFinishInflate counts, real compiled attribute IDs and callback/constructor
+attribute identity. It also checks cloned and explicitly assigned ViewStubs,
+merged callback order/context, callback GC, propagated faults and recovery,
+rejected worker UI access and collection of released temporary roots. A 64-layer
+merged factory chain inflates on the normal test stack; a 65th merge fails with
+the documented bound. The baseline failed at the missing layout-inflater service.
+The expanded check also caught and corrected ViewStub using its own context
+instead of the explicitly assigned inflater's context.
+
+The new callback path exposed shared constructor dependencies in the original
+APKs. View listener queries, bounded monitored Hashtable, canonical-loader
+loadClass, Class.asSubclass, StateSet prefix trimming and Java float rounding
+now pass compiled regressions. Portable Hashtable, reflection and Math contracts
+also pass on desktop Java 17. AppCompat checks add default untransformed text,
+retained checkmark/hint/link palette identity, editor-action callback delivery,
+bounded live ColorStateList arrays and seven-field Configuration copying/equality.
+Configuration uses the declaring-owner keys read by DEX; signed-zero and API-21
+NaN comparisons are checked. Palette/checkmark state is retained without claiming
+painting, and editor callbacks do not imply host Return or IME navigation.
+
+The unchanged pinned Notepad APK now opens Edit Folders and binds the original
+folder editor and button listener. Its own AppCompat Factory2 supplies the actual
+AppCompatImageButton expected by ButterKnife. No APK patch or class alias is used.
+A copied-data headless run returns exit zero and retains both exact note rows;
+the immutable original data is also unchanged. A separate Back replay returns to
+Notes with both exact rows and labels retained. The permanent compatibility suite
+now checks folder editor/button binding, Back and row retention on copied data.
+The former wrong-type error is
+resolved. Starting creation through the original left-button callback instead
+reaches RecyclerView.requestChildFocus and rejects the missing inherited
+ViewGroup.offsetDescendantRectToMyCoords(View, Rect) bridge. That failed run also
+preserves both exact rows. Creation/editing and fresh native folder input remain
+unverified.
