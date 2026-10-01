@@ -217,6 +217,14 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/view/LayoutInflater$Factory;",
             "Landroid/view/LayoutInflater$Factory2;",
             "Landroid/os/Bundle;",
+            "Landroid/os/Parcel;",
+            "Landroid/os/Parcelable;",
+            "Landroid/os/Parcelable$Creator;",
+            "Landroid/os/Parcelable$ClassLoaderCreator;",
+            "Ljava/lang/ClassLoader;",
+            "Landroid/view/GestureDetector;",
+            "Landroid/view/GestureDetector$OnGestureListener;",
+            "Landroid/view/GestureDetector$OnDoubleTapListener;",
             "Landroid/content/Intent;",
             "Landroid/net/Uri;",
             "Landroid/content/ContentResolver;",
@@ -495,6 +503,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.component_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.parcel_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.animation_native(method, args)? {
@@ -3577,6 +3588,37 @@ impl Runtime {
                     .fields
                     .insert("droidless:image:drawable".into(), vec![drawable]);
                 self.view_mut(receiver)?.image = image;
+            }
+            ("Landroid/view/GestureDetector;", "<init>(Landroid/content/Context;Landroid/view/GestureDetector$OnGestureListener;)V") => {
+                ensure!(arg(2)? != Word::ZERO, fault("Ljava/lang/NullPointerException;", "GestureDetector listener is null"));
+                ensure!(self.is_a(&self.heap.get(arg(1)?)?.class, "Landroid/content/Context;"), "GestureDetector requires Context");
+                ensure!(self.is_a(&self.heap.get(arg(2)?)?.class, "Landroid/view/GestureDetector$OnGestureListener;"), "invalid gesture listener");
+                self.heap.get_mut(receiver)?.fields.insert("droidless:gesture:listener".into(), vec![arg(2)?]);
+                if self.is_a(&self.heap.get(arg(2)?)?.class, "Landroid/view/GestureDetector$OnDoubleTapListener;") {
+                    self.heap.get_mut(receiver)?.fields.insert("droidless:gesture:double-tap-listener".into(), vec![arg(2)?]);
+                }
+                // ponytail: retain registration; recognize events when native touch input is implemented.
+            }
+            ("Landroid/view/GestureDetector;", "setOnDoubleTapListener(Landroid/view/GestureDetector$OnDoubleTapListener;)V") => {
+                self.heap.get(receiver)?.fields.get("droidless:gesture:listener").context("uninitialized GestureDetector")?;
+                ensure!(arg(1)? == Word::ZERO || self.is_a(&self.heap.get(arg(1)?)?.class, "Landroid/view/GestureDetector$OnDoubleTapListener;"), "invalid double-tap listener");
+                self.heap.get_mut(receiver)?.fields.insert("droidless:gesture:double-tap-listener".into(), vec![arg(1)?]);
+            }
+            ("Landroid/widget/ImageView;", "setImageURI(Landroid/net/Uri;)V") => {
+                self.view_mut(receiver)?;
+                let context = *self.heap.get(receiver)?.fields.get("droidless:view:context")
+                    .and_then(|v| v.first()).context("ImageView has no Context")?;
+                let roots = self.native_roots.len();
+                self.native_roots.extend_from_slice(args);
+                let loaded = (|| -> Result<()> {
+                    let bitmap = if arg(1)? == Word::ZERO { Word::ZERO } else { self.uri_bitmap(context, arg(1)?)? };
+                    self.native_roots.push(bitmap);
+                    self.invoke(Method { class: "Landroid/widget/ImageView;".into(), name: "setImageBitmap".into(),
+                        parameters: vec!["Landroid/graphics/Bitmap;".into()], returns: "V".into() }, vec![receiver, bitmap], true)?;
+                    Ok(())
+                })();
+                self.native_roots.truncate(roots);
+                loaded?;
             }
             ("Landroid/widget/ImageView;", "setImageBitmap(Landroid/graphics/Bitmap;)V") => {
                 let bitmap = arg(1)?;

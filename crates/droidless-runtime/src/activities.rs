@@ -372,7 +372,7 @@ impl Runtime {
         let data = if source == Word::ZERO {
             source
         } else {
-            self.copy_intent(source)?
+            self.snapshot_intent(source)?
         };
         self.queue_navigation(Navigation::Finish {
             activity,

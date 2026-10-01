@@ -9,8 +9,10 @@ from the host loop pauses/stops the foreground Activity and destroys the stack.
 
 Explicit same-APK Intents launch manifest-declared Activity classes. Bundle and
 Intent extras support String (including null), int, long, float, double and boolean,
-typed defaults, copying, removal and membership. startActivity copies extras;
-getExtras returns a copy. Transitions run after the current guest callback returns.
+typed defaults, copying, removal and membership. Nested Bundles, Parcelables and
+Parcelable ArrayLists are supported. startActivity snapshots supported extras
+through Parcel; getExtras and Bundle/Intent copy constructors make shallow Bundle
+copies. Transitions run after the current guest callback returns.
 The previous Activity pauses, the next creates/starts/resumes, then the previous
 stops. finish/Back resumes the preserved parent through restart/start/resume and
 stops/destroys the outgoing Activity. Each instance retains its title, content
@@ -72,6 +74,37 @@ these grants; writes and persistent grants remain unsupported. [Security boundar
 References: [API-21 Intent](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/Intent.java),
 [ActivityThread result delivery](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/app/ActivityThread.java).
 
+## Bounded Parcelable state transfer
+
+Parcel.obtain/recycle, byte positions/size/available data, int/long/float/double,
+nullable UTF-16 Strings, write/readParcelable and write/readBundle form a bounded
+API-21 subset. Supported Bundle values are primitive values, Strings, nested
+Bundles, Parcelables and ArrayLists containing supported reference values/nulls.
+The buffer is limited to 4 MiB, nesting to 32 and maps/lists to 16,384 entries.
+Malformed lengths, magic, tags, truncation, invalid positions, unpaired surrogates,
+cycles and recycled use fail explicitly.
+
+Guest Parcelable.writeToParcel and the APK's static CREATOR.createFromParcel run
+in DEX; ClassLoaderCreator callbacks receive the allowed loader token. Native Uri
+uses its String representation. Class.getClassLoader returns null for framework
+classes and a canonical opaque APK loader identity for APK classes. This identity
+cannot load host classes, files or external DEX. Start and finish result snapshots
+reconstruct their extras; they do not share mutable Parcelable objects with the
+sender. Bundle/Intent copy constructors retain Android's shallow object values.
+GC roots protect snapshot elements across mutating writers and CREATOR callbacks;
+errors release roots and restore recursion/read bounds.
+
+The authored Parcels APK verifies callback execution, Unicode/wide values, null
+list elements, shallow versus transported state, source-list mutation during GC,
+activity results and callback failures. It is not an Android-device differential
+test. Binder/file descriptors, binary marshalling APIs, typed arrays/lists,
+general Java serialization, custom loaders and full reflection access rules
+remain unsupported. Unsupported values produce diagnostics instead of aliasing
+the sender's objects.
+
+References: [API-21 Parcel](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/os/Parcel.java),
+[BaseBundle](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/os/BaseBundle.java).
+
 ## Read-only document trees and image scaling
 
 Context.getContentResolver is canonical within a runtime. DocumentsContract tree/
@@ -109,8 +142,16 @@ FIT_XY, FIT_START/CENTER/END, CENTER, CENTER_CROP and CENTER_INSIDE render throu
 AppKit with clipping and uniform padding; XML scaleType is also retained. MATRIX
 and custom image matrices remain unsupported. The unmodified SwpieView APK now
 queries and decodes three selected-folder PNG/JPEG/WebP thumbnails and renders
-them natively with CENTER_CROP. Thumbnail selection still stops at the unsupported
-Bundle.putParcelableArrayList call before the full-screen image Activity.
+them natively with CENTER_CROP. Thumbnail selection now transfers the image stack
+through actual guest Parcel callbacks, opens its full-screen Activity and displays
+the selected image. Native Escape returns to all three thumbnails. ImageView's
+setImageURI decodes granted document streams and closes them even on decode failure;
+null clears the displayed bitmap. Other URI providers remain unsupported.
+
+GestureDetector construction retains its gesture and double-tap listeners with
+type checks and GC reachability; event recognition/delivery remains unsupported.
+SwpieView's static-image viewing and Back flow are verified; gesture navigation,
+GIF animation, slideshow, auto-hide and full Android styling remain unproven.
 
 References: [API-21 DocumentsContract](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/provider/DocumentsContract.java),
 [DocumentsProvider](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/provider/DocumentsProvider.java),
@@ -191,7 +232,7 @@ Limits: 1,024 materialized cells, 256 view types and 32 nested binding passes.
 getView receives null convertView; viewport recycling, selection, touch scrolling,
 complete Android measurement and advanced LayoutParams remain unsupported.
 Adapter changes during binding are explicitly rejected. These are authored
-headless/native contracts; the independent SwpieView image workflow remains open.
+headless/native contracts; SwpieView now also completes folder selection, static-image viewing and Back. Gestures and slideshow remain open.
 
 References: [API-21 GridView](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/GridView.java),
 [BaseAdapter](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/BaseAdapter.java),

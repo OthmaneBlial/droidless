@@ -115,6 +115,62 @@ fn mime(name: &str, directory: bool) -> &'static str {
 }
 
 impl Runtime {
+    pub(crate) fn uri_bitmap(&mut self, context: Word, uri: Word) -> Result<Word> {
+        let roots = self.native_roots.len();
+        self.native_roots.extend([context, uri]);
+        let result = (|| -> Result<Word> {
+            let resolver = self.invoke(
+                Method {
+                    class: "Landroid/content/Context;".into(),
+                    name: "getContentResolver".into(),
+                    parameters: vec![],
+                    returns: "Landroid/content/ContentResolver;".into(),
+                },
+                vec![context],
+                true,
+            )?[0];
+            self.native_roots.push(resolver);
+            let stream = self.invoke(
+                Method {
+                    class: "Landroid/content/ContentResolver;".into(),
+                    name: "openInputStream".into(),
+                    parameters: vec!["Landroid/net/Uri;".into()],
+                    returns: "Ljava/io/InputStream;".into(),
+                },
+                vec![resolver, uri],
+                true,
+            )?[0];
+            self.native_roots.push(stream);
+            let bitmap = self.invoke(
+                Method {
+                    class: "Landroid/graphics/BitmapFactory;".into(),
+                    name: "decodeStream".into(),
+                    parameters: vec!["Ljava/io/InputStream;".into()],
+                    returns: "Landroid/graphics/Bitmap;".into(),
+                },
+                vec![stream],
+                false,
+            );
+            if let Ok(words) = &bitmap {
+                self.native_roots.extend_from_slice(words);
+            }
+            let closed = self.invoke(
+                Method {
+                    class: "Ljava/io/InputStream;".into(),
+                    name: "close".into(),
+                    parameters: vec![],
+                    returns: "V".into(),
+                },
+                vec![stream],
+                true,
+            );
+            let bitmap = bitmap?[0];
+            closed?;
+            Ok(bitmap)
+        })();
+        self.native_roots.truncate(roots);
+        result
+    }
     fn uri_text(&self, uri: Word) -> Result<&str> {
         let text = self
             .heap

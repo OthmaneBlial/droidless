@@ -6,6 +6,11 @@ Current source implements `Class.forName(String)`, `Object.getClass`,
 searches the APK's parsed DEX modules and the runtime's known framework subset;
 it never loads host Java classes or executes a host JVM as an APK fallback.
 
+Class.getClassLoader supplies null for framework classes and a canonical opaque
+APK loader token for APK-defined classes (including their array component).
+Parcel uses this token only for APK-local CREATOR reconstruction; custom loading,
+host Java classes and external DEX remain unavailable.
+
 Binary names and array names are converted to descriptors. Unknown/invalid names
 raise ClassNotFoundException; null raises NullPointerException. Array names are
 limited to 255 dimensions and loading an array does not initialize its component.

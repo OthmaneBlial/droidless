@@ -995,6 +995,12 @@ impl Runtime {
             if current == "Ljava/lang/String;" {
                 work.push("Ljava/lang/Comparable;".into());
             }
+            if ["Landroid/net/Uri;", "Landroid/os/Bundle;"].contains(&current.as_str()) {
+                work.push("Landroid/os/Parcelable;".into());
+            }
+            if current == "Landroid/os/Parcelable$ClassLoaderCreator;" {
+                work.push("Landroid/os/Parcelable$Creator;".into());
+            }
             if current.starts_with("Landroid/view/animation/") && current.ends_with("Interpolator;")
             {
                 work.extend(

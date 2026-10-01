@@ -35,10 +35,11 @@ APK. SwpieView passes its bundled vector configuration check and attaches its
 platform ReportFragment, constructs its toolbar/GridView/BaseAdapter and opens a
 native folder chooser. Selecting the owned image folder now runs its query,
 guest sort and image-stream decode, displaying three thumbnails in AppKit and
-closing cleanly. Selecting an image stops at Bundle.putParcelableArrayList before
-its full-screen Activity.
-Bitmap pixel manipulation, Android Canvas/vector
-drawing and an independent image workflow remain unproven.
+closing cleanly. Selecting a thumbnail now executes Parcelable write/CREATOR
+callbacks, opens its full-screen Activity and decodes the selected image through
+ImageView.setImageURI. Native JPEG/PNG/WebP viewing and Escape back to thumbnails
+are verified. Gesture navigation, GIF animation, slideshow and auto-hide remain
+unproven. Bitmap pixel manipulation and Android Canvas/vector drawing remain open.
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does
 not establish general RecyclerView or AndroidX compatibility.
@@ -68,6 +69,10 @@ lifecycle. Authored checks cover result snapshots, cancellation, stopped callers
 GC and callback failures. Native ACTION_OPEN_DOCUMENT_TREE returns the actual
 folder choice as a session-local URI; bounded queries and read-only streams are
 implemented. [Document and scaling scope](framework.md#read-only-document-trees-and-image-scaling).
+Nested Bundle/Parcelable/Parcelable ArrayList state now crosses Activity launches
+and results through a bounded Parcel subset. Authored checks exercise actual
+guest writers/CREATORs, mutation/GC, state isolation, malformed data and cleanup.
+[Exact Parcelable scope](framework.md#bounded-parcelable-state-transfer).
 The v0.1.0 release predates these additions. [Result and picker scope](framework.md#activity-results-and-native-folder-selection).
 Application lifecycle observers add bounded registration/removal, GC-rooted
 snapshot delivery from six Activity super methods and canonical getApplication

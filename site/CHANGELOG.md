@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- SwpieView thumbnails now open the APK's full-screen static-image Activity;
+  native JPEG/PNG/WebP display and Escape back to the grid are verified. Actual
+  guest Parcelable writers/CREATORs transfer bounded Bundle/list state and isolate
+  launch/result payloads. URI image loading closes its stream; authored checks
+  cover mutation/GC, errors, cycles and malformed data. Local CI passes 83 tests
+  and 4,096 mutations. Gestures, GIF animation and slideshow remain unproven.
+
 - The unmodified public SwpieView APK now loads a host-selected folder and
   displays three PNG/JPEG/WebP thumbnails in AppKit, then closes cleanly. Bounded
   read-only document queries/streams, encoded URI paths, natural guest sorting

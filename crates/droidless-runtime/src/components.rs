@@ -33,7 +33,7 @@ impl Runtime {
             "startActivity outside Activity requires unsupported NEW_TASK behavior"
         );
         self.screen(activity)?;
-        let copy = self.copy_intent(source)?;
+        let copy = self.snapshot_intent(source)?;
         let fields = &self.heap.get(copy)?.fields;
         if let Some(target) = fields
             .get("component")
@@ -174,7 +174,7 @@ impl Runtime {
                 })
             })
     }
-    fn new_bundle(&mut self) -> Result<Word> {
+    pub(crate) fn new_bundle(&mut self) -> Result<Word> {
         let object = self.heap.instance("Landroid/os/Bundle;")?;
         self.heap.get_mut(object)?.data = Data::Bundle(BTreeMap::new());
         Ok(object)
@@ -227,7 +227,16 @@ impl Runtime {
         };
         Ok(values
             .get(key)
-            .filter(|(kind, _)| kind == ty)
+            .filter(|(kind, words)| {
+                kind == ty
+                    || (ty.starts_with(['L', '['])
+                        && words.len() == 1
+                        && words[0] != Word::ZERO
+                        && self
+                            .heap
+                            .get(words[0])
+                            .is_ok_and(|value| self.is_a(&value.class, ty)))
+            })
             .map(|(_, words)| words.clone())
             .unwrap_or(default))
     }
@@ -407,6 +416,9 @@ impl Runtime {
                     "putDouble(Ljava/lang/String;D)V",
                     "putBoolean(Ljava/lang/String;Z)V",
                     "putSerializable(Ljava/lang/String;Ljava/io/Serializable;)V",
+                    "putBundle(Ljava/lang/String;Landroid/os/Bundle;)V",
+                    "putParcelable(Ljava/lang/String;Landroid/os/Parcelable;)V",
+                    "putParcelableArrayList(Ljava/lang/String;Ljava/util/ArrayList;)V",
                 ]
                 .contains(&sig) =>
             {
@@ -433,6 +445,9 @@ impl Runtime {
                     "getBoolean(Ljava/lang/String;)Z",
                     "getBoolean(Ljava/lang/String;Z)Z",
                     "getSerializable(Ljava/lang/String;)Ljava/io/Serializable;",
+                    "getBundle(Ljava/lang/String;)Landroid/os/Bundle;",
+                    "getParcelable(Ljava/lang/String;)Landroid/os/Parcelable;",
+                    "getParcelableArrayList(Ljava/lang/String;)Ljava/util/ArrayList;",
                 ]
                 .contains(&sig) =>
             {
@@ -726,6 +741,8 @@ impl Runtime {
                     "putExtra(Ljava/lang/String;D)Landroid/content/Intent;",
                     "putExtra(Ljava/lang/String;Z)Landroid/content/Intent;",
                     "putExtra(Ljava/lang/String;Ljava/io/Serializable;)Landroid/content/Intent;",
+                    "putExtra(Ljava/lang/String;Landroid/os/Bundle;)Landroid/content/Intent;",
+                    "putExtra(Ljava/lang/String;Landroid/os/Parcelable;)Landroid/content/Intent;",
                 ]
                 .contains(&sig) =>
             {
@@ -748,6 +765,8 @@ impl Runtime {
                     "getDoubleExtra(Ljava/lang/String;D)D",
                     "getBooleanExtra(Ljava/lang/String;Z)Z",
                     "getSerializableExtra(Ljava/lang/String;)Ljava/io/Serializable;",
+                    "getBundleExtra(Ljava/lang/String;)Landroid/os/Bundle;",
+                    "getParcelableExtra(Ljava/lang/String;)Landroid/os/Parcelable;",
                 ]
                 .contains(&sig) =>
             {

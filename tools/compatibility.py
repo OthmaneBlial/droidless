@@ -147,6 +147,19 @@ for app, expected_label in [
     if not expected_label and any(image["view"]["image_scale"] != 6 for image in images):
         raise SystemExit("SwpieView did not request CENTER_CROP for its thumbnails")
 print("PASS Documents and public SwpieView: selected-folder query, guest sort, three decoded thumbnails and clean close")
+for back in [False, True]:
+    process = subprocess.run([
+        str(document_replay), str(swpie), str(root / "examples/images/assets"),
+        "--click-first-image", *(["--back"] if back else []),
+    ], text=True, capture_output=True, check=True, timeout=120)
+    nodes = list(flatten(json.loads(process.stdout)))
+    images = [node for node in nodes if node["view"]["kind"] == "ImageView"]
+    expected = 3 if back else 1
+    if len(images) != expected or f"Decoded image views: {expected}" not in process.stderr:
+        raise SystemExit("SwpieView full-screen image/Back replay failed")
+    if not back and (images[0]["rect"]["width"] < 400 or images[0]["rect"]["height"] < 600):
+        raise SystemExit("SwpieView image did not fill its viewer")
+print("PASS Public SwpieView: Parcelable image stack → full-screen decoded image → Back to thumbnails")
 
 notepad = root / "artifacts/apks/notepad-v1.0.0.apk"
 notepad_digest = "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f"

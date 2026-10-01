@@ -13,14 +13,14 @@ The following are objectives, not completed capability claims.
    builds its GridView and BaseAdapter and opens a native folder chooser.
    Cancellation exits cleanly; selected-folder queries, guest sorting and read-only
    image streams now display three PNG/JPEG/WebP thumbnails in the unmodified APK's
-   native grid. Selecting a thumbnail stops at Bundle.putParcelableArrayList;
-   parcelled viewer state and full-screen image navigation are next.
+   native grid. Selecting a thumbnail now runs actual guest Parcelable/CREATOR
+   callbacks and opens the selected image in its full-screen Activity. Native
+   JPEG/PNG/WebP viewer visits and Escape back to the grid are verified.
    Authored grids now verify native image clicks, disabled items, observer updates
    and auto-fit/stretch geometry; viewport recycling and scrolling remain open. Independent-app
-   image workflows, vector/animated drawables, pixel operations and Canvas remain
-   open. The independent selected-folder thumbnail workflow is proven; complete
-   full-screen viewing and compare it
-   with expected Android behavior.
+   gesture navigation, vector/animated drawables, pixel operations and Canvas remain
+   open. The independent folder → thumbnails → static viewer → Back workflow is
+   proven; compare it with expected Android behavior and add genuine input events.
 3. Multi-screen/persistence: explicit Intents/Bundle/back stack are proven in an
    authored native fixture. Activity result snapshots, request codes, cancellation
    and deferred caller delivery now pass compiled checks; native folder selection
@@ -49,8 +49,8 @@ The following are objectives, not completed capability claims.
    Gate: a real APK completes its queued transactions and posts UI results.
 5. Isolated file/process APIs, broader lists/SQLite/network and independent image-app workflows: follow first failures in substantial third-party
    apps, with host capabilities explicit and tested. Current SwpieView startup
-   loads a selected folder into a native thumbnail grid; full-screen viewing,
-   gestures and broader provider access remain open.
+   loads a selected folder into a native thumbnail grid, opens static images and
+   returns through Back; gestures, slideshow and broader provider access remain open.
 6. Linux native backend: common VM/View model, real Linux builds/render/input.
 7. Kotlin/AndroidX, then fragment Views/Compose/JNI/foreign libraries: major subsequent
    compatibility projects. No emulator fallback.

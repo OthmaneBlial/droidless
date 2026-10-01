@@ -757,6 +757,8 @@ target/release/droidless run --ephemeral fixtures/generated/results.apk
 
 ## Independent selected-folder thumbnail workflow
 
+This records the earlier `891eebd` increment; the viewer evidence below supersedes its next blocker.
+
 Verified 2026-10-01 with the original checksum-pinned SwpieView 1.3.2 APK. Both
 debug and optimized native macOS runs open NSOpenPanel. Selecting the repository's
 `examples/images/assets` folder executes the APK's real directory query,
@@ -796,4 +798,47 @@ target/release/droidless run --ephemeral --size 390x844 artifacts/apks/swpieview
 target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets
 # Reproduce the next blocker:
 target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets --click-first-image
+```
+
+
+## Independent static-image viewer and Parcelable state
+
+Verified 2026-10-01 with the original checksum-pinned SwpieView 1.3.2 APK.
+The native AppKit run selects `examples/images/assets`, displays three thumbnails,
+and opens each JPEG, PNG and WebP image in the APK's full-screen Activity. Actual
+screenshots visibly show the selected artwork. Escape returns to all three
+thumbnails after each visit; normal window close exits 0. No screenshot artifact
+is bundled for this observation. The APK is unmodified. The optimized native binary also completes folder selection,
+JPEG viewer display, Escape back to three images and normal close with exit 0.
+
+The guest onItemClick builds its ImageStack Bundle. Activity launch executes each
+ImageContainer.writeToParcel and CREATOR.createFromParcel in DEX, reconstructing
+its URI and MIME type. ImageView.setImageURI opens a granted document stream,
+decodes the full image and closes the stream. The optimized host replay checks
+one decoded viewer image, two Activity instances, Back to three thumbnails and
+one Activity, GC and clean close. This replay uses the same host folder-completion
+API as NSOpenPanel; it does not display a headless dialog.
+
+The authored Parcels APK verifies positions/backpatching, Unicode and wide values,
+nullable objects/list entries, nested Bundles, shallow copy constructors versus
+transported object isolation, actual guest writers/CREATORs, source-list clearing
+and System.gc during callbacks, activity results, throwing callbacks and root
+cleanup. Host checks reject malformed lengths/magic/counts, truncation, oversized
+buffers, invalid positions, recycled use and cyclic Bundles. This is compiled DEX
+evidence; no Android-device differential run is claimed.
+
+Full local CI passes 83 Rust tests, Clippy, optimized builds and 4,096 seeded parser
+mutations. Public calculator, images, grids, result and Notepad save/restart
+replays remain passing. GitHub Actions stay disabled. Gesture recognition, GIF
+animation, slideshow, auto-hide, full styling, Binder/file descriptors, Java
+serialization, custom loading and general Parcelable coverage remain ahead.
+
+```sh
+cargo test -p droidless-runtime --test parcels
+sh tools/ci.sh
+python3 tools/compatibility.py
+target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets --click-first-image
+target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets --click-first-image --back
+target/release/droidless run --ephemeral artifacts/apks/swpieview-1.3.2.apk
+# Native: choose examples/images/assets, click an image, press Escape.
 ```

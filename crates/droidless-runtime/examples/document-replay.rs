@@ -17,8 +17,10 @@ fn first_image(node: &droidless_runtime::ui::Node) -> Option<usize> {
 fn main() -> Result<()> {
     let args = std::env::args().skip(1).collect::<Vec<_>>();
     ensure!(
-        args.len() == 2 || (args.len() == 3 && args[2] == "--click-first-image"),
-        "usage: document-replay APK DIRECTORY [--click-first-image]"
+        (2..=4).contains(&args.len())
+            && args.get(2).is_none_or(|v| v == "--click-first-image")
+            && args.get(3).is_none_or(|v| v == "--back"),
+        "usage: document-replay APK DIRECTORY [--click-first-image [--back]]"
     );
     let mut vm = Runtime::new(Apk::parse(&std::fs::read(&args[0])?)?)?;
     vm.launch()?;
@@ -34,9 +36,26 @@ fn main() -> Result<()> {
     );
     vm.complete_directory_picker(Some(Path::new(&args[1])))?;
     let mut tree = vm.layout_snapshot().context("selected-folder View tree")?;
-    if args.len() == 3 {
+    if args.len() >= 3 {
         vm.click(first_image(&tree).context("no decoded ImageView to click")?)?;
         tree = vm.layout_snapshot().context("image-click View tree")?;
+        ensure!(
+            vm.activity_depth() == 2,
+            "image click did not open another Activity"
+        );
+        ensure!(
+            decoded_images(&tree) == 1,
+            "viewer did not decode one image"
+        );
+        if args.len() == 4 {
+            vm.back()?;
+            vm.collect();
+            tree = vm.layout_snapshot().context("viewer Back View tree")?;
+            ensure!(
+                vm.activity_depth() == 1,
+                "Back did not return to the image list"
+            );
+        }
     }
     eprintln!("Decoded image views: {}", decoded_images(&tree));
     println!("{}", serde_json::to_string_pretty(&tree)?);

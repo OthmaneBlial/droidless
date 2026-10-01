@@ -14,6 +14,7 @@ mod graphics;
 mod grids;
 pub mod heap;
 mod interpreter;
+mod parcel;
 mod preferences;
 mod queues;
 mod reflection;

@@ -133,6 +133,13 @@ pub enum Data {
         values: Vec<Vec<Word>>,
     },
     Bundle(BTreeMap<String, (String, Vec<Word>)>),
+    Parcel {
+        bytes: Vec<u8>,
+        position: usize,
+        depth: usize,
+        read_limit: Option<usize>,
+        recycled: bool,
+    },
     TypedArray(Vec<Option<droidless_formats::xml::Value>>),
     Attributes {
         named: BTreeMap<String, droidless_formats::xml::Value>,

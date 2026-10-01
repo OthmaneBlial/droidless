@@ -212,9 +212,9 @@
       "origin": "third-party",
       "artifact_url": "https://f-droid.org/repo/org.voidptr.swpieview_15.apk",
       "sha256": "7c7a17ddf254e6f7adb53786ab3928937a4de499785475278df2fe5a034f50f3",
-      "status": "folder-thumbnails-subset",
+      "status": "static-image-viewer-subset",
       "native_ui": true,
-      "notes": "Original F-Droid APK unmodified and not redistributed. Optimized native macOS startup opens the folder chooser; selecting examples/images/assets runs guest directory queries, Comparable sorting and stream decoding, displays three PNG/JPEG/WebP thumbnails with CENTER_CROP, and closes with exit 0. Optimized host replay verifies the same three decoded images and close. Selecting a thumbnail reaches ImageStack.toBundle, then stops at Bundle.putParcelableArrayList; full-screen viewing, gestures and slideshow remain unsupported.",
+      "notes": "Original F-Droid APK unmodified and not redistributed. Native macOS folder selection runs guest directory queries, Comparable sorting and stream decoding, displaying three CENTER_CROP thumbnails. Native clicks open JPEG, PNG and WebP images in the APK full-screen Activity; Escape returns to the grid after each visit, and normal close exits 0. Real ImageContainer Parcelable writers/CREATORs transfer the image stack; setImageURI decodes a granted stream and closes it. Optimized host replay checks one viewer image and Back to three thumbnails with GC and clean close. Gesture recognition, GIF animation, slideshow, auto-hide and full styling remain unproven.",
       "native_folder_picker_verified": true,
       "native_picker_cancel_exit_zero": true,
       "host_selection_callback_verified": true,
@@ -222,7 +222,25 @@
       "native_images_verified": true,
       "native_close_exit_zero": true,
       "native_folder_selection_verified": true,
-      "full_screen_viewer_verified": false
+      "full_screen_viewer_verified": true,
+      "native_mouse": true,
+      "native_back_verified": true,
+      "native_static_image_formats_verified": [
+        "JPEG",
+        "PNG",
+        "WebP"
+      ],
+      "host_viewer_back_verified": true
+    },
+    {
+      "package": "org.droidless.parcels",
+      "origin": "droidless-fixture",
+      "status": "headless-conformance-fixture",
+      "source": "examples/parcels",
+      "headless_conformance_verified": true,
+      "native_ui": false,
+      "android_reference_verified": false,
+      "notes": "Compiled DEX verifies real Parcelable writers/CREATORs, Unicode/wide values, byte positions, nested Bundles/lists/nulls, shallow copies versus transported activity/result state, mutation/GC and throwing callbacks. Host checks cover malformed/truncated data, 4 MiB buffers, 32-level nesting, cycles, recycled use and root cleanup. No Binder, file descriptors, binary marshalling APIs, Java serialization or general Android Parcelable coverage."
     }
   ]
 }

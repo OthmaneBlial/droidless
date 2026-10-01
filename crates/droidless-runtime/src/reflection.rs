@@ -370,6 +370,15 @@ impl Runtime {
                 let class = self.reflected_class(arg(0)?)?;
                 result.push(self.heap.string(class_name(&class))?);
             }
+            ("Ljava/lang/Class;", "getClassLoader()Ljava/lang/ClassLoader;") => {
+                let class = self.reflected_class(arg(0)?)?;
+                let component = class.trim_start_matches('[');
+                result.push(if self.class_location(component).is_some() {
+                    self.apk_class_loader()?
+                } else {
+                    Word::ZERO
+                });
+            }
             ("Ljava/lang/Class;", "desiredAssertionStatus()Z") => result.push(Word::ZERO),
             ("Ljava/lang/Class;", "getSimpleName()Ljava/lang/String;") => {
                 let class = self.reflected_class(arg(0)?)?;
