@@ -43,7 +43,11 @@ public class MainActivity extends Activity {
         RecordingHandler() { super(Looper.getMainLooper(), new Handler.Callback() {
             public boolean handleMessage(Message message) {
                 messageCallbacks++;
-                if (message.what == 9) { events += "C"; return true; }
+                if (message.what == 9) {
+                    if (message.arg1 != -11 || message.arg2 != -12 || !"payload".equals(message.obj))
+                        throw new IllegalStateException("message factory arguments");
+                    events += "C"; return true;
+                }
                 return false;
             }
         }); }
@@ -259,7 +263,7 @@ public class MainActivity extends Activity {
         boolean rejected = false;
         try { handler.sendMessage(queued); } catch (IllegalStateException expected) { rejected=true; }
         if (!rejected) throw new IllegalStateException("double enqueue accepted");
-        handler.sendMessageDelayed(handler.obtainMessage(9),10);
+        handler.sendMessageDelayed(handler.obtainMessage(9, -11, -12, payload),10);
         Append removed = new Append("BAD"); handler.postDelayed(removed,10); handler.removeCallbacks(removed);
         if (handler.hasCallbacks(removed)) throw new IllegalStateException("callback removal");
         Object token = new EqualToken(); Object equalToken = new EqualToken();

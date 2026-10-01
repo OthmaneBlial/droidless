@@ -757,10 +757,15 @@ impl Runtime {
                 HANDLER,
                 "obtainMessage()Landroid/os/Message;"
                 | "obtainMessage(I)Landroid/os/Message;"
-                | "obtainMessage(ILjava/lang/Object;)Landroid/os/Message;",
+                | "obtainMessage(ILjava/lang/Object;)Landroid/os/Message;"
+                | "obtainMessage(IIILjava/lang/Object;)Landroid/os/Message;",
             ) => {
-                let token = if method.parameters.len() == 2 {
-                    arg(2)?
+                let token = if method
+                    .parameters
+                    .last()
+                    .is_some_and(|p| p == "Ljava/lang/Object;")
+                {
+                    *args.last().context("missing Message payload")?
                 } else {
                     Word::ZERO
                 };
@@ -771,6 +776,16 @@ impl Runtime {
                         .get_mut(message)?
                         .fields
                         .insert(format!("{MESSAGE}->what:I"), vec![arg(1)?]);
+                }
+                if method.parameters.len() == 4 {
+                    for (index, field) in [(2, "arg1"), (3, "arg2")] {
+                        let value = arg(index)?;
+                        value.int()?;
+                        self.heap
+                            .get_mut(message)?
+                            .fields
+                            .insert(format!("{MESSAGE}->{field}:I"), vec![value]);
+                    }
                 }
                 result.push(message);
             }
