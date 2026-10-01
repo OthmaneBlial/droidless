@@ -330,6 +330,31 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             if retained != rows:
                 raise SystemExit(f"Notepad drawer {phase} changed an existing note row")
 
+    for phase, actions in [("open", []), ("back", ["--back"])]:
+        with tempfile.TemporaryDirectory(prefix="droidless-notepad-folders-") as folder_root:
+            folder_data = Path(folder_root) / "apps"
+            shutil.copytree(app_data, folder_data)
+            process = subprocess.run([
+                str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(folder_data),
+                "--tap", "24", "22", "--advance-ms", "1000", "--click", "Create or edit folders",
+                *actions, str(notepad),
+            ], text=True, capture_output=True, check=True, timeout=120)
+            nodes = list(flatten(json.loads(process.stdout)))
+            labels = [node["view"]["text"] for node in nodes]
+            if phase == "open":
+                editors = [node["view"] for node in nodes if node["view"]["kind"] == "EditText"]
+                left = [node["view"] for node in nodes if node["view"]["id"] == 2131493021]
+                if "Edit Folders" not in labels or len(editors) != 1 or editors[0]["id"] != 2131493023:
+                    raise SystemExit("Notepad folder Activity did not bind its original editor")
+                if len(left) != 1 or left[0]["listener"] is None:
+                    raise SystemExit("Notepad original folder button was not bound to its guest listener")
+            elif "Notes" not in labels or not {revised_title, probe_titles[1]} <= set(labels):
+                raise SystemExit("Notepad folder Back did not return to both retained notes")
+            with sqlite3.connect(folder_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
+                retained = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+            if retained != rows:
+                raise SystemExit(f"Notepad folder {phase} changed an existing note row")
+
     survivor = next(row for row in rows if row[0] != original_id)
     # Original Undo calls note.save(); the APK's INSERT omits its auto-increment ID.
     restored_id = max(row[0] for row in rows) + 1
@@ -425,6 +450,9 @@ report["headless_drawer_open_back_close_verified"] = True
 report["drawer_existing_note_rows_retained"] = True
 report["drawer_frame_steps_ms"] = [100]
 report["drawer_open_close_steps_ms"] = [1000, 1000]
+report["headless_folder_open_back_verified"] = True
+report["headless_folder_existing_note_rows_retained"] = True
+report["native_folder_input_verified"] = False
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
@@ -434,6 +462,8 @@ print("PASS Notepad: original Snackbar message/UNDO show at 250ms and are remove
 print("PASS Notepad: original UNDO restores title/body with a fresh ID; exact survivor, harmless old timeout, restart and reopen verified")
 print("PASS Notepad: original navigation tap reveals an on-screen drawer animation frame at 100ms; both exact note rows retained")
 print("PASS Notepad: original drawer settles at 1000ms; Back closes it, retains Notes and preserves both exact rows")
+
+print("PASS Notepad: original Edit Folders binds its editor/listener; Back retains both exact note rows")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.
