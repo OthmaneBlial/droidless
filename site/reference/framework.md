@@ -157,6 +157,17 @@ verification remains pending because the UI automation tool could not locate the
 window for its coordinate drag; swipe evidence is host replay only.
 GIF animation, slideshow, lifecycle auto-hide and full Android styling remain open.
 
+FrameLayout now honors XML layout_gravity and explicit LayoutParams.gravity for
+top/center/bottom and left/center/right positions, including uniform padding and
+the retained margins. START/END follow the profile's default left-to-right
+direction; RTL, foreground padding and full Android measurement remain open.
+This moves SwpieView's bottom controls below its toolbar and lets root touch
+dispatch reach the slideshow listener. An ordinary DOWN/UP starts then cancels
+the APK's timer; a held DOWN executes its background task and rejects direct UI
+access. [Timer semantics and limits](threading.md#java-timers).
+
+Reference: [API-21 FrameLayout](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/widget/FrameLayout.java).
+
 ## Single-pointer touch and gestures
 
 MotionEvent supports DOWN/UP/MOVE/CANCEL, copies, recycling, local/raw coordinates,

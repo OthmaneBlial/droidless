@@ -25,8 +25,25 @@ pub(crate) struct MainQueue {
     sequence: u64,
     pub closed: bool,
     thread_id: u64,
+    pub(crate) timer_id: u64,
+    pub(crate) wall_start: Option<i64>,
 }
 impl Runtime {
+    /// Wall time follows the deterministic clock; native mode uses host wall time.
+    pub(crate) fn wall_time_ms(&mut self) -> i64 {
+        let now = || {
+            let now = std::time::SystemTime::now();
+            match now.duration_since(std::time::UNIX_EPOCH) {
+                Ok(t) => t.as_millis().min(i64::MAX as u128) as i64,
+                Err(t) => -(t.duration().as_millis().min(i64::MAX as u128) as i64),
+            }
+        };
+        if self.queue.epoch.is_some() {
+            return now();
+        }
+        let origin = *self.queue.wall_start.get_or_insert_with(now);
+        origin.saturating_add(self.uptime_ms() as i64)
+    }
     /// Process-relative monotonic milliseconds, deterministic until a native host enables its clock.
     pub fn uptime_ms(&self) -> u64 {
         let elapsed = self
@@ -533,6 +550,22 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .insert("name".into(), vec![name]);
+            }
+            (THREAD, "setDaemon(Z)V" | "isDaemon()Z") => {
+                if method.name == "setDaemon" {
+                    if self.thread_word(receiver, "started")?.truth() {
+                        return Err(fault(
+                            "Ljava/lang/IllegalThreadStateException;",
+                            "Thread already started",
+                        ));
+                    }
+                    self.heap.get_mut(receiver)?.fields.insert(
+                        "daemon".into(),
+                        vec![Word::from(i32::from(arg(1)?.truth()))],
+                    );
+                } else {
+                    result.push(self.thread_word(receiver, "daemon")?);
+                }
             }
             (THREAD, "run()V") => {
                 let target = self.message_word(receiver, "target")?;

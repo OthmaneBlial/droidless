@@ -48,11 +48,7 @@ impl Runtime {
         }
         match method.signature().as_str() {
             "currentTimeMillis()J" => {
-                let now = std::time::SystemTime::now();
-                let millis = match now.duration_since(std::time::UNIX_EPOCH) {
-                    Ok(elapsed) => elapsed.as_millis().min(i64::MAX as u128) as i64,
-                    Err(before) => -(before.duration().as_millis().min(i64::MAX as u128) as i64),
-                };
+                let millis = self.wall_time_ms();
                 Ok(Some(wide(millis as u64)))
             }
             "nanoTime()J" => Ok(Some(wide(

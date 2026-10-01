@@ -10,6 +10,8 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import java.util.Timer;
+import java.util.TimerTask;
 
 /** Authored timer/conformance UI. Its callbacks run as DEX, not host timer logic. */
 public class MainActivity extends Activity {
@@ -22,6 +24,7 @@ public class MainActivity extends Activity {
     Handler timerHandler = new Handler(Looper.getMainLooper());
     TextView label;
     int ticks;
+    Timer backgroundTimer;
     final Runnable timer = new Runnable() {
         public void run() {
             if (Thread.currentThread() != Looper.getMainLooper().getThread()) throw new IllegalStateException("wrong timer thread");
@@ -98,9 +101,33 @@ public class MainActivity extends Activity {
             }});
             try { WorkerContract.feed(); } catch (InterruptedException failure) { throw new IllegalStateException("main interrupted"); }
         }}); layout.addView(worker);
+        Button background = new Button(this); background.setText("Start background timer");
+        background.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            if (backgroundTimer != null) backgroundTimer.cancel();
+            final Timer owner = new Timer("fixture-background", true); backgroundTimer = owner;
+            label.setText("Background timer queued");
+            owner.scheduleAtFixedRate(new TimerTask() {
+                int delivered;
+                public void run() {
+                    if (Looper.myLooper() != null || Thread.currentThread() == Looper.getMainLooper().getThread()) throw new IllegalStateException("Timer ran on main");
+                    System.gc();
+                    final int tick = ++delivered;
+                    if (tick == 3) owner.cancel();
+                    timerHandler.post(new Runnable() { public void run() {
+                        if (Thread.currentThread() != Looper.getMainLooper().getThread()) throw new IllegalStateException("Timer result off main");
+                        if (backgroundTimer == owner) label.setText(tick == 3 ? "Background timer done: 3" : "Background tick " + tick);
+                    }});
+                }
+            }, 1500, 1500);
+        }}); layout.addView(background);
+        Button stopBackground = new Button(this); stopBackground.setText("Cancel background timer");
+        stopBackground.setOnClickListener(new View.OnClickListener() { public void onClick(View view) {
+            if (backgroundTimer != null) backgroundTimer.cancel(); backgroundTimer = null;
+            label.setText("Background timer cancelled");
+        }}); layout.addView(stopBackground);
         setContentView(layout);
     }
-    public void onDestroy() { timerHandler.removeCallbacksAndMessages(null); super.onDestroy(); }
+    public void onDestroy() { if (backgroundTimer != null) backgroundTimer.cancel(); timerHandler.removeCallbacksAndMessages(null); super.onDestroy(); }
     public static void prepare() {
         events = ""; dispatches = 0; messageCallbacks = 0; handled = 0;
         handler = new RecordingHandler();

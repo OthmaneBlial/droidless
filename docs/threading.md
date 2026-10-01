@@ -18,7 +18,10 @@ interrupt becomes available. This remains a bounded subset, not full Java concur
 | Cancellation | hasCallbacks(Runnable), removeCallbacks(Runnable), removeCallbacks(Runnable, Object), removeCallbacksAndMessages(Object) |
 | Message | constructor(), obtain(), getTarget, setTarget, getCallback, getWhen; public what/arg1/arg2/obj fields |
 | Clock | SystemClock.uptimeMillis and elapsedRealtime return process-relative monotonic milliseconds |
-| Thread | currentThread; constructors (String) and (Runnable, String); getName/setName/getId/isAlive; start once, interrupt/isInterrupted/interrupted, holdsLock; explicit run() calls the stored Runnable |
+| Wall clock | System.currentTimeMillis and Date deadlines follow deterministic advancement; native mode reads host wall time |
+| Thread | currentThread; constructors (String) and (Runnable, String); getName/setName/getId/isAlive/isDaemon; setDaemon before start; start once, interrupt/isInterrupted/interrupted, holdsLock; explicit run() calls the stored Runnable |
+| Timer | constructors (), (boolean), (String), (String, boolean); schedule(TimerTask, long/Date) and repeating long/Date + period overloads; scheduleAtFixedRate repeating long/Date + period overloads; cancel(), purge() |
+| TimerTask | constructor(), cancel(), scheduledExecutionTime(); actual APK run() executes on the Timer's guest worker |
 | Worker queue waits | LinkedBlockingQueue take()/put(Object); immediate results on main, suspend/resume on a worker |
 | Monitors | DEX monitor-enter/exit, reentrant ownership, contention and IllegalMonitorStateException |
 | Collection | System.gc invokes the runtime's managed collector |
@@ -83,7 +86,7 @@ Worker View/Activity calls are explicitly rejected before mutation; results must
 be posted to a main Handler. Looper.myLooper is null on an unprepared worker;
 prepare creates one worker Looper associated with that Thread, and a second prepare
 throws RuntimeException. Worker loop()/Handler delivery, priority, sleep/join,
-wait/notify, timed queue waits, executors and java.util.Timer remain unsupported.
+timed queue waits, executors and general worker Looper delivery remain unsupported.
 Handler construction on a worker must explicitly select the main Looper.
 
 Blocking on main, or suspension across a synchronous native bridge/initializer,
@@ -92,6 +95,61 @@ main continuation/native bridge expansion must preserve these waits, not turn
 blocking into inline execution. Host close/root finish cancels worker continuations
 and releases their roots/locks without claiming guest finally execution at process
 shutdown. Main callbacks and widgets retain their host main-thread requirement.
+
+## Java timers
+
+Each Timer starts one named guest worker and owns its task queue. Tasks run
+sequentially on that worker, with stable Thread identity and ThreadLocal values.
+A blocked task retains its managed continuation; later tasks on the same Timer
+wait for it. Different timers share the existing serial host executor and its
+64-worker/64-slice limits. Timers execute no instructions before a task is due.
+
+One-shot, fixed-delay and fixed-rate schedules support long delays and Date
+deadlines. Past fixed-delay Dates become due now; past fixed-rate Dates retain
+their original schedule and catch up within the bounded poll budget. Following
+API-21 Timer, repeated fixed-delay deadlines use dispatch time before run(), while
+fixed-rate deadlines advance from the preceding scheduled deadline.
+scheduledExecutionTime exposes the task's most recent scheduled wall-clock time.
+Negative delays/Dates, nonpositive periods and initial deadline overflow raise
+IllegalArgumentException. Null names/tasks/Dates and task reuse/cancellation raise
+the corresponding Java faults.
+
+Timer.cancel discards pending tasks and rejects later scheduling without
+interrupting an active task. TimerTask.cancel suppresses future executions and
+reports whether the task was still scheduled; purge removes canceled queue
+entries and returns their count. An uncaught task fault terminates that Timer,
+clears its queue and reports the original diagnostic; other workers still run.
+Pending and active tasks are GC roots. Each Timer allows at most 16,384 queued
+tasks. Capacity faults leave existing tasks intact and do not consume a rejected
+task. Runtime close cancels all timers and releases worker roots and locks.
+
+Worker UI calls remain rejected. A TimerTask must post to the main Handler to
+change Views. The authored Scheduling action demonstrates this correct path. In the optimized
+native window at 420×720, Start background timer reaches Background timer done: 3;
+restarting and canceling leaves Background timer cancelled beyond later deadlines.
+Normal close executes teardown and exits 0.
+The unmodified SwpieView listener starts its timer on DOWN and cancels on UP;
+holding DOWN for 20 seconds instead reaches a TimerTask that calls UI APIs from
+the worker and is rejected. Neither behavior establishes a usable slideshow.
+[Reproducible public-APK diagnosis](verification.md#current-source-java-timers-and-public-slideshow-diagnosis).
+
+Daemon metadata is retained; independent JVM process-liveness semantics and
+Timer finalization on GC are not implemented. Apps must explicitly cancel timers
+or close the runtime. Date deadlines are anchored to monotonic uptime when queued;
+subsequent host wall-clock jumps are not rebased. Full Android/JVM Timer timing
+parity and reference-device differential validation remain open.
+
+```sh
+cargo test -p droidless-runtime --test timers --locked
+java -cp examples/scheduling/build/classes org.droidless.scheduling.TimerContract
+target/release/droidless run --headless --ephemeral fixtures/generated/scheduling.apk \
+  --click "Start background timer" --advance-ms 1500 --advance-ms 1500 --advance-ms 1500
+# JSON View text: Background timer done: 3
+```
+
+Primary references: [API-21 Timer](https://android.googlesource.com/platform/libcore/+/android-5.0.0_r1/luni/src/main/java/java/util/Timer.java),
+[API-21 TimerTask](https://android.googlesource.com/platform/libcore/+/android-5.0.0_r1/luni/src/main/java/java/util/TimerTask.java),
+[Java Timer](https://docs.oracle.com/javase/8/docs/api/java/util/Timer.html).
 
 ## Evidence and reproduction
 

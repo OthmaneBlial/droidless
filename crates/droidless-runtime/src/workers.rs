@@ -75,6 +75,7 @@ impl std::error::Error for Waiting {}
 
 pub(crate) struct Worker {
     thread: Word,
+    timer: Option<Word>,
     entry: Option<(Method, Word)>,
     frames: Vec<Frame>,
     waiting: Option<Waiting>,
@@ -98,6 +99,7 @@ impl Workers {
             .chain(self.pending.iter().flat_map(|w| {
                 [w.thread]
                     .into_iter()
+                    .chain(w.timer)
                     .chain(w.entry.as_ref().map(|(_, receiver)| *receiver))
                     .chain(w.frames.iter().flat_map(Frame::roots))
             }))
@@ -341,13 +343,30 @@ impl Runtime {
         fields.insert("alive".into(), vec![Word::from(1)]);
         self.workers.pending.push_back(Worker {
             thread,
+            timer: None,
             entry,
             frames: vec![],
             waiting: None,
         });
         Ok(())
     }
+    pub(crate) fn start_timer_worker(&mut self, thread: Word, timer: Word) -> Result<()> {
+        self.start_worker(thread)?;
+        self.workers
+            .pending
+            .back_mut()
+            .context("Timer worker missing")?
+            .timer = Some(timer);
+        Ok(())
+    }
     fn worker_ready(&self, worker: &Worker) -> Result<bool> {
+        if let Some(timer) = worker.timer
+            && worker.frames.is_empty()
+            && worker.entry.is_none()
+            && worker.waiting.is_none()
+        {
+            return self.timer_ready(timer);
+        }
         if !matches!(worker.waiting, Some(Waiting::Monitor(_)))
             && self.thread_word(worker.thread, "interrupted")?.truth()
         {
@@ -423,6 +442,21 @@ impl Runtime {
             self.frames = std::mem::take(&mut worker.frames);
             self.workers.waiting = None;
             let result = (|| -> Result<bool> {
+                if let Some(timer) = worker.timer
+                    && self.frames.is_empty()
+                    && worker.entry.is_none()
+                    && let Some(task) = self.take_timer_task(timer)?
+                {
+                    worker.entry = Some((
+                        Method {
+                            class: "Ljava/util/TimerTask;".into(),
+                            name: "run".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        task,
+                    ));
+                }
                 if let Some((method, receiver)) = worker.entry.take()
                     && self.begin_invoke(method, vec![receiver], true)?.is_some()
                 {
@@ -440,10 +474,21 @@ impl Runtime {
             match result {
                 Ok(false) => self.workers.pending.push_back(worker),
                 done => {
+                    if let Some(timer) = worker.timer
+                        && self.finish_timer_task(timer, done.is_err())?
+                    {
+                        worker.waiting = None;
+                        self.workers.pending.push_back(worker);
+                        continue;
+                    }
                     self.heap
                         .get_mut(worker.thread)?
                         .fields
                         .insert("alive".into(), vec![Word::ZERO]);
+                    self.heap
+                        .get_mut(worker.thread)?
+                        .fields
+                        .remove("droidless:timer:owner");
                     // Terminal host errors bypass guest finally; release all locks of the dead worker.
                     self.workers
                         .monitors
@@ -464,11 +509,19 @@ impl Runtime {
             self.workers.current.is_none(),
             "cannot stop workers from a worker"
         );
-        for worker in self.workers.pending.drain(..) {
+        let workers: Vec<_> = self.workers.pending.drain(..).collect();
+        for worker in workers {
+            if let Some(timer) = worker.timer {
+                self.finish_timer_task(timer, true)?;
+            }
             self.heap
                 .get_mut(worker.thread)?
                 .fields
                 .insert("alive".into(), vec![Word::ZERO]);
+            self.heap
+                .get_mut(worker.thread)?
+                .fields
+                .remove("droidless:timer:owner");
             self.workers
                 .monitors
                 .retain(|_, (owner, _)| *owner != worker.thread);

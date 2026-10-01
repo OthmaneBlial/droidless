@@ -135,6 +135,7 @@ pub enum Data {
     Bundle(BTreeMap<String, (String, Vec<Word>)>),
     Motion(crate::touch::Motion),
     Gesture(crate::touch::Gesture),
+    Timer(crate::timers::Timer),
     Parcel {
         bytes: Vec<u8>,
         position: usize,
@@ -370,6 +371,10 @@ impl Heap {
             }
             if let Data::Gesture(gesture) = &object.data {
                 work.extend(gesture.roots());
+            }
+            if let Data::Timer(timer) = &object.data {
+                work.extend(timer.tasks.values().copied());
+                work.extend(timer.active);
             }
             if let Data::Spanned { spans, .. } = &object.data {
                 work.extend(spans.iter().map(|span| span.object));

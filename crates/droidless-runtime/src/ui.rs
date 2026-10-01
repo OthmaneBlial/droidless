@@ -218,6 +218,7 @@ fn params_field(heap: &Heap, word: Word, field: &str) -> Result<Option<Word>> {
             .unwrap_or(Word::ZERO),
     ))
 }
+
 fn weight(heap: &Heap, word: Word) -> Result<f32> {
     let value = if let Some(value) = params_field(
         heap,
@@ -350,15 +351,46 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
         }
     } else if view.kind == "FrameLayout" || view.kind == "View" {
         for child in &view.children {
-            let c = heap.get(*child)?.view.as_ref().context("non-View child")?;
+            let object = heap.get(*child)?;
+            let c = object.view.as_ref().context("non-View child")?;
             if c.visible == 8 {
                 continue;
             }
+            let gravity = params_field(
+                heap,
+                *child,
+                "Landroid/widget/FrameLayout$LayoutParams;->gravity:I",
+            )?
+            .or_else(|| {
+                object
+                    .fields
+                    .get("droidless:view:layout-gravity")?
+                    .first()
+                    .copied()
+            })
+            .unwrap_or(Word::from(-1))
+            .int()?;
+            let gravity = if gravity == -1 { 0x33 } else { gravity };
+            let width = dimension(heap, *child, true, available.width)?;
+            let height = dimension(heap, *child, false, available.height)?;
+            // Relative START/END follow this profile's default left-to-right direction.
+            let x = match gravity & 7 {
+                1 => available.x + (available.width - width) / 2.0 + c.margins[0] - c.margins[2],
+                5 => available.x + available.width - width - c.margins[2],
+                _ => available.x + c.margins[0],
+            };
+            let y = match gravity & 0x70 {
+                0x10 => {
+                    available.y + (available.height - height) / 2.0 + c.margins[1] - c.margins[3]
+                }
+                0x50 => available.y + available.height - height - c.margins[3],
+                _ => available.y + c.margins[1],
+            };
             let child_rect = laid_out_rect(heap, *child, rect)?.unwrap_or(Rect {
-                x: available.x + c.margins[0],
-                y: available.y + c.margins[1],
-                width: dimension(heap, *child, true, available.width)?,
-                height: dimension(heap, *child, false, available.height)?,
+                x,
+                y,
+                width,
+                height,
             });
             children.push(build(heap, *child, child_rect, path)?);
         }
@@ -516,4 +548,56 @@ pub fn dimension(heap: &Heap, word: Word, horizontal: bool, parent: f32) -> Resu
         Ok((total + 2.0 * v.padding).min(parent))
     }
     measure(heap, word, horizontal, parent, 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn frame_child_gravity_padding_margins_and_layout_params_precedence() {
+        let mut heap = Heap::default();
+        let root = heap.instance("Landroid/widget/FrameLayout;").unwrap();
+        let child = heap.instance("Landroid/widget/Button;").unwrap();
+        let frame = heap.get_mut(root).unwrap().view.as_mut().unwrap();
+        frame.padding = 20.0;
+        frame.children.push(child);
+        let button = heap.get_mut(child).unwrap().view.as_mut().unwrap();
+        button.width = 40.0;
+        button.height = 30.0;
+        button.margins = [2.0, 3.0, 4.0, 5.0];
+        for (gravity, expected) in [
+            (-1, (22.0, 23.0)),
+            (0x11, (78.0, 133.0)),
+            (0x55, (136.0, 245.0)),
+            (0x800053, (22.0, 245.0)),
+            (0x800055, (136.0, 245.0)),
+        ] {
+            heap.get_mut(child).unwrap().fields.insert(
+                "droidless:view:layout-gravity".into(),
+                vec![Word::from(gravity)],
+            );
+            let rect = layout(&heap, root, 200.0, 300.0).unwrap().children[0].rect;
+            assert_eq!((rect.x, rect.y), expected);
+            assert_eq!((rect.width, rect.height), (40.0, 30.0));
+        }
+        let params = heap
+            .instance("Landroid/widget/FrameLayout$LayoutParams;")
+            .unwrap();
+        for (key, value) in [
+            ("Landroid/view/ViewGroup$LayoutParams;->width:I", 40),
+            ("Landroid/view/ViewGroup$LayoutParams;->height:I", 30),
+            ("Landroid/widget/FrameLayout$LayoutParams;->gravity:I", 0x11),
+        ] {
+            heap.get_mut(params)
+                .unwrap()
+                .fields
+                .insert(key.into(), vec![Word::from(value)]);
+        }
+        heap.get_mut(child)
+            .unwrap()
+            .fields
+            .insert("droidless:view:layout-params".into(), vec![params]);
+        let rect = layout(&heap, root, 200.0, 300.0).unwrap().children[0].rect;
+        assert_eq!((rect.x, rect.y), (78.0, 133.0));
+    }
 }

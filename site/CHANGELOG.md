@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Java Timer/TimerTask scheduling now owns one guest worker per Timer, with
+  long/Date deadlines, fixed-delay/fixed-rate tasks, cancellation/purge, catch-up,
+  serial blocking, GC retention and failure cleanup. Compiled tasks post UI
+  results through the main Handler; portable validation/serial checks also pass
+  on desktop Java. Timer finalization and JVM process-liveness parity remain open.
+- FrameLayout gravity positions SwpieView's controls below its toolbar. Root
+  touch replay diagnoses its original slideshow listener: DOWN starts a Timer,
+  UP cancels it, and a held DOWN reaches rejected worker UI access. This is
+  runtime/API evidence; usable public slideshow remains unproven.
+
 - Single-pointer MotionEvent dispatch now reaches actual APK touch callbacks.
   The unmodified SwpieView APK changes JPEG/PNG/WebP images through its onFling
   handler in host replay, with first/last bounds checked. Confirmed mouse taps

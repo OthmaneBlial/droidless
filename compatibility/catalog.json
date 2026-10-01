@@ -128,11 +128,16 @@
       "desktop_java_thread_metadata_differential_verified": true,
       "android_reference_verified": false,
       "source": "examples/scheduling",
-      "notes": "Earlier native timer/cancellation/delayed finish evidence. Current compiled headless checks also cover deferred workers, independent identities, queue/monitor waits, interrupt, main Handler result delivery, GC, bounded spinning, faults, capacity and shutdown. Same pure WorkerContract passes on desktop Java 17. Serial shared-heap host executor; no parallel CPU execution. Main/native-bridge waits, worker Looper delivery, priority and sleep/join remain unsupported. Fresh native Start worker delivers the complete result in accessibility state and closes with status 0; its long visible label clips at 360x340. No independent asynchronous workflow claim.",
+      "notes": "Earlier native timer/cancellation/delayed finish evidence. Current compiled headless checks also cover deferred workers, independent identities, queue/monitor waits, interrupt, main Handler result delivery, GC, bounded spinning, faults, capacity and shutdown. Same pure WorkerContract passes on desktop Java 17. Serial shared-heap host executor; no parallel CPU execution. Main/native-bridge waits, worker Looper delivery, priority and sleep/join remain unsupported. Fresh native Start worker delivers the complete result in accessibility state and closes with status 0; its long visible label clips at 360x340. No independent asynchronous workflow claim. Java Timer/TimerTask compiled checks now cover long/Date deadlines, fixed-delay/fixed-rate catch-up, one serial guest worker per Timer, blocking/cancellation, purge, GC, task failure, capacity, shutdown and main Handler UI posting. The portable validation/serial contract also passes on desktop Java; full timing/liveness parity and Timer finalization remain unsupported. Optimized native Scheduling at 420x720 delivers Background timer done: 3 through TimerTask-to-main Handler posting; restarting and canceling leaves Background timer cancelled beyond later deadlines.",
       "headless_worker_verified": true,
       "native_worker_verified": true,
       "desktop_java_worker_differential_verified": true,
-      "native_worker_close_exit_zero": true
+      "native_worker_close_exit_zero": true,
+      "headless_java_timer_verified": true,
+      "desktop_java_timer_contract_verified": true,
+      "native_java_timer_verified": true,
+      "native_java_timer_cancellation_verified": true,
+      "native_java_timer_close_exit_zero": true
     },
     {
       "package": "org.droidless.images",
@@ -214,7 +219,7 @@
       "sha256": "7c7a17ddf254e6f7adb53786ab3928937a4de499785475278df2fe5a034f50f3",
       "status": "static-image-viewer-subset",
       "native_ui": true,
-      "notes": "Original F-Droid APK unmodified and not redistributed. Native macOS folder selection runs guest directory queries, Comparable sorting and stream decoding, displaying three CENTER_CROP thumbnails. Native clicks open JPEG, PNG and WebP images in the APK full-screen Activity; Escape returns to the grid after each visit, and normal close exits 0. Real ImageContainer Parcelable writers/CREATORs transfer the image stack; setImageURI decodes a granted stream and closes it. Optimized host replay checks one viewer image and Back to three thumbnails with GC and clean close. Host touch replay runs the APK gesture callbacks, checks exact JPEG/PNG/WebP next/previous image bytes, first/last bounds and confirmed tap control hide/show. GIF animation, slideshow, lifecycle auto-hide and full styling remain unproven; velocity estimation is a bounded single-pointer profile. Optimized native mouse taps hide/restore the controls; Escape restores three thumbnails and normal close exits 0. Native mouse-drag verification is pending: the UI automation tool could not locate the window at its drag coordinate, so swipe evidence is host replay only.",
+      "notes": "Original F-Droid APK unmodified and not redistributed. Native macOS folder selection runs guest directory queries, Comparable sorting and stream decoding, displaying three CENTER_CROP thumbnails. Native clicks open JPEG, PNG and WebP images in the APK full-screen Activity; Escape returns to the grid after each visit, and normal close exits 0. Real ImageContainer Parcelable writers/CREATORs transfer the image stack; setImageURI decodes a granted stream and closes it. Optimized host replay checks one viewer image and Back to three thumbnails with GC and clean close. Host touch replay runs the APK gesture callbacks, checks exact JPEG/PNG/WebP next/previous image bytes, first/last bounds and confirmed tap control hide/show. GIF animation, slideshow, lifecycle auto-hide and full styling remain unproven; velocity estimation is a bounded single-pointer profile. Optimized native mouse taps hide/restore the controls; Escape restores three thumbnails and normal close exits 0. Native mouse-drag verification is pending: the UI automation tool could not locate the window at its drag coordinate, so swipe evidence is host replay only. FrameLayout gravity places bottom controls below the toolbar. Root touch replay diagnoses the original slideshow listener: DOWN starts a Timer, UP cancels it, and a held DOWN delivers a background TimerTask whose direct UI call is rejected. Usable slideshow remains unproven; APK bytes are unchanged.",
       "native_folder_picker_verified": true,
       "native_picker_cancel_exit_zero": true,
       "host_selection_callback_verified": true,
@@ -234,7 +239,10 @@
       "host_swipe_navigation_verified": true,
       "host_confirmed_tap_controls_verified": true,
       "native_confirmed_tap_controls_verified": true,
-      "native_swipe_navigation_verified": false
+      "native_swipe_navigation_verified": false,
+      "host_slideshow_timer_cancel_verified": true,
+      "host_slideshow_worker_ui_rejection_verified": true,
+      "slideshow_verified": false
     },
     {
       "package": "org.droidless.parcels",

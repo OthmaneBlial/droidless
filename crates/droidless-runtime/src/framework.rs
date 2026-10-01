@@ -64,6 +64,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/Thread;",
             "Ljava/lang/ThreadLocal;",
             "Ljava/util/Date;",
+            "Ljava/util/Timer;",
+            "Ljava/util/TimerTask;",
             "Ljava/util/Locale;",
             "Ljava/util/ResourceBundle;",
             "Ljava/util/ListResourceBundle;",
@@ -546,6 +548,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.thread_local_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.timer_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.system_services_native(method, args)? {
@@ -4781,6 +4786,13 @@ impl Runtime {
                 }
                 "layout_width" => view.width = dimension(&self.attribute(raw)?)?,
                 "layout_height" => view.height = dimension(&self.attribute(raw)?)?,
+                "layout_gravity" => {
+                    let gravity = self.attribute(raw)?.data as i32;
+                    self.heap.get_mut(word)?.fields.insert(
+                        "droidless:view:layout-gravity".into(),
+                        vec![Word::from(gravity)],
+                    );
+                }
                 "layout_weight" => {
                     view.weight = if raw.kind == 4 {
                         f32::from_bits(raw.data)

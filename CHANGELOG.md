@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Java Timer/TimerTask scheduling now uses one stable guest worker per Timer,
+  with long/Date deadlines, fixed-delay/fixed-rate tasks, catch-up, cancellation,
+  purge, serial blocking, GC roots and failure cleanup. Compiled contracts cover
+  main Handler UI delivery, capacity and shutdown; the portable validation/serial
+  task contract also passes on desktop Java.
+- FrameLayout XML/parameter gravity now places SwpieView controls below its
+  toolbar. Root touch replay diagnoses the original APK's slideshow: DOWN starts
+  its timer, UP cancels it, and a held DOWN reaches a worker UI call that is
+  explicitly rejected. A usable public slideshow remains unproven.
+
 - The unmodified public Notepad APK now renders a saved title in the reopened
   Notes list after Back and after a fresh DROIDLESS process. Local verification
   also keeps the native-window boundary explicit; GitHub Actions stay disabled.

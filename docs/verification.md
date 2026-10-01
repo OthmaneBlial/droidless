@@ -887,3 +887,60 @@ target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examp
 target/release/droidless run --ephemeral artifacts/apks/swpieview-1.3.2.apk
 # Native: select examples/images/assets, open a thumbnail, tap twice, Escape, close.
 ```
+
+## Current source: Java timers and public slideshow diagnosis
+
+Java Timer/TimerTask now uses one stable guest worker per Timer. The compiled
+Scheduling contract checks deferred deadlines, long/Date schedules, past-Date
+clamping and fixed-rate catch-up, Thread identity/name/daemon/ThreadLocal values,
+serial tasks across a queue wait, cancellation during an active wait, purge,
+task reuse, null/negative/overflow faults, uncaught task termination, GC, queue
+capacity recovery, runtime close and TimerTask-to-main Handler UI delivery.
+Its portable validation/serial-task entry point also passes on desktop Java 17
+with Java 8 source/target. This is not an Android reference differential run.
+
+The original SwpieView 1.3.2 APK retains its pinned SHA-256 and is not modified.
+FrameLayout XML/parameter gravity now places its bottom controls below the toolbar;
+a layout regression checks center/right/bottom/default positions, padding,
+margins and parameter precedence. Actual root touch replay reaches the APK's
+slideshow OnTouchListener. DOWN starts a real Timer and UP cancels it: advancing
+20 seconds executes no slideshow task and preserves the original image. A
+separate held-DOWN replay delivers its TimerTask on the worker, where its direct
+UI call is rejected before changing the image. The failure leaves clean managed
+frames; cancellation, a subsequent poll and normal close succeed. These checks
+diagnose the APK's behavior and do not establish a usable slideshow.
+
+The optimized native Scheduling fixture at 420×720 displays Background timer
+queued after Start background timer, then Background timer done: 3 after its
+worker tasks post results to the main Handler. Restarting and clicking Cancel
+background timer leaves Background timer cancelled beyond later deadlines.
+Normal window close executes teardown and exits 0.
+
+Local CI passes 86 Rust tests, warning-free Clippy, optimized builds and 4,096
+seeded parser mutations. GitHub Actions remain disabled.
+
+Headless System.currentTimeMillis and Date now follow the deterministic clock.
+Without manual advancement, Notepad's creation and formatting Dates coincide,
+so its actual PrettyTime bytecode displays Created moments from now. The replay
+checks that zero-duration label, both editor fields and unchanged two-title
+save/restart evidence. This is the library's documented
+[zero-duration format](https://www.ocpsoft.org/prettytime/); native mode still
+uses the host wall clock.
+
+Timer finalization, daemon/non-daemon JVM process-liveness parity, wall-clock
+jump rebasing and full Android timing parity remain open. The executor is serial
+and bounded; worker UI access remains rejected. Native drag verification and
+GIF animation remain open. The v0.1.0 archive predates this source milestone.
+
+```sh
+cargo test -p droidless-runtime --test timers --locked
+python3 tools/build-fixtures.py --app scheduling
+java -cp examples/scheduling/build/classes org.droidless.scheduling.TimerContract
+target/release/droidless run --headless --ephemeral fixtures/generated/scheduling.apk \
+  --click "Start background timer" --advance-ms 1500 --advance-ms 1500 --advance-ms 1500
+# JSON View text: Background timer done: 3
+target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets --click-first-image --slideshow
+target/release/examples/document-replay artifacts/apks/swpieview-1.3.2.apk examples/images/assets --click-first-image --slideshow-hold
+sh tools/ci.sh
+python3 tools/compatibility.py
+```

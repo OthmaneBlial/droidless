@@ -167,6 +167,17 @@ process = subprocess.run([
 assert "confirmed taps hide and restore controls" in process.stderr
 assert "Decoded image views: 1" in process.stderr
 print("PASS Public SwpieView: bounded next/previous swipes and confirmed taps hide/restore controls")
+for option, expected in [
+    ("--slideshow", "UP cancels it; no task or image change"),
+    ("--slideshow-hold", "UI access rejected with clean frames"),
+]:
+    process = subprocess.run([
+        str(document_replay), str(swpie), str(root / "examples/images/assets"),
+        "--click-first-image", option,
+    ], text=True, capture_output=True, check=True, timeout=120)
+    assert expected in process.stderr
+    assert "Decoded image views: 1" in process.stderr
+print("PASS Public SwpieView slideshow diagnosis: tap starts/cancels; held task rejects worker UI access")
 
 notepad = root / "artifacts/apks/notepad-v1.0.0.apk"
 notepad_digest = "2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f"
@@ -195,7 +206,9 @@ if len(editable) != 2 or editable[0]["view"]["text"] != "Hello, desktop":
 # activity_note.xml explicitly gives its Toolbar a space as app:title.
 toolbar = next(node for node in nodes if node["view"]["id"] == 0x7f0c0072)
 toolbar_labels = [node["view"]["text"] for node in flatten(toolbar)]
-if " " not in toolbar_labels or "Created moments ago" not in labels:
+# Frozen headless time makes creation/reference Dates equal. PrettyTime's
+# documented zero-duration format is "moments from now" (ocpsoft.org/prettytime/).
+if " " not in toolbar_labels or "Created moments from now" not in labels:
     raise SystemExit("Notepad editor screen labels were not rendered")
 report = {
     "screens": ["notes-list", "note-editor"],

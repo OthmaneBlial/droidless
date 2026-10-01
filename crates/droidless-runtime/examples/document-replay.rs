@@ -22,6 +22,12 @@ fn image_bytes(node: &droidless_runtime::ui::Node) -> Option<&[u8]> {
 fn buttons(node: &droidless_runtime::ui::Node) -> usize {
     usize::from(node.view.kind == "Button") + node.children.iter().map(buttons).sum::<usize>()
 }
+fn slideshow_button(node: &droidless_runtime::ui::Node) -> Option<&droidless_runtime::ui::Node> {
+    if node.view.kind == "Button" && node.view.text.to_ascii_lowercase().contains("slideshow") {
+        return Some(node);
+    }
+    node.children.iter().find_map(slideshow_button)
+}
 fn swipe(vm: &mut Runtime, left: bool) -> Result<()> {
     let (start, end) = if left { (340.0, 80.0) } else { (80.0, 340.0) };
     vm.touch(0, start, 360.0)?;
@@ -41,10 +47,11 @@ fn main() -> Result<()> {
     ensure!(
         (2..=4).contains(&args.len())
             && args.get(2).is_none_or(|v| v == "--click-first-image")
-            && args
-                .get(3)
-                .is_none_or(|v| v == "--back" || v == "--gestures"),
-        "usage: document-replay APK DIRECTORY [--click-first-image [--back|--gestures]]"
+            && args.get(3).is_none_or(|v| matches!(
+                v.as_str(),
+                "--back" | "--gestures" | "--slideshow" | "--slideshow-hold"
+            )),
+        "usage: document-replay APK DIRECTORY [--click-first-image [--back|--gestures|--slideshow|--slideshow-hold]]"
     );
     let mut vm = Runtime::new(Apk::parse(&std::fs::read(&args[0])?)?)?;
     vm.launch()?;
@@ -122,6 +129,64 @@ fn main() -> Result<()> {
             eprintln!(
                 "PASS public swipe navigation: first/last bounds, next/previous JPEG/PNG/WebP; confirmed taps hide and restore controls"
             );
+        } else if args.get(3).is_some_and(|s| s.starts_with("--slideshow")) {
+            let button = slideshow_button(&tree).context("slideshow button missing")?;
+            let x = button.rect.x + button.rect.width / 2.0;
+            let y = button.rect.y + button.rect.height / 2.0;
+            let original = image_bytes(&tree).context("viewer image missing")?.to_vec();
+            vm.touch(0, x, y)?;
+            vm.collect();
+            ensure!(
+                slideshow_button(&vm.layout_snapshot()?).is_some_and(|button| button
+                    .view
+                    .text
+                    .to_ascii_lowercase()
+                    .starts_with("start")),
+                "DOWN did not enter the APK slideshow listener"
+            );
+            if args[3] == "--slideshow" {
+                vm.advance_time(20)?;
+                vm.touch(1, x, y)?;
+                ensure!(
+                    slideshow_button(&vm.layout_snapshot()?).is_some_and(|button| button
+                        .view
+                        .text
+                        .to_ascii_lowercase()
+                        .starts_with("stop")),
+                    "UP did not cancel through the APK slideshow listener"
+                );
+                vm.advance_time(20_000)?;
+                tree = vm.layout_snapshot()?;
+                ensure!(
+                    image_bytes(&tree) == Some(original.as_slice()),
+                    "ordinary slideshow tap changed the image"
+                );
+                eprintln!(
+                    "PASS public slideshow diagnosis: DOWN starts Timer, UP cancels it; no task or image change after 20 seconds"
+                );
+            } else {
+                let error = vm
+                    .advance_time(20_000)
+                    .expect_err("held slideshow task unexpectedly allowed worker UI access");
+                ensure!(
+                    format!("{error:#}").contains("unsupported UI access from a guest worker"),
+                    "unexpected slideshow failure: {error:#}"
+                );
+                ensure!(
+                    vm.stack_depth() == 0,
+                    "slideshow failure retained guest frames"
+                );
+                tree = vm.layout_snapshot()?;
+                ensure!(
+                    image_bytes(&tree) == Some(original.as_slice()),
+                    "worker changed viewer image"
+                );
+                vm.touch(3, x, y)?;
+                vm.poll_messages()?;
+                eprintln!(
+                    "PASS public slideshow diagnosis: held DOWN delivers TimerTask on its worker; UI access rejected with clean frames"
+                );
+            }
         } else if args.len() == 4 {
             vm.back()?;
             vm.collect();

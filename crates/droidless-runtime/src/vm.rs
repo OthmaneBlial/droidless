@@ -1027,7 +1027,7 @@ impl Runtime {
             if current == "Ldroidless/runtime/GridClick;" {
                 work.push("Landroid/view/View$OnClickListener;".into());
             }
-            if current == "Ldroidless/runtime/GestureTimer;" {
+            if current == "Ldroidless/runtime/GestureTimer;" || current == "Ljava/util/TimerTask;" {
                 work.push("Ljava/lang/Runnable;".into());
             }
             if current == "Landroid/view/GestureDetector$SimpleOnGestureListener;" {

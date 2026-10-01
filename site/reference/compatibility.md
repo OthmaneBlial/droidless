@@ -44,6 +44,14 @@ auto-hide remain unproven. MotionEvent/View/Activity dispatch and timed gesture
 callbacks pass compiled guest checks; multi-touch, intercept behavior and Android
 VelocityTracker parity remain unsupported. Bitmap pixel manipulation and Android
 Canvas/vector drawing remain open.
+FrameLayout child gravity now honors XML and explicit parameters with padding/
+margins in the default LTR profile. SwpieView's bottom controls become reachable
+through root touch dispatch. Its slideshow tap starts then cancels a real Timer;
+a held DOWN runs the task on its worker and rejects its UI access.
+Bounded Java Timer/TimerTask schedules, Date deadlines, fixed-delay/fixed-rate,
+cancellation/purge and worker-to-main Handler posting pass compiled contracts.
+[Timer scope and ceilings](threading.md#java-timers). Usable public slideshow,
+Timer finalization and independent JVM process-liveness semantics remain open.
 A targeted support-RecyclerView layout pass renders two saved titles from the
 pinned Notepad APK after save and restart; item animations are omitted. This does
 not establish general RecyclerView or AndroidX compatibility.
@@ -134,7 +142,7 @@ checks. The authored native Start worker action also delivers its main-thread re
 - Failed class initialization is sticky and retains causes; concurrent initialization
   is unsupported. Instruction/field/method checks are not a complete Java type verifier.
 - Main waits, blocking native-bridge callbacks/initializers, sleep/join, wait/notify,
-  worker Looper delivery/priority, parallel execution and general Java timers are unsupported.
+  worker Looper delivery/priority, parallel execution, Timer finalization and JVM process-liveness parity are unsupported.
 - Other bulk collections, custom Map copies/views, CopyOnWriteArrayList write revalidation,
   ListIterator/subList, custom class loaders, method/field reflection, general file I/O,
   general SQLite APIs beyond the subset documented in [storage](storage.md),

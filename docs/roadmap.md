@@ -43,8 +43,12 @@ The following are objectives, not completed capability claims.
    callbacks are proven. Immediate FIFO queue operations also pass compiled and
    desktop Java conformance. Managed DEX call continuations now pause/resume with
    GC and exception checks. Bounded deferred workers now execute on a serial shared-heap
-   host executor, with queue/monitor waits and main Handler result checks. Native
-   bridges/class initialization remain synchronous; main waits, worker delivery,
+   host executor, with queue/monitor waits and main Handler result checks.
+   Java timers now reuse one guest worker per Timer: deadlines, catch-up,
+   serial tasks, cancellation/purge, failure cleanup and main Handler posting
+   pass compiled contracts. Public SwpieView's ordinary touch starts/cancels its
+   timer; holding it exposes its worker UI call. Usable slideshow is not proven.
+   Native bridges/class initialization remain synchronous; main waits, worker delivery,
    priorities and join/sleep remain ahead. Notepad passes deferred Thread.start;
    independently completed transaction execution remains unproven.
    Gate: a real APK completes its queued transactions and posts UI results.
