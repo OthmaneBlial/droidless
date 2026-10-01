@@ -11,6 +11,7 @@ pub struct Resource {
     pub id: u32,
     pub name: String,
     pub value: Option<Value>,
+    pub parent: Option<u32>,
     pub bag: BTreeMap<u32, Value>,
 }
 #[derive(Default, Debug, Serialize)]
@@ -111,12 +112,17 @@ impl Resources {
                         id,
                         name,
                         value: None,
+                        parent: None,
                         bag: BTreeMap::new(),
                     };
                     if entry_flags & 1 == 0 {
                         resource.value = Some(value(b, at + size, &strings)?);
                     } else {
                         ensure!(size >= 16, "invalid resource map entry");
+                        resource.parent = match b.u32(at + 8)? {
+                            0 => None,
+                            parent => Some(parent),
+                        };
                         let count = b.u32(at + 12)? as usize;
                         b.table(at + size, count, 12)?;
                         for j in 0..count {
@@ -151,6 +157,50 @@ impl Resources {
     pub fn text(&self, id: u32) -> Result<String> {
         Ok(self.resolve(id)?.display())
     }
+
+    pub fn style(&self, id: u32) -> Result<BTreeMap<u32, Value>> {
+        fn collect(
+            resources: &Resources,
+            id: u32,
+            seen: &mut std::collections::BTreeSet<u32>,
+            attributes: &mut BTreeMap<u32, Value>,
+        ) -> Result<()> {
+            ensure!(
+                seen.len() < 32 && seen.insert(id),
+                "style parent cycle or depth limit"
+            );
+            let Some(resource) = resources.entries.get(&id) else {
+                if id >> 24 == 1 {
+                    return Ok(());
+                }
+                anyhow::bail!("style @0x{id:08x} missing");
+            };
+            let implicit_parent = || {
+                let (_, name) = resource.name.split_once('/')?;
+                let (parent, _) = name.rsplit_once('.')?;
+                let parent_name = format!("style/{parent}");
+                resources
+                    .entries
+                    .values()
+                    .find(|candidate| candidate.name == parent_name)
+                    .map(|candidate| candidate.id)
+            };
+            if let Some(parent) = resource.parent.or_else(implicit_parent) {
+                collect(resources, parent, seen, attributes)?;
+            }
+            attributes.extend(resource.bag.clone());
+            Ok(())
+        }
+
+        let mut attributes = BTreeMap::new();
+        collect(
+            self,
+            id,
+            &mut std::collections::BTreeSet::new(),
+            &mut attributes,
+        )?;
+        Ok(attributes)
+    }
 }
 fn value(b: Bytes<'_>, at: usize, strings: &[String]) -> Result<Value> {
     ensure!(b.u16(at)? == 8, "invalid resource value size");
@@ -162,4 +212,64 @@ fn value(b: Bytes<'_>, at: usize, strings: &[String]) -> Result<Value> {
         None
     };
     Ok(Value { kind, data, text })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Resource, Resources};
+    use crate::xml::Value;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn styles_merge_explicit_and_implicit_parents() {
+        let resource = |id, name: &str, parent, bag| Resource {
+            id,
+            name: name.into(),
+            value: None,
+            parent,
+            bag,
+        };
+        let value = |data| Value {
+            kind: 16,
+            data,
+            text: None,
+        };
+        let resources = Resources {
+            entries: BTreeMap::from([
+                (
+                    1,
+                    resource(
+                        1,
+                        "style/Theme.Base",
+                        None,
+                        BTreeMap::from([(10, value(1))]),
+                    ),
+                ),
+                (
+                    2,
+                    resource(
+                        2,
+                        "style/Theme.Base.Dark",
+                        None,
+                        BTreeMap::from([(10, value(2)), (11, value(3))]),
+                    ),
+                ),
+                (
+                    3,
+                    resource(
+                        3,
+                        "style/AppTheme",
+                        Some(2),
+                        BTreeMap::from([(12, value(4))]),
+                    ),
+                ),
+            ]),
+        };
+
+        let merged = resources.style(3).unwrap();
+        assert_eq!(merged.keys().copied().collect::<Vec<_>>(), [10, 11, 12]);
+        assert_eq!(merged[&10].data, 2);
+        assert_eq!(merged[&11].data, 3);
+        assert_eq!(merged[&12].data, 4);
+    }
 }

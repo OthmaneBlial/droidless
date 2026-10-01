@@ -1,6 +1,6 @@
 //! Main-thread messages and monotonic time. Guest callbacks always execute in our DEX VM.
 use crate::{
-    heap::{Word, bits64, fault, wide},
+    heap::{Data, Word, bits64, fault, wide},
     vm::Runtime,
 };
 use anyhow::{Context, Result, ensure};
@@ -11,6 +11,8 @@ const HANDLER: &str = "Landroid/os/Handler;";
 const MESSAGE: &str = "Landroid/os/Message;";
 const LOOPER: &str = "Landroid/os/Looper;";
 const THREAD: &str = "Ljava/lang/Thread;";
+const THREAD_GROUP: &str = "Ljava/lang/ThreadGroup;";
+const LOCAL_SERVER_SOCKET: &str = "Landroid/net/LocalServerSocket;";
 const RUNNABLE: &str = "Ljava/lang/Runnable;";
 const LIMIT: usize = 16_384;
 
@@ -253,6 +255,152 @@ impl Runtime {
         let sig = method.signature();
         let mut result = vec![];
         match (method.class.as_str(), sig.as_str()) {
+            (LOCAL_SERVER_SOCKET, "<init>(Ljava/lang/String;)V") => {
+                let name = arg(1)?;
+                self.heap.text(name)?;
+                let object = self.heap.get_mut(receiver)?;
+                object.data = Data::Collection {
+                    values: vec![],
+                    version: 0,
+                };
+                object.fields.insert("name".into(), vec![name]);
+                object.fields.insert("closed".into(), vec![Word::ZERO]);
+            }
+            (LOCAL_SERVER_SOCKET, "accept()Landroid/net/LocalSocket;") => {
+                if self.collection(receiver)?.0.is_empty() {
+                    if self
+                        .heap
+                        .get(receiver)?
+                        .fields
+                        .get("closed")
+                        .and_then(|values| values.first())
+                        .is_some_and(|value| value.truth())
+                    {
+                        return Err(fault(
+                            "Ljava/net/SocketException;",
+                            "LocalServerSocket is closed",
+                        ));
+                    }
+                    self.wait_worker(crate::workers::Waiting::Take(receiver))?;
+                }
+                let mut pending = self.collection(receiver)?.0.to_vec();
+                result.push(pending.remove(0));
+                self.change_collection(receiver, pending)?;
+            }
+            (LOCAL_SERVER_SOCKET, "close()V") | ("Landroid/net/LocalSocket;", "close()V") => {
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("closed".into(), vec![Word::from(1)]);
+            }
+            ("Ljava/lang/Object;", "wait()V" | "wait(J)V") => {
+                let timeout = if sig == "wait()V" {
+                    None
+                } else {
+                    let millis = bits64(&args[1..])? as i64;
+                    if millis < 0 {
+                        return Err(fault(
+                            "Ljava/lang/IllegalArgumentException;",
+                            "negative wait timeout",
+                        ));
+                    }
+                    (millis > 0).then(|| self.uptime_ms().saturating_add(millis as u64))
+                };
+                let thread = self.current_thread()?;
+                let pending = self.thread_word(thread, "droidless:wait:object")? == receiver;
+                if pending {
+                    let deadline = self
+                        .heap
+                        .get(thread)?
+                        .fields
+                        .get("droidless:wait:deadline")
+                        .context("missing Object.wait deadline")?;
+                    let deadline = bits64(deadline)?;
+                    let timed = self
+                        .thread_word(thread, "droidless:wait:hasDeadline")?
+                        .truth()
+                        && self.uptime_ms() >= deadline;
+                    let interrupted = self.thread_word(thread, "interrupted")?.truth();
+                    if !self.thread_word(thread, "droidless:wait:notified")?.truth()
+                        && !timed
+                        && !interrupted
+                    {
+                        self.wait_worker(crate::workers::Waiting::ObjectWait {
+                            object: receiver,
+                            deadline: self
+                                .thread_word(thread, "droidless:wait:hasDeadline")?
+                                .truth()
+                                .then_some(deadline),
+                        })?;
+                        return Ok(Some(vec![]));
+                    }
+                    self.enter_monitor(receiver)?;
+                    let depth = self.thread_word(thread, "droidless:wait:depth")?.int()? as usize;
+                    if let Some((owner, monitor_depth)) =
+                        self.workers.monitors.get_mut(&receiver.reference()?)
+                        && *owner == thread
+                    {
+                        *monitor_depth = depth.max(1);
+                    }
+                    let fields = &mut self.heap.get_mut(thread)?.fields;
+                    for key in [
+                        "droidless:wait:object",
+                        "droidless:wait:deadline",
+                        "droidless:wait:hasDeadline",
+                        "droidless:wait:notified",
+                        "droidless:wait:depth",
+                    ] {
+                        fields.remove(key);
+                    }
+                    if self.take_interrupt()? {
+                        return Err(fault(
+                            "Ljava/lang/InterruptedException;",
+                            "interrupted while waiting",
+                        ));
+                    }
+                } else {
+                    if self.take_interrupt()? {
+                        return Err(fault(
+                            "Ljava/lang/InterruptedException;",
+                            "interrupted while waiting",
+                        ));
+                    }
+                    let handle = receiver.reference()?;
+                    let depth = self
+                        .workers
+                        .monitors
+                        .get(&handle)
+                        .filter(|(owner, _)| *owner == thread)
+                        .map(|(_, depth)| *depth)
+                        .ok_or_else(|| {
+                            fault(
+                                "Ljava/lang/IllegalMonitorStateException;",
+                                "current thread does not own this monitor",
+                            )
+                        })?;
+                    self.workers.monitors.remove(&handle);
+                    let fields = &mut self.heap.get_mut(thread)?.fields;
+                    fields.insert("droidless:wait:object".into(), vec![receiver]);
+                    fields.insert("droidless:wait:deadline".into(), wide(timeout.unwrap_or(0)));
+                    fields.insert(
+                        "droidless:wait:hasDeadline".into(),
+                        vec![Word::from(i32::from(timeout.is_some()))],
+                    );
+                    fields.insert("droidless:wait:notified".into(), vec![Word::ZERO]);
+                    fields.insert(
+                        "droidless:wait:depth".into(),
+                        vec![Word::from(depth.min(i32::MAX as usize) as i32)],
+                    );
+                    self.wait_worker(crate::workers::Waiting::ObjectWait {
+                        object: receiver,
+                        deadline: timeout,
+                    })?;
+                    return Ok(Some(vec![]));
+                }
+            }
+            ("Ljava/lang/Object;", "notify()V" | "notifyAll()V") => {
+                self.notify_waiters(receiver, sig == "notifyAll()V")?;
+            }
             ("Ljava/lang/System;", "gc()V") => {
                 self.collect();
             }
@@ -300,17 +448,37 @@ impl Runtime {
                 ));
             }
             (THREAD, "currentThread()Ljava/lang/Thread;") => result.push(self.current_thread()?),
+            (THREAD_GROUP, "<init>(Ljava/lang/String;)V") => {
+                let name = arg(1)?;
+                self.heap.text(name)?;
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("name".into(), vec![name]);
+            }
             (
                 THREAD,
-                "<init>(Ljava/lang/String;)V" | "<init>(Ljava/lang/Runnable;Ljava/lang/String;)V",
+                "<init>()V"
+                | "<init>(Ljava/lang/Runnable;)V"
+                | "<init>(Ljava/lang/String;)V"
+                | "<init>(Ljava/lang/Runnable;Ljava/lang/String;)V"
+                | "<init>(Ljava/lang/ThreadGroup;Ljava/lang/Runnable;Ljava/lang/String;)V",
             ) => {
                 self.main_thread()?;
-                let name = arg(if method.parameters.len() == 1 { 1 } else { 2 })?;
-                self.heap.text(name)?;
-                let target = if method.parameters.len() == 1 {
-                    Word::ZERO
-                } else {
-                    arg(1)?
+                let target = match method.parameters.as_slice() {
+                    [parameter] if parameter == "Ljava/lang/Runnable;" => arg(1)?,
+                    [runnable, _] if runnable == "Ljava/lang/Runnable;" => arg(1)?,
+                    [group, runnable, _]
+                        if group == THREAD_GROUP && runnable == "Ljava/lang/Runnable;" =>
+                    {
+                        let group = arg(1)?;
+                        ensure!(
+                            self.is_a(&self.heap.get(group)?.class, THREAD_GROUP),
+                            "expected ThreadGroup"
+                        );
+                        arg(2)?
+                    }
+                    _ => Word::ZERO,
                 };
                 if target != Word::ZERO {
                     ensure!(
@@ -324,6 +492,17 @@ impl Runtime {
                     .checked_add(1)
                     .filter(|id| *id <= i64::MAX as u64)
                     .context("thread ID limit reached")?;
+                let name = match method.parameters.as_slice() {
+                    [parameter] if parameter == "Ljava/lang/String;" => arg(1)?,
+                    [runnable, _] if runnable == "Ljava/lang/Runnable;" => arg(2)?,
+                    [group, runnable, _]
+                        if group == THREAD_GROUP && runnable == "Ljava/lang/Runnable;" =>
+                    {
+                        arg(3)?
+                    }
+                    _ => self.heap.string(format!("Thread-{}", id - 1))?,
+                };
+                self.heap.text(name)?;
                 let fields = &mut self.heap.get_mut(receiver)?.fields;
                 fields.insert("name".into(), vec![name]);
                 fields.insert("target".into(), vec![target]);
@@ -512,21 +691,32 @@ impl Runtime {
                 HANDLER,
                 "sendMessage(Landroid/os/Message;)Z"
                 | "sendMessageDelayed(Landroid/os/Message;J)Z"
-                | "sendMessageAtTime(Landroid/os/Message;J)Z",
+                | "sendMessageAtTime(Landroid/os/Message;J)Z"
+                | "sendEmptyMessage(I)Z"
+                | "sendEmptyMessageDelayed(IJ)Z"
+                | "sendEmptyMessageAtTime(IJ)Z",
             ) => {
                 let when = if method.parameters.len() == 1 {
                     self.uptime_ms()
                 } else {
                     self.message_time(
                         args.get(2..4).context("missing time words")?,
-                        method.name == "sendMessageDelayed",
+                        method.name.ends_with("Delayed"),
                     )?
                 };
-                result.push(Word::from(i32::from(self.enqueue_message(
-                    receiver,
-                    arg(1)?,
-                    when,
-                )?)));
+                let message = if method.name.starts_with("sendEmptyMessage") {
+                    let message = self.new_message(receiver, Word::ZERO, Word::ZERO)?;
+                    self.heap
+                        .get_mut(message)?
+                        .fields
+                        .insert(format!("{MESSAGE}->what:I"), vec![arg(1)?]);
+                    message
+                } else {
+                    arg(1)?
+                };
+                result.push(Word::from(i32::from(
+                    self.enqueue_message(receiver, message, when)?,
+                )));
             }
             (
                 HANDLER,
@@ -575,6 +765,41 @@ impl Runtime {
                             .context("message disappeared")?;
                         self.retire_message(message)?;
                     }
+                }
+            }
+            (
+                HANDLER,
+                "removeMessages(I)V"
+                | "removeMessages(ILjava/lang/Object;)V"
+                | "hasMessages(I)Z"
+                | "hasMessages(ILjava/lang/Object;)Z",
+            ) => {
+                let what = arg(1)?;
+                let token = if method.parameters.len() == 2 {
+                    arg(2)?
+                } else {
+                    Word::ZERO
+                };
+                let mut found = vec![];
+                for (key, message) in &self.queue.pending {
+                    if self.message_word(*message, "target")? == receiver
+                        && self.message_word(*message, "Landroid/os/Message;->what:I")? == what
+                        && (token == Word::ZERO || self.message_word(*message, "obj")? == token)
+                    {
+                        found.push(*key);
+                    }
+                }
+                if method.name == "hasMessages" {
+                    result.push(Word::from(i32::from(!found.is_empty())));
+                    return Ok(Some(result));
+                }
+                for key in found {
+                    let message = self
+                        .queue
+                        .pending
+                        .remove(&key)
+                        .context("message disappeared")?;
+                    self.retire_message(message)?;
                 }
             }
             (HANDLER, "dispatchMessage(Landroid/os/Message;)V") => {

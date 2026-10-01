@@ -73,11 +73,15 @@ pub struct Runtime {
     pub(crate) back_stack: Vec<Word>,
     pub(crate) navigation: std::collections::VecDeque<crate::activities::Navigation>,
     pub(crate) storage: Option<crate::storage::Storage>,
+    pub(crate) virtual_directories: BTreeSet<Vec<String>>,
+    pub(crate) databases: BTreeMap<String, std::sync::Arc<std::sync::Mutex<rusqlite::Connection>>>,
+    pub(crate) database_transactions: BTreeMap<String, Vec<bool>>,
     pub(crate) preferences: BTreeMap<String, Word>,
     pub(crate) queue: crate::scheduling::MainQueue,
     pub(crate) workers: crate::workers::Workers,
     pub(crate) sync_depth: usize,
     pub(crate) native_roots: Vec<Word>,
+    pub(crate) started: std::time::Instant,
 }
 impl Runtime {
     pub(crate) fn reset_budget(&mut self) {
@@ -138,11 +142,22 @@ impl Runtime {
             back_stack: vec![],
             navigation: std::collections::VecDeque::new(),
             storage: None,
+            virtual_directories: [
+                vec![],
+                vec!["files".into()],
+                vec!["cache".into()],
+                vec!["databases".into()],
+                vec!["shared_prefs".into()],
+            ]
+            .into(),
+            databases: BTreeMap::new(),
+            database_transactions: BTreeMap::new(),
             preferences: BTreeMap::new(),
             queue: crate::scheduling::MainQueue::default(),
             workers: crate::workers::Workers::default(),
             sync_depth: 0,
             native_roots: vec![],
+            started: std::time::Instant::now(),
         })
     }
     /// Enable disk storage below a host-approved apps root; `new` is ephemeral.
@@ -461,6 +476,8 @@ impl Runtime {
             Some("Ljava/lang/Class;")
         } else if self.sdk_field(field) {
             Some("I")
+        } else if self.time_unit_field(field).is_some() {
+            Some("Ljava/util/concurrent/TimeUnit;")
         } else {
             None
         };
@@ -476,11 +493,35 @@ impl Runtime {
             }
             return Ok(field.clone());
         }
+        if field.class == "Landroid/graphics/PorterDuff$Mode;" {
+            if !static_field {
+                return Err(fault(
+                    "Ljava/lang/IncompatibleClassChangeError;",
+                    field.key(),
+                ));
+            }
+            if field.ty != "Landroid/graphics/PorterDuff$Mode;"
+                || crate::framework::porter_duff_mode_ordinal(&field.name).is_none()
+            {
+                return Err(fault("Ljava/lang/NoSuchFieldError;", field.key()));
+            }
+            return Ok(field.clone());
+        }
         ensure!(
             self.class_location(&field.class).is_some()
                 || (!static_field
-                    && ["Landroid/util/DisplayMetrics;", "Landroid/os/Message;"]
-                        .contains(&field.class.as_str())),
+                    && [
+                        "Landroid/util/DisplayMetrics;",
+                        "Landroid/util/TypedValue;",
+                        "Landroid/content/res/Configuration;",
+                        "Landroid/os/Message;",
+                        "Landroid/database/Observable;",
+                        "Landroid/content/pm/ActivityInfo;",
+                        "Landroid/content/pm/ApplicationInfo;",
+                        "Landroid/content/pm/PackageInfo;",
+                        "Landroid/content/pm/ResolveInfo;",
+                    ]
+                    .contains(&field.class.as_str())),
             "unsupported framework field {}",
             field.key()
         );
@@ -532,6 +573,20 @@ impl Runtime {
                         ("density", "F"),
                     ]
                     .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/util/TypedValue;"
+                        && [
+                            ("type", "I"),
+                            ("data", "I"),
+                            ("assetCookie", "I"),
+                            ("resourceId", "I"),
+                            ("changingConfigurations", "I"),
+                            ("string", "Ljava/lang/CharSequence;"),
+                            ("float", "F"),
+                            ("density", "I"),
+                        ]
+                        .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/content/res/Configuration;"
+                        && [("keyboard", "I")].contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/os/Message;"
                         && [
                             ("what", "I"),
@@ -539,7 +594,48 @@ impl Runtime {
                             ("arg2", "I"),
                             ("obj", "Ljava/lang/Object;"),
                         ]
-                        .contains(&(field.name.as_str(), field.ty.as_str()))))
+                        .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/database/Observable;"
+                        && [("mObservers", "Ljava/util/ArrayList;")]
+                            .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/content/pm/ActivityInfo;"
+                        && [
+                            ("name", "Ljava/lang/String;"),
+                            ("packageName", "Ljava/lang/String;"),
+                            ("metaData", "Landroid/os/Bundle;"),
+                            ("labelRes", "I"),
+                            ("icon", "I"),
+                            ("applicationInfo", "Landroid/content/pm/ApplicationInfo;"),
+                            ("parentActivityName", "Ljava/lang/String;"),
+                            ("targetActivity", "Ljava/lang/String;"),
+                            ("exported", "Z"),
+                            ("permission", "Ljava/lang/String;"),
+                            ("theme", "I"),
+                        ]
+                        .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/content/pm/ApplicationInfo;"
+                        && [
+                            ("name", "Ljava/lang/String;"),
+                            ("packageName", "Ljava/lang/String;"),
+                            ("metaData", "Landroid/os/Bundle;"),
+                            ("labelRes", "I"),
+                            ("icon", "I"),
+                            ("targetSdkVersion", "I"),
+                            ("flags", "I"),
+                            ("uid", "I"),
+                        ]
+                        .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/content/pm/PackageInfo;"
+                        && [
+                            ("packageName", "Ljava/lang/String;"),
+                            ("versionName", "Ljava/lang/String;"),
+                            ("versionCode", "I"),
+                            ("applicationInfo", "Landroid/content/pm/ApplicationInfo;"),
+                        ]
+                        .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/content/pm/ResolveInfo;"
+                        && [("activityInfo", "Landroid/content/pm/ActivityInfo;")]
+                            .contains(&(field.name.as_str(), field.ty.as_str()))))
             {
                 return Ok(Field {
                     class,
@@ -557,9 +653,18 @@ impl Runtime {
             return Some(parent.into());
         }
         let parent = match class {
+            "Ljava/lang/Enum;" => "Ljava/lang/Object;",
+            "Ljava/lang/ref/WeakReference;" => "Ljava/lang/ref/Reference;",
+            "Ljava/io/FileInputStream;" => "Ljava/io/InputStream;",
+            "Ljava/io/InputStream;" => "Ljava/lang/Object;",
+            "Ljava/io/File;" => "Ljava/lang/Object;",
             "Ljava/lang/Double;" => "Ljava/lang/Number;",
+            "Ljava/lang/Integer;" | "Ljava/lang/Long;" => "Ljava/lang/Number;",
+            "Landroid/graphics/drawable/ColorDrawable;" => "Landroid/graphics/drawable/Drawable;",
             "Ljava/util/HashSet;" => "Ljava/util/AbstractSet;",
+            "Ljava/util/TreeSet;" => "Ljava/util/AbstractSet;",
             "Ljava/util/HashMap;" => "Ljava/util/AbstractMap;",
+            "Ljava/util/WeakHashMap;" => "Ljava/util/AbstractMap;",
             "Ljava/util/LinkedHashMap;" => "Ljava/util/HashMap;",
             "Ljava/util/ArrayList;" => "Ljava/util/AbstractList;",
             "Ldroidless/runtime/UnmodifiableRandomAccessList;" => {
@@ -626,8 +731,24 @@ impl Runtime {
                 work.push("Ljava/lang/CharSequence;".into());
                 work.push("Ljava/io/Serializable;".into());
             }
+            if current == "Ljava/lang/String;" {
+                work.push("Ljava/lang/Comparable;".into());
+            }
+            if current.starts_with("Landroid/view/animation/") && current.ends_with("Interpolator;")
+            {
+                work.extend(
+                    [
+                        "Landroid/view/animation/Interpolator;",
+                        "Landroid/animation/TimeInterpolator;",
+                    ]
+                    .map(String::from),
+                );
+            }
             if current == "Ljava/lang/Thread;" {
                 work.push("Ljava/lang/Runnable;".into());
+            }
+            if current == "Landroid/app/Activity;" {
+                work.push("Landroid/view/Window$Callback;".into());
             }
             if current == "Ljava/util/concurrent/LinkedBlockingQueue;" {
                 work.extend(
@@ -644,6 +765,20 @@ impl Runtime {
             if current == "Ljava/util/HashSet;" {
                 work.extend(
                     [
+                        "Ljava/util/Set;",
+                        "Ljava/util/Collection;",
+                        "Ljava/lang/Iterable;",
+                        "Ljava/lang/Cloneable;",
+                        "Ljava/io/Serializable;",
+                    ]
+                    .map(String::from),
+                );
+            }
+            if current == "Ljava/util/TreeSet;" {
+                work.extend(
+                    [
+                        "Ljava/util/SortedSet;",
+                        "Ljava/util/NavigableSet;",
                         "Ljava/util/Set;",
                         "Ljava/util/Collection;",
                         "Ljava/lang/Iterable;",
@@ -699,7 +834,7 @@ impl Runtime {
             if current == "Ldroidless/runtime/UnmodifiableRandomAccessList;" {
                 work.push("Ljava/util/RandomAccess;".into());
             }
-            if current == "Ljava/util/HashMap;" {
+            if current == "Ljava/util/HashMap;" || current == "Ljava/util/WeakHashMap;" {
                 work.extend(
                     [
                         "Ljava/util/Map;",

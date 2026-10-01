@@ -9,6 +9,7 @@ use droidless_formats::dex::Method;
 const ITERATOR: &str = "Ldroidless/runtime/CollectionIterator;";
 const SNAPSHOT_ITERATOR: &str = "Ldroidless/runtime/SnapshotIterator;";
 const COPY_ON_WRITE_LIST: &str = "Ljava/util/concurrent/CopyOnWriteArrayList;";
+const TREE_SET: &str = "Ljava/util/TreeSet;";
 const READ_ONLY_ITERATOR: &str = "Ldroidless/runtime/UnmodifiableIterator;";
 const READ_ONLY_SET: &str = "Ldroidless/runtime/UnmodifiableSet;";
 const READ_ONLY_LIST: &str = "Ldroidless/runtime/UnmodifiableList;";
@@ -115,12 +116,189 @@ impl Runtime {
         }
         Ok(index as usize)
     }
+    fn tree_compare(&mut self, owner: Word, left: Word, right: Word) -> Result<std::cmp::Ordering> {
+        let comparator = self
+            .heap
+            .get(owner)?
+            .fields
+            .get("droidless:tree-set:comparator")
+            .and_then(|values| values.first())
+            .copied()
+            .unwrap_or(Word::ZERO);
+        let roots = self.native_roots.len();
+        self.native_roots.extend([owner, comparator, left, right]);
+        let comparison = (|| -> Result<i32> {
+            let result = if comparator == Word::ZERO {
+                if !self.is_a(&self.heap.get(left)?.class, "Ljava/lang/Comparable;") {
+                    return Err(fault(
+                        "Ljava/lang/ClassCastException;",
+                        "TreeSet element does not implement Comparable",
+                    ));
+                }
+                self.invoke(
+                    Method {
+                        class: "Ljava/lang/Comparable;".into(),
+                        name: "compareTo".into(),
+                        parameters: vec!["Ljava/lang/Object;".into()],
+                        returns: "I".into(),
+                    },
+                    vec![left, right],
+                    true,
+                )?
+            } else {
+                self.invoke(
+                    Method {
+                        class: "Ljava/util/Comparator;".into(),
+                        name: "compare".into(),
+                        parameters: vec!["Ljava/lang/Object;".into(); 2],
+                        returns: "I".into(),
+                    },
+                    vec![comparator, left, right],
+                    true,
+                )?
+            };
+            result
+                .first()
+                .context("TreeSet comparison returned no value")?
+                .int()
+        })();
+        self.native_roots.truncate(roots);
+        Ok(match comparison? {
+            value if value < 0 => std::cmp::Ordering::Less,
+            0 => std::cmp::Ordering::Equal,
+            _ => std::cmp::Ordering::Greater,
+        })
+    }
+    fn tree_find(&mut self, owner: Word, value: Word) -> Result<Option<usize>> {
+        for (index, existing) in self.collection(owner)?.0.to_vec().into_iter().enumerate() {
+            match self.tree_compare(owner, value, existing)? {
+                std::cmp::Ordering::Less => return Ok(None),
+                std::cmp::Ordering::Equal => return Ok(Some(index)),
+                std::cmp::Ordering::Greater => {}
+            }
+        }
+        Ok(None)
+    }
     pub(crate) fn collection_native(
         &mut self,
         method: &Method,
         args: &[Word],
     ) -> Result<Option<Vec<Word>>> {
         let signature = method.signature();
+        if [
+            "Landroid/util/SparseArray;",
+            "Landroid/util/SparseIntArray;",
+        ]
+        .contains(&method.class.as_str())
+        {
+            let receiver = *args.first().context("SparseArray receiver missing")?;
+            let arg = |index| {
+                args.get(index)
+                    .copied()
+                    .context("SparseArray argument missing")
+            };
+            let result = match signature.as_str() {
+                "<init>()V" | "<init>(I)V" => {
+                    if signature == "<init>(I)V" && arg(1)?.int()? < 0 {
+                        return Err(fault(
+                            "Ljava/lang/IllegalArgumentException;",
+                            "negative SparseArray capacity",
+                        ));
+                    }
+                    self.heap.get_mut(receiver)?.data = Data::SparseArray(Default::default());
+                    vec![]
+                }
+                "put(ILjava/lang/Object;)V"
+                | "append(ILjava/lang/Object;)V"
+                | "put(II)V"
+                | "append(II)V" => {
+                    let key = arg(1)?.int()?;
+                    let value = arg(2)?;
+                    let Data::SparseArray(values) = &mut self.heap.get_mut(receiver)?.data else {
+                        bail!("uninitialized SparseArray");
+                    };
+                    values.insert(key, value);
+                    vec![]
+                }
+                "get(I)Ljava/lang/Object;"
+                | "get(ILjava/lang/Object;)Ljava/lang/Object;"
+                | "get(I)I"
+                | "get(II)I" => {
+                    let key = arg(1)?.int()?;
+                    let Data::SparseArray(values) = &self.heap.get(receiver)?.data else {
+                        bail!("uninitialized SparseArray");
+                    };
+                    vec![values.get(&key).copied().unwrap_or(if args.len() == 3 {
+                        arg(2)?
+                    } else {
+                        Word::ZERO
+                    })]
+                }
+                "size()I" => {
+                    let Data::SparseArray(values) = &self.heap.get(receiver)?.data else {
+                        bail!("uninitialized SparseArray");
+                    };
+                    vec![Word::from(values.len() as i32)]
+                }
+                "clear()V" => {
+                    let Data::SparseArray(values) = &mut self.heap.get_mut(receiver)?.data else {
+                        bail!("uninitialized SparseArray");
+                    };
+                    values.clear();
+                    vec![]
+                }
+                "remove(I)V" | "delete(I)V" => {
+                    let key = arg(1)?.int()?;
+                    let Data::SparseArray(values) = &mut self.heap.get_mut(receiver)?.data else {
+                        bail!("uninitialized SparseArray");
+                    };
+                    values.remove(&key);
+                    vec![]
+                }
+                _ => return Ok(None),
+            };
+            return Ok(Some(result));
+        }
+        if method.class == "Ljava/util/Arrays;"
+            && signature == "asList([Ljava/lang/Object;)Ljava/util/List;"
+        {
+            let array = *args.first().context("Arrays.asList array missing")?;
+            let values = {
+                let Data::Array { values, .. } = &self.heap.get(array)?.data else {
+                    bail!("Arrays.asList requires an object array");
+                };
+                ensure!(
+                    values.len() <= LIMIT,
+                    "collection entry limit reached ({LIMIT})"
+                );
+                values
+                    .iter()
+                    .map(|value| value.first().copied().unwrap_or(Word::ZERO))
+                    .collect()
+            };
+            let list = self.heap.instance("Ljava/util/ArrayList;")?;
+            self.heap.get_mut(list)?.data = Data::Collection { values, version: 0 };
+            return Ok(Some(vec![list]));
+        }
+        if [
+            "Ljava/util/Collection;",
+            "Ljava/util/List;",
+            "Ljava/util/Set;",
+        ]
+        .contains(&method.class.as_str())
+        {
+            let owner = *args.first().context("collection receiver missing")?;
+            let class = self.heap.get(owner)?.class.clone();
+            if class != method.class && self.is_a(&class, &method.class) {
+                return self.collection_native(
+                    &Method {
+                        class,
+                        ..method.clone()
+                    },
+                    args,
+                );
+            }
+        }
         if method.class == READ_ONLY_ITERATOR {
             if signature == "remove()V" {
                 return Err(fault(
@@ -150,6 +328,126 @@ impl Runtime {
             )?));
         }
         if method.class == "Ljava/util/Collections;" {
+            if signature == "sort(Ljava/util/List;Ljava/util/Comparator;)V" {
+                let list = *args.first().context("sort list missing")?;
+                let comparator = *args.get(1).context("sort comparator missing")?;
+                ensure!(
+                    self.is_a(&self.heap.get(list)?.class, "Ljava/util/List;"),
+                    "Collections.sort requires a List"
+                );
+                let (values, version) = self.collection(list)?;
+                let mut source = values.to_vec();
+                let mut target = vec![Word::ZERO; source.len()];
+                let mut width = 1;
+                while width < source.len() {
+                    for start in (0..source.len()).step_by(width * 2) {
+                        let middle = (start + width).min(source.len());
+                        let end = (start + width * 2).min(source.len());
+                        let (mut left, mut right, mut output) = (start, middle, start);
+                        while left < middle && right < end {
+                            let compared = if comparator == Word::ZERO {
+                                ensure!(
+                                    self.is_a(
+                                        &self.heap.get(source[left])?.class,
+                                        "Ljava/lang/Comparable;"
+                                    ),
+                                    fault(
+                                        "Ljava/lang/ClassCastException;",
+                                        "list element is not Comparable"
+                                    )
+                                );
+                                self.invoke(
+                                    Method {
+                                        class: "Ljava/lang/Comparable;".into(),
+                                        name: "compareTo".into(),
+                                        parameters: vec!["Ljava/lang/Object;".into()],
+                                        returns: "I".into(),
+                                    },
+                                    vec![source[left], source[right]],
+                                    true,
+                                )?
+                            } else {
+                                self.invoke(
+                                    Method {
+                                        class: "Ljava/util/Comparator;".into(),
+                                        name: "compare".into(),
+                                        parameters: vec!["Ljava/lang/Object;".into(); 2],
+                                        returns: "I".into(),
+                                    },
+                                    vec![comparator, source[left], source[right]],
+                                    true,
+                                )?
+                            };
+                            ensure!(
+                                self.collection(list)?.1 == version,
+                                fault(
+                                    "Ljava/util/ConcurrentModificationException;",
+                                    "list changed while sorting"
+                                )
+                            );
+                            let order = compared
+                                .first()
+                                .context("compare returned no value")?
+                                .int()?;
+                            if order <= 0 {
+                                target[output] = source[left];
+                                left += 1;
+                            } else {
+                                target[output] = source[right];
+                                right += 1;
+                            }
+                            output += 1;
+                        }
+                        while left < middle {
+                            target[output] = source[left];
+                            left += 1;
+                            output += 1;
+                        }
+                        while right < end {
+                            target[output] = source[right];
+                            right += 1;
+                            output += 1;
+                        }
+                    }
+                    std::mem::swap(&mut source, &mut target);
+                    width *= 2;
+                }
+                self.change_collection(list, source)?;
+                return Ok(Some(vec![]));
+            }
+            if signature == "addAll(Ljava/util/Collection;[Ljava/lang/Object;)Z" {
+                let collection = *args.first().context("addAll collection missing")?;
+                ensure!(
+                    self.is_a(&self.heap.get(collection)?.class, "Ljava/util/Collection;"),
+                    "addAll requires a Collection"
+                );
+                let array = *args.get(1).context("addAll array missing")?;
+                let Data::Array { values, .. } = &self.heap.get(array)?.data else {
+                    bail!("addAll requires an Object array");
+                };
+                let values = values
+                    .iter()
+                    .map(|value| value.first().copied().unwrap_or(Word::ZERO))
+                    .collect::<Vec<_>>();
+                let mut modified = false;
+                for value in values {
+                    modified |= self
+                        .invoke(
+                            Method {
+                                class: "Ljava/util/Collection;".into(),
+                                name: "add".into(),
+                                parameters: vec!["Ljava/lang/Object;".into()],
+                                returns: "Z".into(),
+                            },
+                            vec![collection, value],
+                            true,
+                        )?
+                        .first()
+                        .context("Collection.add returned no result")?
+                        .truth();
+                }
+                return Ok(Some(vec![Word::from(i32::from(modified))]));
+            }
             let (interface, wrapper_class) = match signature.as_str() {
                 "unmodifiableSet(Ljava/util/Set;)Ljava/util/Set;" => {
                     ("Ljava/util/Set;", READ_ONLY_SET)
@@ -269,14 +567,23 @@ impl Runtime {
             }
             return Ok(Some(result));
         }
-        if method.class == "Ljava/util/HashMap;" || method.class == "Ljava/util/LinkedHashMap;" {
+        if [
+            "Ljava/util/HashMap;",
+            "Ljava/util/LinkedHashMap;",
+            "Ljava/util/WeakHashMap;",
+        ]
+        .contains(&method.class.as_str())
+        {
+            // ponytail: WeakHashMap keys remain strong until guest garbage collection is modeled.
             return self.map_native(method, args);
         }
         let cow = method.class == COPY_ON_WRITE_LIST;
         let list = method.class == "Ljava/util/ArrayList;" || cow;
+        let tree_set = method.class == TREE_SET;
         let snapshot_iterator = method.class == SNAPSHOT_ITERATOR;
         if !list
             && method.class != "Ljava/util/HashSet;"
+            && !tree_set
             && method.class != ITERATOR
             && !snapshot_iterator
         {
@@ -286,6 +593,61 @@ impl Runtime {
         let arg = |n| args.get(n).copied().context("collection argument missing");
         let sig = method.signature();
         let mut result = vec![];
+        if sig == "addAll(Ljava/util/Collection;)Z" || sig == "addAll(ILjava/util/Collection;)Z" {
+            let indexed = sig.starts_with("addAll(I");
+            let source = arg(if indexed { 2 } else { 1 })?;
+            ensure!(
+                self.is_a(&self.heap.get(source)?.class, "Ljava/util/Collection;"),
+                "addAll source must be a Collection"
+            );
+            let values = self.collection(source)?.0.to_vec();
+            let mut insertion = if indexed {
+                Some(self.list_index(receiver, arg(1)?, true)?)
+            } else {
+                None
+            };
+            let mut modified = false;
+            for value in values {
+                let (name, parameters, returns, forwarded) = if let Some(index) = &mut insertion {
+                    let position = *index;
+                    *index += 1;
+                    (
+                        "add",
+                        vec!["I".into(), "Ljava/lang/Object;".into()],
+                        "V",
+                        vec![receiver, Word::from(position as i32), value],
+                    )
+                } else {
+                    (
+                        "add",
+                        vec!["Ljava/lang/Object;".into()],
+                        "Z",
+                        vec![receiver, value],
+                    )
+                };
+                let added = self.invoke(
+                    Method {
+                        class: if indexed {
+                            "Ljava/util/List;"
+                        } else {
+                            "Ljava/util/Collection;"
+                        }
+                        .into(),
+                        name: name.into(),
+                        parameters,
+                        returns: returns.into(),
+                    },
+                    forwarded,
+                    true,
+                )?;
+                modified |= indexed
+                    || added
+                        .first()
+                        .context("Collection.add returned no value")?
+                        .truth();
+            }
+            return Ok(Some(vec![Word::from(i32::from(modified))]));
+        }
         if method.class == ITERATOR || snapshot_iterator {
             if snapshot_iterator && sig == "remove()V" {
                 return Err(fault(
@@ -369,7 +731,16 @@ impl Runtime {
             "invalid collection receiver"
         );
         match sig.as_str() {
-            "<init>()V" | "<init>(I)V" if !cow || sig == "<init>()V" => {
+            "<init>(Ljava/util/Collection;)V" if list => {
+                let source = arg(1)?;
+                ensure!(
+                    self.is_a(&self.heap.get(source)?.class, "Ljava/util/Collection;"),
+                    "ArrayList source must be a Collection"
+                );
+                let values = self.collection(source)?.0.to_vec();
+                self.heap.get_mut(receiver)?.data = Data::Collection { values, version: 0 };
+            }
+            "<init>()V" | "<init>(I)V" if !tree_set && (!cow || sig == "<init>()V") => {
                 if sig == "<init>(I)V" && arg(1)?.int()? < 0 {
                     return Err(fault(
                         "Ljava/lang/IllegalArgumentException;",
@@ -381,16 +752,98 @@ impl Runtime {
                     version: 0,
                 }
             }
+            "<init>()V" | "<init>(Ljava/util/Comparator;)V" if tree_set => {
+                let comparator = if sig == "<init>()V" {
+                    Word::ZERO
+                } else {
+                    arg(1)?
+                };
+                self.heap.get_mut(receiver)?.data = Data::Collection {
+                    values: vec![],
+                    version: 0,
+                };
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:tree-set:comparator".into(), vec![comparator]);
+            }
+            "<init>(Ljava/util/SortedSet;)V" if tree_set => {
+                let source = arg(1)?;
+                ensure!(
+                    self.is_a(&self.heap.get(source)?.class, "Ljava/util/SortedSet;"),
+                    "TreeSet source must be a SortedSet"
+                );
+                let values = self.collection(source)?.0.to_vec();
+                let comparator = self
+                    .heap
+                    .get(source)?
+                    .fields
+                    .get("droidless:tree-set:comparator")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO);
+                self.heap.get_mut(receiver)?.data = Data::Collection { values, version: 0 };
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:tree-set:comparator".into(), vec![comparator]);
+            }
+            "comparator()Ljava/util/Comparator;" if tree_set => result.push(
+                self.heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:tree-set:comparator")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO),
+            ),
+            "first()Ljava/lang/Object;" | "last()Ljava/lang/Object;" if tree_set => {
+                let values = self.collection(receiver)?.0;
+                let value = if sig == "first()Ljava/lang/Object;" {
+                    values.first()
+                } else {
+                    values.last()
+                }
+                .copied()
+                .ok_or_else(|| fault("Ljava/util/NoSuchElementException;", "TreeSet is empty"))?;
+                result.push(value);
+            }
             "size()I" => result.push(Word::from(self.collection(receiver)?.0.len() as i32)),
             "isEmpty()Z" => result.push(Word::from(i32::from(
                 self.collection(receiver)?.0.is_empty(),
             ))),
-            "contains(Ljava/lang/Object;)Z" => result.push(Word::from(i32::from(
-                self.collection_find(receiver, arg(1)?, false)?.is_some(),
-            ))),
+            "contains(Ljava/lang/Object;)Z" => {
+                let found = if tree_set {
+                    self.tree_find(receiver, arg(1)?)?.is_some()
+                } else {
+                    self.collection_find(receiver, arg(1)?, false)?.is_some()
+                };
+                result.push(Word::from(i32::from(found)));
+            }
             "add(Ljava/lang/Object;)Z" => {
                 let value = arg(1)?;
                 value.reference()?;
+                if tree_set {
+                    let mut values = self.collection(receiver)?.0.to_vec();
+                    let mut insertion = values.len();
+                    for (index, existing) in values.iter().copied().enumerate() {
+                        match self.tree_compare(receiver, value, existing)? {
+                            std::cmp::Ordering::Less => {
+                                insertion = index;
+                                break;
+                            }
+                            std::cmp::Ordering::Equal => {
+                                result.push(Word::ZERO);
+                                return Ok(Some(result));
+                            }
+                            std::cmp::Ordering::Greater => {}
+                        }
+                    }
+                    values.insert(insertion, value);
+                    self.change_collection(receiver, values)?;
+                    result.push(Word::from(1));
+                    return Ok(Some(result));
+                }
                 let exists = !list && self.collection_find(receiver, value, false)?.is_some();
                 if !exists {
                     let mut values = self.collection(receiver)?.0.to_vec();
@@ -401,7 +854,11 @@ impl Runtime {
             }
             "remove(Ljava/lang/Object;)Z" => {
                 let version = self.collection(receiver)?.1;
-                let index = self.collection_find(receiver, arg(1)?, false)?;
+                let index = if tree_set {
+                    self.tree_find(receiver, arg(1)?)?
+                } else {
+                    self.collection_find(receiver, arg(1)?, false)?
+                };
                 if cow {
                     ensure!(
                         self.collection(receiver)?.1 == version,
@@ -483,10 +940,36 @@ impl Runtime {
         Ok(Some(result))
     }
     fn map(&self, owner: Word) -> Result<(&[(Word, Word)], u32)> {
-        let Data::Map { entries, version } = &self.heap.get(owner)?.data else {
+        let Data::Map {
+            entries, version, ..
+        } = &self.heap.get(owner)?.data
+        else {
             bail!("uninitialized map");
         };
         Ok((entries, *version))
+    }
+    fn map_access(&mut self, owner: Word, index: usize) -> Result<()> {
+        let (entries, version, access_order) = match &self.heap.get(owner)?.data {
+            Data::Map {
+                entries,
+                version,
+                access_order,
+            } => (entries.clone(), *version, *access_order),
+            _ => bail!("uninitialized map"),
+        };
+        if !access_order || index + 1 == entries.len() {
+            return Ok(());
+        }
+        let mut entries = entries;
+        let entry = entries.remove(index);
+        entries.push(entry);
+        let version = version.checked_add(1).context("map version exhausted")?;
+        self.heap.get_mut(owner)?.data = Data::Map {
+            entries,
+            version,
+            access_order,
+        };
+        Ok(())
     }
     fn map_find(&mut self, owner: Word, key: Word) -> Result<Option<usize>> {
         key.reference()?;
@@ -516,23 +999,40 @@ impl Runtime {
             "LinkedHashMap subclasses and eviction hooks are unsupported"
         );
         ensure!(
-            self.is_a(&self.heap.get(owner)?.class, "Ljava/util/HashMap;"),
+            class == "Ljava/util/WeakHashMap;"
+                || self.is_a(&self.heap.get(owner)?.class, "Ljava/util/HashMap;"),
             "invalid HashMap receiver"
         );
         let arg = |n| args.get(n).copied().context("map argument missing");
         let sig = method.signature();
         let mut result = vec![];
         match sig.as_str() {
-            "<init>()V" | "<init>(I)V" => {
-                if sig == "<init>(I)V" && arg(1)?.int()? < 0 {
+            "<init>()V" | "<init>(I)V" | "<init>(IF)V" | "<init>(IFZ)V" => {
+                if sig != "<init>()V" && arg(1)?.int()? < 0 {
                     return Err(fault(
                         "Ljava/lang/IllegalArgumentException;",
                         "negative map capacity",
                     ));
                 }
+                let has_load_factor = sig == "<init>(IF)V" || sig == "<init>(IFZ)V";
+                if has_load_factor {
+                    let load_factor = f32::from_bits(arg(2)?.int()? as u32);
+                    if !load_factor.is_finite() || load_factor <= 0.0 {
+                        return Err(fault(
+                            "Ljava/lang/IllegalArgumentException;",
+                            "map load factor must be positive and finite",
+                        ));
+                    }
+                }
+                let access_order = if sig == "<init>(IFZ)V" {
+                    arg(3)?.int()? != 0
+                } else {
+                    false
+                };
                 self.heap.get_mut(owner)?.data = Data::Map {
                     entries: vec![],
                     version: 0,
+                    access_order,
                 };
             }
             "size()I" => result.push(Word::from(self.map(owner)?.0.len() as i32)),
@@ -559,9 +1059,20 @@ impl Runtime {
             "get(Ljava/lang/Object;)Ljava/lang/Object;" => {
                 let index = self.map_find(owner, arg(1)?)?;
                 result.push(match index {
-                    Some(i) => self.map(owner)?.0[i].1,
+                    Some(i) => {
+                        let value = self.map(owner)?.0[i].1;
+                        self.map_access(owner, i)?;
+                        value
+                    }
                     None => Word::ZERO,
                 });
+            }
+            "values()Ljava/util/Collection;" => {
+                // ponytail: Map.values is a snapshot; add a live view if callers mutate during iteration.
+                let values = self.map(owner)?.0.iter().map(|(_, value)| *value).collect();
+                let view = self.heap.instance("Ljava/util/ArrayList;")?;
+                self.heap.get_mut(view)?.data = Data::Collection { values, version: 0 };
+                result.push(view);
             }
             "putAll(Ljava/util/Map;)V" => {
                 let source = arg(1)?;
@@ -569,7 +1080,9 @@ impl Runtime {
                     ensure!(
                         matches!(
                             self.heap.get(map)?.class.as_str(),
-                            "Ljava/util/HashMap;" | "Ljava/util/LinkedHashMap;"
+                            "Ljava/util/HashMap;"
+                                | "Ljava/util/LinkedHashMap;"
+                                | "Ljava/util/WeakHashMap;"
                         ),
                         "unsupported putAll with custom Map implementations or subclass hooks"
                     );
@@ -609,9 +1122,18 @@ impl Runtime {
                 let index = self.map_find(owner, arg(1)?)?;
                 let (entries, mut version) = self.map(owner)?;
                 let mut entries = entries.to_vec();
+                let access_order = match &self.heap.get(owner)?.data {
+                    Data::Map { access_order, .. } => *access_order,
+                    _ => bail!("uninitialized map"),
+                };
                 let old = if let Some(index) = index {
                     let old = entries[index].1;
                     entries[index].1 = arg(2)?;
+                    if access_order && index + 1 != entries.len() {
+                        let entry = entries.remove(index);
+                        entries.push(entry);
+                        version = version.checked_add(1).context("map version exhausted")?;
+                    }
                     old
                 } else {
                     ensure!(entries.len() < LIMIT, "map entry limit reached ({LIMIT})");
@@ -619,7 +1141,11 @@ impl Runtime {
                     version = version.checked_add(1).context("map version exhausted")?;
                     Word::ZERO
                 };
-                self.heap.get_mut(owner)?.data = Data::Map { entries, version };
+                self.heap.get_mut(owner)?.data = Data::Map {
+                    entries,
+                    version,
+                    access_order,
+                };
                 result.push(old);
             }
             "remove(Ljava/lang/Object;)Ljava/lang/Object;" => {
@@ -629,7 +1155,15 @@ impl Runtime {
                     let mut entries = entries.to_vec();
                     let old = entries.remove(index).1;
                     let version = version.checked_add(1).context("map version exhausted")?;
-                    self.heap.get_mut(owner)?.data = Data::Map { entries, version };
+                    let access_order = match &self.heap.get(owner)?.data {
+                        Data::Map { access_order, .. } => *access_order,
+                        _ => bail!("uninitialized map"),
+                    };
+                    self.heap.get_mut(owner)?.data = Data::Map {
+                        entries,
+                        version,
+                        access_order,
+                    };
                     old
                 } else {
                     Word::ZERO
@@ -642,9 +1176,14 @@ impl Runtime {
                     .1
                     .checked_add(1)
                     .context("map version exhausted")?;
+                let access_order = match &self.heap.get(owner)?.data {
+                    Data::Map { access_order, .. } => *access_order,
+                    _ => bail!("uninitialized map"),
+                };
                 self.heap.get_mut(owner)?.data = Data::Map {
                     entries: vec![],
                     version,
+                    access_order,
                 };
             }
             "equals(Ljava/lang/Object;)Z" | "hashCode()I" | "toString()Ljava/lang/String;" => {
@@ -653,5 +1192,95 @@ impl Runtime {
             _ => return Ok(None),
         }
         Ok(Some(result))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use droidless_formats::{apk::Apk, dex::Method};
+
+    fn call(
+        vm: &mut Runtime,
+        class: &str,
+        name: &str,
+        parameters: &[&str],
+        returns: &str,
+        args: &[Word],
+    ) -> Vec<Word> {
+        vm.invoke(
+            Method {
+                class: class.into(),
+                name: name.into(),
+                parameters: parameters
+                    .iter()
+                    .map(|parameter| (*parameter).into())
+                    .collect(),
+                returns: returns.into(),
+            },
+            args.to_vec(),
+            false,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn tree_set_sorts_compares_and_iterates_strings() {
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/intents.apk")).unwrap(),
+        )
+        .unwrap();
+        let set = vm.new_instance(TREE_SET).unwrap();
+        call(&mut vm, TREE_SET, "<init>", &[], "V", &[set]);
+        for item in ["z", "a", "m", "a"] {
+            let value = vm.heap.string(item.into()).unwrap();
+            call(
+                &mut vm,
+                TREE_SET,
+                "add",
+                &["Ljava/lang/Object;"],
+                "Z",
+                &[set, value],
+            );
+        }
+        assert_eq!(
+            call(&mut vm, TREE_SET, "size", &[], "I", &[set])[0]
+                .int()
+                .unwrap(),
+            3
+        );
+        let iterator = call(
+            &mut vm,
+            TREE_SET,
+            "iterator",
+            &[],
+            "Ljava/util/Iterator;",
+            &[set],
+        )[0];
+        let actual = (0..3)
+            .map(|_| {
+                let value = call(
+                    &mut vm,
+                    ITERATOR,
+                    "next",
+                    &[],
+                    "Ljava/lang/Object;",
+                    &[iterator],
+                )[0];
+                vm.heap.text(value).unwrap().to_owned()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(actual, ["a", "m", "z"]);
+        let first = call(
+            &mut vm,
+            TREE_SET,
+            "first",
+            &[],
+            "Ljava/lang/Object;",
+            &[set],
+        )[0];
+        let last = call(&mut vm, TREE_SET, "last", &[], "Ljava/lang/Object;", &[set])[0];
+        assert_eq!(vm.heap.text(first).unwrap(), "a");
+        assert_eq!(vm.heap.text(last).unwrap(), "z");
     }
 }

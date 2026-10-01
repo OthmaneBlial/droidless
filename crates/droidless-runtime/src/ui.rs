@@ -27,16 +27,25 @@ pub struct View {
 }
 impl View {
     pub fn for_class(class: &str) -> Option<Self> {
-        let name = class
-            .strip_prefix("Landroid/widget/")
-            .and_then(|c| c.strip_suffix(';'))
-            .or_else(|| {
-                if class == "Landroid/view/View;" || class == "Landroid/view/ViewGroup;" {
-                    Some("View")
-                } else {
-                    None
-                }
-            })?;
+        let name = match class {
+            "Landroid/support/v7/widget/FitWindowsFrameLayout;"
+            | "Landroid/support/v7/widget/ContentFrameLayout;"
+            | "Landroid/support/v4/widget/DrawerLayout;"
+            | "Landroid/support/design/widget/NavigationView;"
+            | "Landroid/support/design/internal/NavigationMenuView;"
+            | "Landroid/support/v7/widget/RecyclerView;" => "FrameLayout",
+            "Landroid/support/v7/widget/ViewStubCompat;" => "View",
+            _ => class
+                .strip_prefix("Landroid/widget/")
+                .and_then(|c| c.strip_suffix(';'))
+                .or_else(|| {
+                    if class == "Landroid/view/View;" || class == "Landroid/view/ViewGroup;" {
+                        Some("View")
+                    } else {
+                        None
+                    }
+                })?,
+        };
         if ![
             "View",
             "LinearLayout",

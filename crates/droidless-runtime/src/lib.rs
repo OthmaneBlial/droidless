@@ -1,15 +1,25 @@
 //! DROIDLESS's own register interpreter and Android compatibility layer.
 mod activities;
+mod animations;
+mod atomics;
 mod collections;
 mod components;
+mod enums;
+mod file_io;
 mod framework;
 pub mod heap;
 mod interpreter;
 mod preferences;
 mod queues;
 mod reflection;
+mod regex_compat;
 mod scheduling;
+mod sqlite;
 mod storage;
+mod string_format;
+mod system;
+mod system_services;
+mod time_units;
 pub mod ui;
 mod vm;
 mod workers;

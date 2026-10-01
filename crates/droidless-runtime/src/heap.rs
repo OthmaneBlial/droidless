@@ -30,13 +30,20 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         | "Ljava/util/NoSuchElementException;"
         | "Ljava/util/ConcurrentModificationException;"
         | "Ljava/lang/IndexOutOfBoundsException;" => "Ljava/lang/RuntimeException;",
-        "Ljava/lang/NumberFormatException;" => "Ljava/lang/IllegalArgumentException;",
+        "Ljava/lang/NumberFormatException;" | "Ljava/util/regex/PatternSyntaxException;" => {
+            "Ljava/lang/IllegalArgumentException;"
+        }
         "Ljava/lang/IllegalThreadStateException;" => "Ljava/lang/IllegalArgumentException;",
         "Ljava/lang/InterruptedException;" => "Ljava/lang/Exception;",
         "Ljava/lang/ArrayIndexOutOfBoundsException;"
         | "Ljava/lang/StringIndexOutOfBoundsException;" => "Ljava/lang/IndexOutOfBoundsException;",
         "Ljava/lang/RuntimeException;" => "Ljava/lang/Exception;",
+        "Landroid/database/sqlite/SQLiteDoneException;" => {
+            "Landroid/database/sqlite/SQLiteException;"
+        }
+        "Landroid/database/sqlite/SQLiteException;" => "Ljava/lang/RuntimeException;",
         "Ljava/lang/ClassNotFoundException;"
+        | "Ljava/lang/NoSuchMethodException;"
         | "Ljava/lang/InstantiationException;"
         | "Ljava/lang/IllegalAccessException;" => "Ljava/lang/ReflectiveOperationException;",
         "Ljava/lang/ReflectiveOperationException;" => "Ljava/lang/Exception;",
@@ -51,6 +58,8 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         "Ljava/lang/Error;" => "Ljava/lang/Throwable;",
         "Ljava/lang/Exception;" => "Ljava/lang/Throwable;",
         "Ljava/lang/Throwable;" => "Ljava/lang/Object;",
+        "Ljava/io/FileNotFoundException;" => "Ljava/io/IOException;",
+        "Ljava/io/IOException;" => "Ljava/lang/Exception;",
         _ => return None,
     })
 }
@@ -105,11 +114,15 @@ pub enum Data {
     Instance,
     String(String),
     Builder(String),
+    File(String),
     Array {
         element: String,
         values: Vec<Vec<Word>>,
     },
     Bundle(BTreeMap<String, (String, Vec<Word>)>),
+    TypedArray(Vec<Option<droidless_formats::xml::Value>>),
+    Attributes(std::collections::BTreeMap<String, droidless_formats::xml::Value>),
+    ReflectedMethod(droidless_formats::dex::Method),
     Collection {
         values: Vec<Word>,
         version: u32,
@@ -117,7 +130,103 @@ pub enum Data {
     Map {
         entries: Vec<(Word, Word)>,
         version: u32,
+        access_order: bool,
     },
+    SparseArray(std::collections::BTreeMap<i32, Word>),
+    ByteStream {
+        bytes: Vec<u8>,
+        position: usize,
+        closed: bool,
+    },
+    AtomicInteger(std::sync::Arc<std::sync::atomic::AtomicI32>),
+    AtomicLong(std::sync::Arc<std::sync::atomic::AtomicI64>),
+    AtomicBoolean(std::sync::Arc<std::sync::atomic::AtomicBool>),
+    Pattern(std::sync::Arc<regex::Regex>),
+    Matcher {
+        groups: Option<Vec<Option<(usize, usize)>>>,
+        next_search: usize,
+    },
+    TimeUnit(TimeUnit),
+    SqlDatabase(String),
+    SqlStatement {
+        database: String,
+        sql: String,
+        bindings: Vec<SqlValue>,
+    },
+    Cursor {
+        columns: Vec<String>,
+        rows: Vec<Vec<SqlValue>>,
+        position: i32,
+        closed: bool,
+    },
+    ContentValues(BTreeMap<String, SqlValue>),
+    NetworkRequestBuilder(Vec<i32>),
+    NetworkRequest(Vec<i32>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SqlValue {
+    Null,
+    Integer(i64),
+    Real(f64),
+    Text(String),
+    Blob(Vec<u8>),
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TimeUnit {
+    Nanoseconds,
+    Microseconds,
+    Milliseconds,
+    Seconds,
+    Minutes,
+    Hours,
+    Days,
+}
+impl TimeUnit {
+    pub(crate) fn named(name: &str) -> Option<Self> {
+        Some(match name {
+            "NANOSECONDS" => Self::Nanoseconds,
+            "MICROSECONDS" => Self::Microseconds,
+            "MILLISECONDS" => Self::Milliseconds,
+            "SECONDS" => Self::Seconds,
+            "MINUTES" => Self::Minutes,
+            "HOURS" => Self::Hours,
+            "DAYS" => Self::Days,
+            _ => return None,
+        })
+    }
+    fn nanos(self) -> u64 {
+        match self {
+            Self::Nanoseconds => 1,
+            Self::Microseconds => 1_000,
+            Self::Milliseconds => 1_000_000,
+            Self::Seconds => 1_000_000_000,
+            Self::Minutes => 60_000_000_000,
+            Self::Hours => 3_600_000_000_000,
+            Self::Days => 86_400_000_000_000,
+        }
+    }
+    pub(crate) fn convert(self, target: Self, value: i64) -> i64 {
+        let (source, destination) = (self.nanos(), target.nanos());
+        if source == destination {
+            value
+        } else if source > destination {
+            value.saturating_mul((source / destination) as i64)
+        } else {
+            value / (destination / source) as i64
+        }
+    }
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Nanoseconds => "NANOSECONDS",
+            Self::Microseconds => "MICROSECONDS",
+            Self::Milliseconds => "MILLISECONDS",
+            Self::Seconds => "SECONDS",
+            Self::Minutes => "MINUTES",
+            Self::Hours => "HOURS",
+            Self::Days => "DAYS",
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub struct Object {
@@ -215,6 +324,9 @@ impl Heap {
             }
             if let Data::Map { entries, .. } = &object.data {
                 work.extend(entries.iter().flat_map(|(key, value)| [*key, *value]));
+            }
+            if let Data::SparseArray(values) = &object.data {
+                work.extend(values.values().copied());
             }
             if let Some(view) = &object.view {
                 work.extend(view.children.iter().copied());

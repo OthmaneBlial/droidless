@@ -288,6 +288,7 @@ fn collection_limits_and_unsupported_overrides_fail_without_mutation() {
     vm.heap.get_mut(map).unwrap().data = Data::Map {
         entries: values.into_iter().map(|key| (key, Word::ZERO)).collect(),
         version: 0,
+        access_order: false,
     };
     let put = Method {
         class: "Ljava/util/HashMap;".into(),
@@ -318,6 +319,7 @@ fn collection_limits_and_unsupported_overrides_fail_without_mutation() {
     vm.heap.get_mut(source).unwrap().data = Data::Map {
         entries: vec![(existing, new_key), (new_key, Word::ZERO)],
         version: 0,
+        access_order: false,
     };
     let copy = Method {
         class: "Ljava/util/Map;".into(),
@@ -332,7 +334,10 @@ fn collection_limits_and_unsupported_overrides_fail_without_mutation() {
         )
         .contains("entry limit")
     );
-    let Data::Map { entries, version } = &vm.heap.get(map).unwrap().data else {
+    let Data::Map {
+        entries, version, ..
+    } = &vm.heap.get(map).unwrap().data
+    else {
         panic!("map lost");
     };
     assert_eq!(entries.len(), 16_384);
@@ -378,4 +383,80 @@ fn collection_limits_and_unsupported_overrides_fail_without_mutation() {
         vm.heap.get(map).is_err(),
         "failed bulk copy retained its target"
     );
+}
+
+#[test]
+fn linked_hash_map_access_order_supports_lru_lookup() {
+    let mut vm = runtime();
+    let map = vm.heap.instance("Ljava/util/LinkedHashMap;").unwrap();
+    let constructor = Method {
+        class: "Ljava/util/LinkedHashMap;".into(),
+        name: "<init>".into(),
+        parameters: vec!["I".into(), "F".into(), "Z".into()],
+        returns: "V".into(),
+    };
+    vm.invoke(
+        constructor.clone(),
+        vec![
+            map,
+            Word::from(4),
+            Word::Bits(0.75f32.to_bits()),
+            Word::from(1),
+        ],
+        false,
+    )
+    .unwrap();
+    let keys = [
+        vm.heap.instance("Ljava/lang/Object;").unwrap(),
+        vm.heap.instance("Ljava/lang/Object;").unwrap(),
+    ];
+    let values = [
+        vm.heap.instance("Ljava/lang/Object;").unwrap(),
+        vm.heap.instance("Ljava/lang/Object;").unwrap(),
+    ];
+    let put = Method {
+        class: "Ljava/util/Map;".into(),
+        name: "put".into(),
+        parameters: vec!["Ljava/lang/Object;".into(), "Ljava/lang/Object;".into()],
+        returns: "Ljava/lang/Object;".into(),
+    };
+    for index in 0..2 {
+        vm.invoke(put.clone(), vec![map, keys[index], values[index]], true)
+            .unwrap();
+    }
+    let get = Method {
+        class: "Ljava/util/Map;".into(),
+        name: "get".into(),
+        parameters: vec!["Ljava/lang/Object;".into()],
+        returns: "Ljava/lang/Object;".into(),
+    };
+    assert_eq!(
+        vm.invoke(get, vec![map, keys[0]], true).unwrap(),
+        vec![values[0]]
+    );
+    let Data::Map {
+        entries,
+        access_order,
+        ..
+    } = &vm.heap.get(map).unwrap().data
+    else {
+        panic!("map lost");
+    };
+    assert!(*access_order);
+    assert_eq!(entries, &[(keys[1], values[1]), (keys[0], values[0])]);
+
+    let invalid = vm.heap.instance("Ljava/util/LinkedHashMap;").unwrap();
+    let error = vm
+        .invoke(
+            constructor,
+            vec![
+                invalid,
+                Word::from(4),
+                Word::Bits(0.0f32.to_bits()),
+                Word::from(1),
+            ],
+            false,
+        )
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("map load factor"));
 }

@@ -707,6 +707,10 @@ impl Runtime {
                         vec![self.class_object(primitive)?]
                     } else if self.sdk_field(&field) {
                         vec![Word::from(crate::framework::SDK_INT)]
+                    } else if let Some(unit) = self.time_unit_field(&field) {
+                        vec![self.time_unit_object(unit)?]
+                    } else if field.class == "Landroid/graphics/PorterDuff$Mode;" {
+                        vec![self.porter_duff_mode(&field.name)?]
                     } else if static_field {
                         self.statics
                             .get(&key)
@@ -722,7 +726,10 @@ impl Runtime {
                     };
                     self.put(f, dest, &value)?;
                 } else {
-                    if self.primitive_field(&field).is_some() || self.sdk_field(&field) {
+                    if self.primitive_field(&field).is_some()
+                        || self.sdk_field(&field)
+                        || self.time_unit_field(&field).is_some()
+                    {
                         return Err(fault(
                             "Ljava/lang/IllegalAccessError;",
                             format!("cannot write final field {key}"),

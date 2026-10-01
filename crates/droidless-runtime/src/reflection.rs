@@ -1,6 +1,6 @@
 //! APK-local class lookup and reflective construction, without host class loading.
 use crate::{
-    heap::{Word, fault},
+    heap::{Data, Word, fault},
     vm::Runtime,
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -89,6 +89,63 @@ impl Runtime {
             .context("Class has no descriptor")?;
         Ok(self.heap.text(name)?.to_owned())
     }
+    fn reflected_parameters(&self, array: Word) -> Result<Vec<String>> {
+        if array == Word::ZERO {
+            return Ok(vec![]);
+        }
+        let Data::Array { values, .. } = &self.heap.get(array)?.data else {
+            bail!("reflection parameter list must be Class[]");
+        };
+        values
+            .iter()
+            .map(|value| self.reflected_class(*value.first().context("empty Class[] element")?))
+            .collect()
+    }
+    fn reflected_method(
+        &self,
+        class: &str,
+        name: &str,
+        parameters: &[String],
+        inherited: bool,
+    ) -> Option<Method> {
+        let mut class = class.to_owned();
+        for _ in 0..64 {
+            if let Some((dex, index)) = self.class_location(&class) {
+                let definition = &self.apk.dex[dex].classes[index];
+                if let Some(method) = definition
+                    .methods
+                    .iter()
+                    .map(|encoded| &self.apk.dex[dex].methods[encoded.index])
+                    .find(|method| method.name == name && method.parameters == parameters)
+                {
+                    return Some(method.clone());
+                }
+                if !inherited {
+                    return None;
+                }
+                let Some(parent) = &definition.super_class else {
+                    return None;
+                };
+                class = parent.clone();
+            } else {
+                if class == "Landroid/view/View;" {
+                    let platform_method = (name == "computeFitSystemWindows"
+                        && parameters == ["Landroid/graphics/Rect;", "Landroid/graphics/Rect;"])
+                        || (name == "makeOptionalFitsSystemWindows" && parameters.is_empty());
+                    if platform_method {
+                        return Some(Method {
+                            class,
+                            name: name.into(),
+                            parameters: parameters.to_vec(),
+                            returns: "V".into(),
+                        });
+                    }
+                }
+                return None;
+            }
+        }
+        None
+    }
     pub(crate) fn reflection_native(
         &mut self,
         method: &Method,
@@ -124,6 +181,70 @@ impl Runtime {
             ("Ljava/lang/Class;", "getName()Ljava/lang/String;") => {
                 let class = self.reflected_class(arg(0)?)?;
                 result.push(self.heap.string(class_name(&class))?);
+            }
+            ("Ljava/lang/Class;", "getSimpleName()Ljava/lang/String;") => {
+                let class = self.reflected_class(arg(0)?)?;
+                let simple = if class.starts_with('[') {
+                    let rank = class
+                        .chars()
+                        .take_while(|character| *character == '[')
+                        .count();
+                    format!(
+                        "{}{}",
+                        class_name(&class[rank..]).rsplit('.').next().unwrap_or(""),
+                        "[]".repeat(rank)
+                    )
+                } else {
+                    class_name(&class)
+                        .rsplit(['.', '$'])
+                        .next()
+                        .unwrap_or("")
+                        .to_owned()
+                };
+                result.push(self.heap.string(simple)?);
+            }
+            ("Ljava/lang/Class;", "cast(Ljava/lang/Object;)Ljava/lang/Object;") => {
+                let class = self.reflected_class(arg(0)?)?;
+                let object = arg(1)?;
+                if object != Word::ZERO && !self.is_a(&self.heap.get(object)?.class, &class) {
+                    return Err(fault(
+                        "Ljava/lang/ClassCastException;",
+                        format!("cannot cast to {}", class_name(&class)),
+                    ));
+                }
+                result.push(object);
+            }
+            (
+                "Ljava/lang/Class;",
+                "getDeclaredMethod(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;",
+            )
+            | (
+                "Ljava/lang/Class;",
+                "getMethod(Ljava/lang/String;[Ljava/lang/Class;)Ljava/lang/reflect/Method;",
+            ) => {
+                let class = self.reflected_class(arg(0)?)?;
+                let name = self.heap.text(arg(1)?)?.to_owned();
+                let parameters = self.reflected_parameters(arg(2)?)?;
+                let inherited = method.name == "getMethod";
+                let reflected = self
+                    .reflected_method(&class, &name, &parameters, inherited)
+                    .ok_or_else(|| {
+                        fault(
+                            "Ljava/lang/NoSuchMethodException;",
+                            format!(
+                                "{}({})",
+                                class_name(&class),
+                                parameters
+                                    .iter()
+                                    .map(|parameter| class_name(parameter))
+                                    .collect::<Vec<_>>()
+                                    .join(",")
+                            ),
+                        )
+                    })?;
+                let object = self.heap.instance("Ljava/lang/reflect/Method;")?;
+                self.heap.get_mut(object)?.data = Data::ReflectedMethod(reflected);
+                result.push(object);
             }
             // Class overrides Object.toString; falling through would expose a wrong handle string.
             ("Ljava/lang/Class;", "toString()Ljava/lang/String;") => {
@@ -232,6 +353,52 @@ impl Runtime {
                     .and_then(|v| v.first())
                     .context("uninitialized Package")?,
             ),
+            ("Ljava/lang/reflect/AccessibleObject;", "setAccessible(Z)V")
+            | ("Ljava/lang/reflect/Method;", "setAccessible(Z)V") => {
+                self.heap
+                    .get_mut(arg(0)?)?
+                    .fields
+                    .insert("droidless:accessible".into(), vec![arg(1)?]);
+            }
+            ("Ljava/lang/reflect/AccessibleObject;", "isAccessible()Z")
+            | ("Ljava/lang/reflect/Method;", "isAccessible()Z") => {
+                let accessible = self
+                    .heap
+                    .get(arg(0)?)?
+                    .fields
+                    .get("droidless:accessible")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO);
+                result.push(accessible);
+            }
+            (
+                "Ljava/lang/reflect/Method;",
+                "invoke(Ljava/lang/Object;[Ljava/lang/Object;)Ljava/lang/Object;",
+            ) => {
+                let reflected = match &self.heap.get(arg(0)?)?.data {
+                    Data::ReflectedMethod(method) => method.clone(),
+                    _ => bail!("uninitialized reflected Method"),
+                };
+                let target = arg(1)?;
+                let values = match arg(2)? {
+                    Word::Bits(0) => vec![],
+                    array => match &self.heap.get(array)?.data {
+                        Data::Array { values, .. } => values
+                            .iter()
+                            .map(|value| {
+                                value.first().copied().context("empty reflection argument")
+                            })
+                            .collect::<Result<Vec<_>>>()?,
+                        _ => bail!("Method.invoke requires Object[]"),
+                    },
+                };
+                let mut call_args = Vec::with_capacity(values.len() + 1);
+                call_args.push(target);
+                call_args.extend(values);
+                let returned = self.invoke(reflected, call_args, true)?;
+                result.push(returned.first().copied().unwrap_or(Word::ZERO));
+            }
             _ => return Ok(None),
         }
         Ok(Some(result))

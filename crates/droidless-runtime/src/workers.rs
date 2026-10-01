@@ -12,6 +12,7 @@ pub(crate) enum Waiting {
     Take(Word),
     Put(Word),
     Monitor(Word),
+    ObjectWait { object: Word, deadline: Option<u64> },
 }
 
 #[cfg(test)]
@@ -151,6 +152,35 @@ impl Runtime {
         );
         Err(waiting.into())
     }
+    pub(crate) fn notify_waiters(&mut self, object: Word, all: bool) -> Result<()> {
+        let thread = self.current_thread()?;
+        if self
+            .workers
+            .monitors
+            .get(&object.reference()?)
+            .is_none_or(|(owner, _)| *owner != thread)
+        {
+            return Err(fault(
+                "Ljava/lang/IllegalMonitorStateException;",
+                "current thread does not own this monitor",
+            ));
+        }
+        for worker in &self.workers.pending {
+            if matches!(
+                worker.waiting,
+                Some(Waiting::ObjectWait { object: waiting, .. }) if waiting == object
+            ) {
+                self.heap
+                    .get_mut(worker.thread)?
+                    .fields
+                    .insert("droidless:wait:notified".into(), vec![Word::from(1)]);
+                if !all {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
     pub(crate) fn enter_monitor(&mut self, object: Word) -> Result<()> {
         self.heap.get(object)?;
         let thread = self.current_thread()?;
@@ -267,6 +297,12 @@ impl Runtime {
                 .monitors
                 .get(&object.reference()?)
                 .is_none_or(|(owner, _)| *owner == worker.thread),
+            Some(Waiting::ObjectWait { object, deadline }) => {
+                self.thread_word(worker.thread, "droidless:wait:notified")?
+                    .truth()
+                    || deadline.is_some_and(|deadline| self.uptime_ms() >= deadline)
+                    || self.thread_word(worker.thread, "droidless:wait:object")? != object
+            }
         })
     }
     /// Move the VM's exclusive borrow onto a host worker executor for this poll.
