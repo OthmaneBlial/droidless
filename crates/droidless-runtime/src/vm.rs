@@ -446,7 +446,66 @@ impl Runtime {
         })();
         self.native_roots.truncate(roots);
         result?;
+        self.compute_scroll_frame(root, &mut vec![])?;
         ui::layout(&self.heap, root, self.width, self.height)
+    }
+    fn compute_scroll_frame(&mut self, view: Word, path: &mut Vec<Word>) -> Result<()> {
+        ensure!(
+            path.len() < 128 && !path.contains(&view),
+            "cyclic or too deep View hierarchy"
+        );
+        if self
+            .heap
+            .get(view)?
+            .view
+            .as_ref()
+            .context("expected View")?
+            .visible
+            != 0
+        {
+            return Ok(());
+        }
+        path.push(view);
+        let roots = self.native_roots.len();
+        self.native_roots.push(view);
+        let result = (|| -> Result<()> {
+            self.invoke(
+                Method {
+                    class: "Landroid/view/View;".into(),
+                    name: "computeScroll".into(),
+                    parameters: vec![],
+                    returns: "V".into(),
+                },
+                vec![view],
+                true,
+            )?;
+            let children = self
+                .heap
+                .get(view)?
+                .view
+                .as_ref()
+                .context("expected View")?
+                .children
+                .clone();
+            self.native_roots.extend(children.iter().copied());
+            for child in children {
+                let parent = self
+                    .heap
+                    .get(child)?
+                    .fields
+                    .get("droidless:view:parent")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO);
+                if parent == view {
+                    self.compute_scroll_frame(child, path)?;
+                }
+            }
+            Ok(())
+        })();
+        self.native_roots.truncate(roots);
+        path.pop();
+        result
     }
     pub fn click(&mut self, handle: usize) -> Result<bool> {
         self.budget = 0;

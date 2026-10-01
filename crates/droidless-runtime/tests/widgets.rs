@@ -176,6 +176,41 @@ fn compiled_widget_metadata_adapter_and_timed_scroll_contracts() {
     assert_eq!(vm.poll_messages().unwrap(), 0);
     call(&mut vm, "invalidateDetachedFrame", "V");
     assert_eq!(vm.poll_messages().unwrap(), 0);
+    let removed = call(&mut vm, "startFrame", "Landroid/view/View;")[0];
+    let root = call(&mut vm, "frameRoot", "Landroid/view/View;")[0];
+    let frame_state = |vm: &mut Runtime| {
+        let word = call(vm, "frameState", "Ljava/lang/String;")[0];
+        vm.heap.text(word).unwrap().to_owned()
+    };
+    vm.layout_snapshot().unwrap();
+    assert_eq!(frame_state(&mut vm), "1:0:0");
+    vm.collect();
+    assert!(
+        vm.heap.get(removed).is_err(),
+        "detached child retained after frame"
+    );
+    assert_eq!(vm.advance_time(500).unwrap(), 1);
+    let half = vm.layout_snapshot().unwrap();
+    assert_eq!(half.children.len(), 2);
+    assert_eq!(half.children[0].rect.x, 50.0);
+    assert_eq!(frame_state(&mut vm), "2:50:0");
+    assert_eq!(vm.advance_time(500).unwrap(), 1);
+    let done = vm.layout_snapshot().unwrap();
+    assert_eq!(done.children[0].rect.x, 100.0);
+    assert_eq!(frame_state(&mut vm), "3:100:0");
+    assert_eq!(vm.poll_messages().unwrap(), 0);
+    call(&mut vm, "failFrame", "V");
+    assert!(format!("{:#}", vm.layout_snapshot().unwrap_err()).contains("scroll frame failure"));
+    assert_eq!(vm.stack_depth(), 0);
+    call(&mut vm, "recoverFrame", "V");
+    vm.layout_snapshot().unwrap();
+    assert_eq!(frame_state(&mut vm), "4:100:0");
+    call(&mut vm, "releaseFrame", "V");
+    vm.collect();
+    assert!(
+        vm.heap.get(root).is_err(),
+        "scroll failure retained temporary roots"
+    );
     vm.close().unwrap();
 
     for (target, minimum, expected) in [

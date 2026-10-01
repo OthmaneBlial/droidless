@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.app.Activity;
 import android.content.pm.ApplicationInfo;
 import android.widget.OverScroller;
+import android.widget.FrameLayout;
 import android.view.animation.Interpolator;
 import android.view.View;
 import android.graphics.drawable.Drawable;
@@ -14,6 +15,8 @@ import android.graphics.drawable.ColorDrawable;
 public final class WidgetProbe {
     private static Activity host;
     private static OverScroller scroll;
+    private static FrameLayout frameRoot;
+    private static ScrollFrame frame, hidden;
     public static void verify(Activity activity) {
         host = activity;
         final int[] calls = {0};
@@ -112,5 +115,47 @@ public final class WidgetProbe {
     }
     public static void invalidateDetachedFrame() {
         new View(host).postInvalidateOnAnimation();
+    }
+    private static class ScrollFrame extends View {
+        final OverScroller scroller;
+        int calls;
+        boolean fail, removed;
+        View toRemove;
+        ScrollFrame(Activity context) {
+            super(context);
+            scroller = new OverScroller(context, new Interpolator() {
+                public float getInterpolation(float input) { System.gc(); return input; }
+            });
+        }
+        @Override public void computeScroll() {
+            super.computeScroll();
+            if (removed) throw new AssertionError("detached child callback");
+            if (fail) throw new IllegalStateException("scroll frame failure");
+            calls++;
+            if (toRemove != null) { frameRoot.removeView(toRemove); toRemove = null; }
+            System.gc();
+            if (scroller.computeScrollOffset()) {
+                setTranslationX(scroller.getCurrX());
+                if (!scroller.isFinished()) postInvalidateOnAnimation();
+            }
+        }
+    }
+    public static View startFrame() {
+        frameRoot = new FrameLayout(host);
+        frame = new ScrollFrame(host);
+        hidden = new ScrollFrame(host); hidden.setVisibility(View.INVISIBLE);
+        ScrollFrame removed = new ScrollFrame(host); removed.removed = true;
+        frame.toRemove = removed;
+        frameRoot.addView(frame); frameRoot.addView(hidden); frameRoot.addView(removed);
+        host.setContentView(frameRoot);
+        frame.scroller.startScroll(0, 0, 100, 0, 1000);
+        return removed;
+    }
+    public static String frameState() { return frame.calls + ":" + (int)frame.getTranslationX() + ":" + hidden.calls; }
+    public static View frameRoot() { return frameRoot; }
+    public static void failFrame() { frame.fail = true; }
+    public static void recoverFrame() { frame.fail = false; }
+    public static void releaseFrame() {
+        host.setContentView(new View(host)); frameRoot = null; frame = null; hidden = null;
     }
 }
