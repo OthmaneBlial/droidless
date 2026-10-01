@@ -14,7 +14,7 @@ interrupt becomes available. This remains a bounded subset, not full Java concur
 | Looper | getMainLooper, myLooper, getThread; prepare once per worker, loop delivery, quit and quitSafely; main quit/quitSafely throw IllegalStateException |
 | Handler construction | (), (Looper), (Callback), (Looper, Callback); implicit construction selects the current prepared Looper; unprepared workers throw RuntimeException |
 | Runnable posts | post(Runnable), postDelayed(Runnable, long), postAtTime(Runnable, long), postAtTime(Runnable, Object, long) |
-| Message delivery | obtainMessage(), obtainMessage(int), sendMessage(Message), sendMessageDelayed(Message, long), sendMessageAtTime(Message, long), dispatchMessage(Message), handleMessage(Message) |
+| Message delivery | obtainMessage(), obtainMessage(int), obtainMessage(int, Object), sendMessage(Message), sendMessageDelayed(Message, long), sendMessageAtTime(Message, long), dispatchMessage(Message), handleMessage(Message) |
 | Cancellation | hasCallbacks(Runnable), removeCallbacks(Runnable), removeCallbacks(Runnable, Object), removeCallbacksAndMessages(Object) |
 | Message | constructor(), obtain(), getTarget, setTarget, getCallback, getWhen; public what/arg1/arg2/obj fields |
 | Clock | SystemClock.uptimeMillis and elapsedRealtime return process-relative monotonic milliseconds |

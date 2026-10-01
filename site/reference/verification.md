@@ -1233,7 +1233,7 @@ opens one and selects its original Delete item. The actual callback executes
 SQLite DELETE; the resulting table contains only the other note with its original
 ID, title and body. EventBus description/posting and generic Snackbar-layout
 construction now execute. Returning to Notes then fails at the original
-Snackbar Handler.obtainMessage(int, Object) call. This is partial deletion
+queued Snackbar Math.max(float, float) call. This is partial deletion
 evidence, not a passing delete/return/restart workflow or native menu interaction.
 The regression catalog keeps the complete deletion capability false.
 
@@ -1265,5 +1265,19 @@ The compiled contract checks default state, all mode bits, out-of-range values
 and GC. Android accessibility-service event delivery is not implemented.
 
 The pinned Notepad delete probe now completes its original SnackbarLayout child
-binding; it reaches Handler.obtainMessage(int, Object). The complete workflow
-remains unverified, and the catalog keeps that capability false.
+binding and delivers its queued confirmation callback; it reaches Math.max(float,
+float). The complete workflow remains unverified, and the catalog keeps that capability false.
+
+## Current-source Handler payload factory
+
+Handler.obtainMessage(int, Object) reuses the existing Message factory and queued
+delivery path. The compiled scheduling contract verifies the what field, Handler
+target, null payload, exact object identity across GC and deferred dispatch with
+its original fields. The queue alone retains the Handler, Message and payload
+after the fixture drops its own roots. Ordering, cancellation, double enqueue
+and worker delivery regressions still pass. This follows the [API-21 Handler
+factory](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/os/Handler.java).
+
+The pinned Notepad Delete callback now queues and executes its original Snackbar
+Handler.Callback. It fails next at Math.max(float, float) in SwipeDismissBehavior.
+Complete delete/return/restart and native options-menu input remain unverified.

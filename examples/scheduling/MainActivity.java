@@ -230,7 +230,12 @@ public class MainActivity extends Activity {
             events += "I"; owner.post(new Append("R"));
         }});
         handler.postDelayed(new Append("N"),-100);
-        queued = handler.obtainMessage(7); queued.arg1=11; queued.arg2=12; queued.obj="payload";
+        Message empty = handler.obtainMessage(123, null);
+        if (empty.what != 123 || empty.obj != null || empty.getTarget() != handler) throw new IllegalStateException("null message payload");
+        Object payload = new StringBuilder().append("pay").append("load").toString();
+        queued = handler.obtainMessage(7, payload); queued.arg1=11; queued.arg2=12;
+        System.gc();
+        if (queued.obj != payload) throw new IllegalStateException("message payload identity/GC");
         if (queued.getTarget()!=handler || !handler.sendMessageAtTime(queued,10) || queued.getWhen()!=10) throw new IllegalStateException("message timing");
         boolean rejected = false;
         try { handler.sendMessage(queued); } catch (IllegalStateException expected) { rejected=true; }

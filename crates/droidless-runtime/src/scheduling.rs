@@ -743,9 +743,16 @@ impl Runtime {
             }
             (
                 HANDLER,
-                "obtainMessage()Landroid/os/Message;" | "obtainMessage(I)Landroid/os/Message;",
+                "obtainMessage()Landroid/os/Message;"
+                | "obtainMessage(I)Landroid/os/Message;"
+                | "obtainMessage(ILjava/lang/Object;)Landroid/os/Message;",
             ) => {
-                let message = self.new_message(receiver, Word::ZERO, Word::ZERO)?;
+                let token = if method.parameters.len() == 2 {
+                    arg(2)?
+                } else {
+                    Word::ZERO
+                };
+                let message = self.new_message(receiver, Word::ZERO, token)?;
                 if !method.parameters.is_empty() {
                     arg(1)?.int()?;
                     self.heap
