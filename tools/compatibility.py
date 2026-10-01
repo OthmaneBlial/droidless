@@ -102,7 +102,7 @@ report = {
     "first_field_text": editable[0]["view"]["text"],
     "visible_labels": [label for label in labels if label],
 }
-probe_title = "Droidless persistence probe"
+probe_title = "Hello, desktop"
 with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
     saved_process = subprocess.run([
         str(args.binary), "run", "--headless", "--size", "390x844",
