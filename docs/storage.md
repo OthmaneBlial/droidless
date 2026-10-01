@@ -74,8 +74,8 @@ The runtime stores SQLite databases under the same per-package app-data root.
 Its current bridge covers `SQLiteOpenHelper`, `execSQL`, transactions,
 `compileStatement` binding/execution, `ContentValues` updates, `rawQuery`, and
 typed cursor reads. This is a method subset, not general Android database
-compatibility. The unchanged Notepad APK saves an edited title, and its `Note`
-row survives a fresh process. The Notes screen renders the saved title both
-after Back and after a fresh process restart; native-window interaction remains
-unverified.
+compatibility. The unchanged Notepad APK saves two edited titles, and both
+`Note` rows survive a fresh process. The Notes screen renders both titles after
+Back and after a fresh process restart. A native AppKit run also confirmed
+keyboard text entry and saving through the APK's own flow.
 `tools/compatibility.py` checks this flow against the pinned upstream APK.

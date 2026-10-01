@@ -23,14 +23,16 @@ annotation coverage remains pending. Reserved/newer opcodes fail with method/PC.
 
 Activity constructors/lifecycle/content/title/findViewById/window metrics;
 Context/Resources strings/resources; View ID/visibility/enabled/background/
-uniform padding/click/key listeners; ViewGroup addView; LinearLayout orientation;
+uniform padding/click/key listeners, scroll offsets and the default scroll-change
+callback; ViewGroup add/detach/attach child operations; LinearLayout orientation;
 TextView text/append/size/color/gravity; EditText text/null key listener/selection;
-KeyEvent action/keycode. A targeted support-RecyclerView layout pass renders the
-pinned Notepad APK's saved title after save and restart; item animations are
-omitted. This does not establish general RecyclerView or AndroidX compatibility.
+KeyEvent action/keycode. Long.rotateRight(JI)J is implemented for 64-bit values.
+A targeted support-RecyclerView layout pass renders two saved titles from the
+pinned Notepad APK after save and restart; item animations are omitted. This does
+not establish general RecyclerView or AndroidX compatibility.
 String valueOf/toString/length/equals/startsWith/contains/
 substring/concat/charAt; StringBuilder constructors/append/toString; Integer
-parseInt/toString; Double parseDouble/valueOf(D)/doubleValue/toString/isNaN(D); Long toString(J); Math sqrt/cbrt/sin/cos/tan/log/
+parseInt/toString; Double parseDouble/valueOf(D)/doubleValue/toString/isNaN(D); Long toString(J)/rotateRight(JI); Math sqrt/cbrt/sin/cos/tan/log/
 exp/abs/pow; Log d/i/w/e. The source's exact signature table is authoritative;
 other overloads remain unsupported.
 Throwable constructors/getMessage/getCause/toString and common runtime exception types
@@ -39,8 +41,8 @@ Android `CharSequence`/`Spanned`/`SpannableStringBuilder` text and a bounded SAX
 event parser cover Notepad's rich-text serialization path. DTDs are rejected.
 SQLite support includes `SQLiteOpenHelper`, SQL statements/transactions,
 `ContentValues` updates, `rawQuery` and typed cursor reads; the pinned Notepad
-APK save/restart probe confirms its note row persists and the reopened list
-renders the saved title. These narrow paths do not imply general text/XML/database
+APK save/restart probe confirms two note rows persist and the reopened list
+renders both titles. These narrow paths do not imply general text/XML/database
 compatibility.
 Current source adds explicit same-APK Intent constructors/setClass/setClassName,
 startActivity, getIntent, finish/isFinishing/onBackPressed, Bundle typed extras and

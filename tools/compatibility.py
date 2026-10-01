@@ -102,24 +102,26 @@ report = {
     "first_field_text": editable[0]["view"]["text"],
     "visible_labels": [label for label in labels if label],
 }
-probe_title = "Hello, desktop"
+probe_titles = ["Hello, desktop", "Native desktop test"]
 with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
     saved_process = subprocess.run([
         str(args.binary), "run", "--headless", "--size", "390x844",
-        "--data-dir", app_data, "--click", "＋", "--input", probe_title,
-        "--back", str(notepad),
+        "--data-dir", app_data,
+        "--click", "＋", "--input", probe_titles[0], "--back",
+        "--click", "＋", "--input", probe_titles[1], "--back", str(notepad),
     ], text=True, capture_output=True, check=True, timeout=120)
     saved_tree = json.loads(saved_process.stdout)
     saved_labels = [node["view"]["text"] for node in flatten(saved_tree)]
-    if probe_title not in saved_labels:
-        raise SystemExit("Notepad did not render its saved title after returning to Notes")
+    if not all(title in saved_labels for title in probe_titles):
+        raise SystemExit("Notepad did not render both saved titles after returning to Notes")
     database = Path(app_data) / "ir.cafebazaar.notepad/databases/AppDatabase.db"
     with sqlite3.connect(database) as connection:
         saved = connection.execute(
-            "SELECT id, title, body FROM Note WHERE title = ?", (probe_title,)
+            "SELECT title, body FROM Note WHERE title IN (?, ?) ORDER BY title",
+            probe_titles,
         ).fetchall()
-    if len(saved) != 1 or saved[0][2] != "":
-        raise SystemExit("Notepad did not persist the edited title before restart")
+    if saved != sorted((title, "") for title in probe_titles):
+        raise SystemExit("Notepad did not persist both edited titles before restart")
 
     restarted = subprocess.run([
         str(args.binary), "run", "--headless", "--size", "390x844",
@@ -129,18 +131,20 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
     restarted_labels = [node["view"]["text"] for node in flatten(restarted_tree)]
     if "Notes" not in restarted_labels:
         raise SystemExit("Notepad did not return to its Notes screen after restart")
-    if probe_title not in restarted_labels:
-        raise SystemExit("Notepad did not render its saved title in the reopened Notes list")
+    if not all(title in restarted_labels for title in probe_titles):
+        raise SystemExit("Notepad did not render both saved titles in the reopened Notes list")
     with sqlite3.connect(database) as connection:
         retained = connection.execute(
-            "SELECT title, body FROM Note WHERE id = ?", (saved[0][0],)
-        ).fetchone()
-    if retained != (probe_title, ""):
-        raise SystemExit("Notepad did not retain the note row after a fresh process")
+            "SELECT title, body FROM Note WHERE title IN (?, ?) ORDER BY title",
+            probe_titles,
+        ).fetchall()
+    if retained != sorted((title, "") for title in probe_titles):
+        raise SystemExit("Notepad did not retain both note rows after a fresh process")
 
 report["note_row_survives_fresh_process"] = True
 report["note_title_visible_after_save"] = True
 report["note_title_visible_in_reopened_list"] = True
+report["saved_notes"] = probe_titles
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
-print("PASS Notepad: saved title appears immediately, survives restart and returns to Notes")
+print("PASS Notepad: two saved titles appear immediately and survive restart")

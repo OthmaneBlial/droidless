@@ -141,11 +141,11 @@ preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only
 | 🧠 DEX 035–040 | Headers, digests, IDs, classes, code and try handlers; annotations/debug partial |
 | ⚡ Own register interpreter | Arithmetic, wide values, branches, arrays, fields, dispatch, managed call continuations and Java throw/catch |
 | 🧹 Managed objects | Inheritance, strings, sticky class initialization and handle-based mark/sweep GC |
-| 🪟 Native widgets | TextView, Button, EditText, LinearLayout and FrameLayout; a targeted support-RecyclerView saved-row path; approximate layout/style |
+| 🪟 Native widgets | TextView, Button, EditText, LinearLayout and FrameLayout; a targeted support-RecyclerView two-note path; approximate layout/style |
 | 📝 Rich text/XML | Android spannable text and a bounded SAX parser subset exercised by an unmodified APK |
-| 🖱️ Input | Native calculator mouse callbacks, Counter text/key callbacks and clean close |
+| 🖱️ Input | Native calculator clicks, Counter text/key callbacks, and real keyboard text in the public Notepad APK |
 | 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish and native Application lifecycle observers — current source |
-| 📓 Persistent storage | Typed SharedPreferences and bounded SQLite support; authored preferences plus a public Notepad note row survive process restart — current source |
+| 📓 Persistent storage | Typed SharedPreferences and bounded SQLite support; two public Notepad notes appear after Back and a fresh process — current source |
 | 🗂️ Java collections | Bounded HashSet/ArrayList/HashMap/basic LinkedHashMap, snapshot CopyOnWriteArrayList, immediate FIFO queues, indexed lists, guest equality, native map copying and live read-only Set/List views — current source |
 | 🔎 APK classes | APK-local Class lookup, no-argument construction, initialization/access faults, primitive TYPE metadata and inherited field resolution — current source |
 | 🌍 API profile | Fixed read-only Build.VERSION.SDK_INT = 21 for app version checks; partial framework support — current source |

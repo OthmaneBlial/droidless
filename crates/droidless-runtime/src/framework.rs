@@ -452,6 +452,61 @@ impl Runtime {
         let mut result = vec![];
         if receiver != Word::ZERO
             && matches!(receiver, Word::Ref(_))
+            && self.is_a(&self.heap.get(receiver)?.class, "Landroid/view/View;")
+            && signature == "onScrollChanged(IIII)V"
+        {
+            self.require_main_thread()?;
+            self.view_mut(receiver)?;
+            return Ok(Some(result));
+        }
+        if receiver != Word::ZERO
+            && matches!(receiver, Word::Ref(_))
+            && self.is_a(&self.heap.get(receiver)?.class, "Landroid/view/ViewGroup;")
+        {
+            match signature.as_str() {
+                "detachViewFromParent(I)V" => {
+                    self.require_main_thread()?;
+                    let index = arg(1)?.int()?;
+                    let children = &mut self.view_mut(receiver)?.children;
+                    ensure!(
+                        index >= 0 && (index as usize) < children.len(),
+                        "View child index is out of bounds"
+                    );
+                    children.remove(index as usize);
+                    return Ok(Some(result));
+                }
+                "attachViewToParent(Landroid/view/View;ILandroid/view/ViewGroup$LayoutParams;)V" => {
+                    self.require_main_thread()?;
+                    let child = arg(1)?;
+                    let index = arg(2)?.int()?;
+                    let params = arg(3)?;
+                    self.view_mut(child)?;
+                    if params != Word::ZERO {
+                        self.heap.get(params)?;
+                    }
+                    let children = &mut self.view_mut(receiver)?.children;
+                    ensure!(
+                        index >= -1 && index <= children.len() as i32,
+                        "View child index is out of bounds"
+                    );
+                    children.insert(
+                        if index == -1 {
+                            children.len()
+                        } else {
+                            index as usize
+                        },
+                        child,
+                    );
+                    let fields = &mut self.heap.get_mut(child)?.fields;
+                    fields.insert("droidless:view:parent".into(), vec![receiver]);
+                    fields.insert("droidless:view:layout-params".into(), vec![params]);
+                    return Ok(Some(result));
+                }
+                _ => {}
+            }
+        }
+        if receiver != Word::ZERO
+            && matches!(receiver, Word::Ref(_))
             && self.is_a(
                 &self.heap.get(receiver)?.class,
                 "Landroid/database/Observable;",
@@ -1797,6 +1852,9 @@ impl Runtime {
             }
             ("Ljava/lang/Long;", "bitCount(J)I") => {
                 result.push(Word::from(bits64(args)?.count_ones() as i32));
+            }
+            ("Ljava/lang/Long;", "rotateRight(JI)J") => {
+                result = wide(bits64(args)?.rotate_right(arg(2)?.int()? as u32));
             }
             ("Ljava/lang/Integer;", "bitCount(I)I") => {
                 result.push(Word::from(arg(0)?.int()?.count_ones() as i32));
@@ -3298,6 +3356,20 @@ impl Runtime {
             ("Landroid/view/View;", "getLayoutDirection()I") => {
                 self.view_mut(receiver)?;
                 result.push(Word::ZERO);
+            }
+            ("Landroid/view/View;", "getScrollX()I")
+            | ("Landroid/view/View;", "getScrollY()I") => {
+                self.view_mut(receiver)?;
+                let axis = if method.name == "getScrollX" { "x" } else { "y" };
+                result.push(
+                    self.heap
+                        .get(receiver)?
+                        .fields
+                        .get(&format!("droidless:view:scroll-{axis}"))
+                        .and_then(|values| values.first())
+                        .copied()
+                        .unwrap_or(Word::ZERO),
+                );
             }
             ("Landroid/view/View;", "getWidth()I")
             | ("Landroid/view/View;", "getHeight()I") => {

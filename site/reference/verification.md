@@ -575,18 +575,21 @@ target/release/droidless run --headless --ephemeral --size 390x844 \
 The tree comes from the original APK and runs its Activity/DBFlow initialization.
 `tools/compatibility.py` also opens the editor, changes the title, dispatches
 Back through the APK, and confirms the resulting `Note` row in its private
-SQLite database. Returning to Notes renders the saved title immediately. A
-second DROIDLESS process opens the same app-data directory and renders that
-title again. The probe checks database state and the headless View tree, not
-native keyboard events.
+SQLite database. It creates two notes in one process, checks that both rows
+persist and both titles render on return to Notes, then opens a fresh process
+against the same app-data directory and verifies both titles again. The probe
+checks database state and the headless View tree; its `--input` helper does not
+synthesize native keyboard events.
 
 `site/assets/notepad-preview.svg` is a vector illustration of the editor, not a
-captured native window. AppKit text interaction, visual fidelity and an
-independent Android reference run remain unverified. The 50% everyday-app
-checkpoint remains ahead.
+captured native window. In a separate AppKit run, the original APK accepted real
+keyboard input for `Native desktop test`; leaving the editor saved that title in
+the APK's SQLite database. Native text entry and save are verified, while the
+window's visual fidelity and an independent Android reference run remain
+unverified. The 50% everyday-app checkpoint remains ahead.
 
 `sh tools/ci.sh` passes locally with the current Rust test suite, warning-free Clippy, the
 optimized release build and 4,096 seeded parser mutations. `python3 tools/compatibility.py`
-passes 17 calculator scenarios plus the Notepad Notes list/editor and SQLite
-save/restart probes. The saved row is retained and its title is rendered after
-restart. No GitHub Actions run was used.
+passes 17 calculator scenarios plus the Notepad Notes list/editor and two-note
+SQLite save/restart probes. Both rows are retained and both titles render after
+Back and in a fresh process. No GitHub Actions run was used.
