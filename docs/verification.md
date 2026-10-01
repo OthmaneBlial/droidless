@@ -1668,6 +1668,9 @@ claimed. GitHub Actions remain disabled and the 50% checkpoint remains active.
 
 ## Current-source resource entry names and folder diagnostic
 
+The [message/cause checkpoint](#current-source-exception-causes-and-original-folder-type-error)
+below supersedes this checkpoint's missing exception constructor.
+
 Date: 2026-10-01. Resources.getResourceEntryName now reads the name of the
 requested compiled entry. It does not resolve aliases to their target's name or
 require a scalar value for an ID entry or style bag. The authored Images contract
@@ -1696,3 +1699,38 @@ unsigned development bundle and optimized CLI have matching SHA-256
 `2d301be9e7825fcd63017f0356d02c1dd32a38a1e40346a53af81d1eccdfe4b8`.
 No fresh physical drawer or folder input is claimed. GitHub Actions remain
 disabled; the 50% checkpoint is still active.
+
+## Current-source exception causes and original folder type error
+
+Date: 2026-10-01. The message/cause constructor now retains the actual guest
+references for Throwable, Exception, RuntimeException and IllegalStateException,
+including null arguments. Virtual fillInStackTrace still executes with rooted
+ownership. Following API-21 libcore, the fields are assigned before that callback.
+The compiled Throwable contract previously failed at the missing overload and
+now verifies message/cause identity across GC, callback observations, retained
+cause-chain output and callback-fault cleanup. The portable constructor checks
+also pass on desktop Java 17; its callback assignment order differs, so that
+observation check is explicitly API-21-only. Cause-only constructors, initCause,
+suppression and StackTraceElement arrays remain unsupported.
+
+The unchanged pinned Notepad APK now reaches its original ButterKnife throw at
+classes.dex PC 0x0038. The guest IllegalStateException reports:
+`View 'left_button' with ID 2131493021 for field 'leftButton' was of the wrong type.`
+Both copied and source SQLite rows remain exact. This is failure evidence;
+folder binding, creation and editing remain unverified.
+
+A standalone diagnostic built against DROIDLESS's own parser reads the original
+APK's view_new_folder binary XML and confirms the left_button tag is ImageButton.
+The tagged [NewFolderViewHolder](https://github.com/MohMah/android-notepad/blob/v1.0.0/app/src/main/java/ir/cafebazaar/notepad/activities/editfolders/NewFolderViewHolder.java)
+declares AppCompatImageButton. Current source retains LayoutInflater factories
+but constructs XML widgets directly without invoking them. The next shared fix
+is factory callback dispatch; changing the APK or aliasing the widget's class
+would bypass the guest creation path.
+
+The full local gate passes 106 Rust tests, Clippy, optimized CLI/document replay
+builds and 4,096 seeded parser mutations. The unchanged public APK replay passes,
+including the drawer's 100 ms frame, 1000 ms settlement and Back closure with
+exact retained rows. The rebuilt unsigned bundle matches the optimized CLI
+(SHA-256 `b32148b7cf78b40b4c819a5cc174b45fd3e55254b4b41bb64a531575d42dc81e`).
+No fresh native folder interaction is claimed. GitHub Actions remain disabled
+and the 50% checkpoint remains active.

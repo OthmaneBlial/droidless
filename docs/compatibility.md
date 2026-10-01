@@ -59,10 +59,11 @@ computeScroll; attached postInvalidateOnAnimation requests drive host redraw
 polling. Advancing to 1000 ms now completes the original settlement callback and
 its View.requestFocus call. Back closes the drawer while retaining Notes and both
 exact rows. Native drawer input remains unverified. Selecting Create or edit
-folders reaches its own Activity. Resource-entry lookup now executes; the next
-binding diagnostic stops at unsupported
-IllegalStateException(String,Throwable). Folder creation/editing remains
-unverified, and the underlying binding cause is not yet established.
+folders reaches its own Activity. Resource-entry lookup and the message/cause
+exception constructor now execute. The original binder reports that left_button
+has the wrong type for leftButton. Its compiled XML declares ImageButton, while
+the tagged field expects AppCompatImageButton; inflater factories are currently
+retained without callback dispatch. Folder creation/editing remains unverified.
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree

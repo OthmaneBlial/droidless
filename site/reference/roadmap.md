@@ -66,9 +66,11 @@ The following are objectives, not completed capability claims.
    polling. Generic focus ownership and callbacks now complete the 1000 ms drawer
    settlement callback. Back closes it while retaining Notes and both exact rows.
    Native drawer input remains ahead. Create or edit folders reaches its Activity, then stops
-   while constructing the NewFolderViewHolder binding diagnostic at unsupported
-   IllegalStateException(String,Throwable). Resource-entry lookup now executes;
-   the binding cause and folder editing remain ahead.
+   in the original NewFolderViewHolder binder with a wrong-type error for
+   left_button/leftButton. Resource lookup and message/cause exception construction
+   execute. Compiled XML uses ImageButton; the tagged field expects
+   AppCompatImageButton. Shared inflater factory dispatch and folder editing
+   remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
