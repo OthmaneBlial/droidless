@@ -1,10 +1,10 @@
 # Java collections subset
 
 Current source implements bounded guest HashSet, ArrayList, CopyOnWriteArrayList and HashMap storage,
-plus basic insertion-mode LinkedHashMap and immediate LinkedBlockingQueue operations. Objects stay
+plus basic insertion-mode LinkedHashMap, Hashtable and immediate LinkedBlockingQueue operations. Objects stay
 in the managed heap; lookups execute the APK's virtual `equals` method. Null keys,
 null values and String value equality are supported by the Set/List/Map stores.
-Queues reject null elements. There is no host Java runtime.
+Hashtable rejects null keys/values; queues reject null elements. There is no host Java runtime.
 
 | Type | Supported methods |
 |---|---|
@@ -12,6 +12,7 @@ Queues reject null elements. There is no host Java runtime.
 | ArrayList | Empty/int-capacity constructors; size, isEmpty, add, contains, remove, clear, iterator; indexed get/set/add/remove; indexOf/lastIndexOf |
 | CopyOnWriteArrayList | Empty constructor; size, isEmpty, add, contains, remove, clear; indexed get/set/add/remove; indexOf/lastIndexOf; snapshot iterator |
 | HashMap / LinkedHashMap | Empty/int-capacity constructors; size, isEmpty, containsKey, containsValue, get, put, remove, clear; putAll between native maps |
+| Hashtable | Empty/int-capacity/int-capacity-and-load-factor constructors; size, isEmpty, containsKey, containsValue, get, put, remove, clear; putAll between native maps |
 | LinkedBlockingQueue | Empty/fixed-capacity constructors; size, isEmpty, remainingCapacity, add/offer, peek/element, poll/remove, contains, remove(Object), clear; immediate operations and worker take/put waits |
 | Set / List iterator | hasNext, next, remove; exhaustion, invalid remove and structural-change exceptions |
 | Snapshot iterator | hasNext, next; original values survive later list changes; remove throws UnsupportedOperationException |
@@ -25,6 +26,17 @@ Membership uses linear scans; hash buckets are deferred until profiling justifie
 them. Ordering and performance do not reproduce a Java hash-table implementation.
 List insertion/removal currently copies the bounded backing vector; Java's
 amortized append performance is not reproduced.
+
+## Hashtable monitor profile
+
+Hashtable reuses the bounded linear map store and retains Dictionary, Map,
+Cloneable and Serializable type relationships. Native operations enter the actual
+guest monitor, including virtual equality callbacks; faults release it. Lookup
+compares stored keys/values against the supplied object, preserving Hashtable
+equality direction. The compiled portable contract checks monitor ownership,
+reentrancy, null faults, copying, GC and fault cleanup; it also passes on Java 17.
+Hash buckets, Enumeration, views, clone, serialization and arbitrary Map copies
+remain unsupported. This does not imply parallel host execution.
 
 ## Object-array sorting
 

@@ -8,8 +8,16 @@ it never loads host Java classes or executes a host JVM as an APK fallback.
 
 Class.getClassLoader supplies null for framework classes and a canonical opaque
 APK loader token for APK-defined classes (including their array component).
-Parcel uses this token only for APK-local CREATOR reconstruction; custom loading,
-host Java classes and external DEX remain unavailable.
+ClassLoader.loadClass(String) on this token resolves APK and known native-profile
+classes without initialization. It rejects array names and missing classes with
+ClassNotFoundException; null raises NullPointerException. Parcel also uses the
+token for APK-local CREATOR reconstruction. Host classes, external DEX and custom
+loaders remain unavailable.
+
+Class.asSubclass(Class) checks the actual descriptor hierarchy and returns the
+original canonical Class on success, without initialization. An unrelated class
+raises ClassCastException and a null target raises NullPointerException. Compiled
+and portable Java 17 checks cover identity, GC, faults and deferred initialization.
 
 Binary names and array names are converted to descriptors. Unknown/invalid names
 raise ClassNotFoundException; null raises NullPointerException. Array names are

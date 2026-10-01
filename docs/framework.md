@@ -422,6 +422,36 @@ state. [Executor methods and limits](threading.md#executors-and-future-results).
 Main waits, native bridge/initializer suspension and parallel CPU execution remain
 unsupported. [Exact methods, clocks, limits and native evidence](threading.md).
 
+## AppCompat constructor state
+
+View.hasOnClickListeners reports an installed guest or XML listener independently
+of the clickable bit. Explicit setOnClickListener replaces the XML callback,
+including null clearing. TextView exposes its default untransformed state; guest
+transformation setters remain unsupported. CheckedTextView retains nullable
+checkmark Drawable identity through GC without claiming checkmark painting.
+TextView editor-action listeners receive the real View, action ID and null
+KeyEvent; registration, clearing and callback GC are checked. Host Return/IME
+focus navigation remain unsupported.
+
+ColorStateList construction retains bounded int[][]/int[] references: state lookup
+observes their mutations while the default color is cached at construction.
+Positive/negative state requirements, zero terminators, null queries and the
+API-21 empty/single-row behavior pass compiled checks. Limits are 1,024 rows,
+128 states per row and 4,096 integers per input/query array. Color.alpha extracts
+the unsigned ARGB high byte. Hint/link palettes retain managed identity and null
+clearing; dynamic hint/link/state painting remains unsupported.
+
+Resources supplies canonical Configuration values in the same declaring-owner
+fields read by DEX. Empty/copy constructors and typed/Object equality cover the
+seven profile fields: orientation, keyboard, logical widths/heights, density and
+fontScale. Float comparison follows API-21 signed-zero/NaN behavior. Locale and
+other qualifiers remain unsupported. StateSet.trimStateSet preserves input
+identity at equal length and otherwise copies the requested prefix; null and
+invalid sizes raise guest faults.
+[API-21 Configuration](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/res/Configuration.java),
+[ColorStateList](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/res/ColorStateList.java),
+[TextView](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/TextView.java).
+
 ## Virtual API profile
 
 Build.VERSION.SDK_INT is a read-only native static int with a fixed value of 21.
@@ -490,6 +520,26 @@ resource references, width/height, weight, orientation, per-side padding, margin
 text size/color, image `src`/`srcCompat`, gravity, enabled/visibility and XML
 onClick. Recursive include is bounded. px/dp/sp resolve at density 1.
 `--size WIDTHxHEIGHT` selects logical host dimensions (128–4096 per axis; default 420×720).
+
+LayoutInflater.from resolves the virtual Context layout-inflater service. The
+profile retains its context, separate Factory/Factory2 identities and one-setter
+state. cloneInContext copies callbacks, changes the context and permits a new
+factory. Merged callbacks try the new factory before the inherited one; Factory2
+has priority during inflation, including when a clone adds only Factory. Chains
+are bounded to 64 merges. Null setters and repeated setters raise guest errors.
+
+Factories receive the actual parent, XML tag name, inflater context and one
+managed AttributeSet shared with the fallback constructor. A nonnull returned
+View is adopted without a second constructor; null permits normal construction.
+Includes, merge children and Activity content use the same inflater. Native
+ViewStub captures a clone, supports an explicit replacement inflater and uses
+that inflater's context when replacing itself. Guest callbacks and constructors
+retain temporary roots through GC and release them on faults. Compiled checks
+cover callback order, attributes, clones, substitution, parent arguments,
+ViewStub replacement, the merge bound, recovery and rejected worker UI access.
+Private factories, filters, theme wrapping and full custom-inflater subclass
+behavior remain unsupported.
+[API-21 reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/LayoutInflater.java).
 
 `Resources.getXml` opens packaged binary XML as an `XmlResourceParser` cursor.
 The current subset covers document/tag/text events, namespaces, depth and line
@@ -683,7 +733,10 @@ painting is not implemented. No general Android styling parity is claimed.
 SparseArray/SparseIntArray indexOfKey returns ordered signed-key ranks and
 complemented insertion points. Collections.reverse uses virtual List get/set,
 retaining guest overrides, read-only faults and nonstructural iterator behavior.
-Math.min(float,float) retains Java NaN and signed-zero behavior.
+Math.min/max(float,float) retain Java NaN and signed-zero behavior. Math.round(float)
+rounds ties toward positive infinity, preserves values immediately below 0.5,
+returns zero for NaN and saturates at int limits. The compiled MathContract
+also passes on desktop Java 17.
 
 AppKit hit testing converts mouse positions to the content view's superview
 coordinates; guest MotionEvents retain flipped content coordinates. This keeps
