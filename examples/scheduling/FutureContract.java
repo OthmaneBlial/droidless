@@ -29,7 +29,8 @@ public class FutureContract {
             local.set("kept"); stage = 1; System.gc();
             try {
                 if (mode == 4) { cause = new IllegalArgumentException("task failure"); throw (IllegalArgumentException) cause; }
-                if (mode == 10) Thread.sleep(1); // Deliberately outside the runtime's supported wait subset.
+                if (mode == 10) Thread.currentThread().getStackTrace(); // Deliberately unsupported API.
+                if (mode == 11) Thread.sleep(10);
                 return input.take();
             } finally { finished++; }
         }

@@ -196,8 +196,9 @@ snapshot stability, duplicates/nulls, indexes, mutation rejection, exhaustion,
 guest equality/GC and read-only wrapping. Rust checks additionally cover old-value
 retention/release, a guest worker changing the live List, entry ceilings, unknown
 constructors/methods and cleanup after the reentrant-write diagnostic. Desktop
-main uses Thread.join only to wait for its reference worker; guest join remains
-unsupported and the DROIDLESS check uses its worker polling path.
+main uses Thread.join only to wait for its reference worker. The DROIDLESS driver
+uses worker polling: main joins of live guest Threads remain unsupported, while
+[worker sleep/join](threading.md#worker-sleep-and-join) now have separate contracts.
 
 Contract references: [Android ArrayList](https://developer.android.com/reference/java/util/ArrayList),
 [Java 8 ArrayList](https://docs.oracle.com/javase/8/docs/api/java/util/ArrayList.html)

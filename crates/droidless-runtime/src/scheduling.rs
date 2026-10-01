@@ -579,6 +579,38 @@ impl Runtime {
             (THREAD, "start()V") => {
                 self.start_worker(receiver)?;
             }
+            (THREAD, "sleep(J)V" | "sleep(JI)V" | "join()V" | "join(J)V" | "join(JI)V") => {
+                let offset = usize::from(method.name == "join");
+                let millis = if method.parameters.is_empty() {
+                    0
+                } else {
+                    bits64(
+                        args.get(offset..offset + 2)
+                            .context("Thread timeout missing")?,
+                    )? as i64
+                };
+                let nanos = if method.parameters.len() == 2 {
+                    arg(offset + 2)?.int()?
+                } else {
+                    0
+                };
+                if millis < 0 || !(0..1_000_000).contains(&nanos) {
+                    return Err(fault(
+                        "Ljava/lang/IllegalArgumentException;",
+                        "invalid Thread timeout",
+                    ));
+                }
+                // ponytail: the shared millisecond clock rounds positive sub-ms waits up.
+                let duration = millis as u64 + u64::from(nanos > 0);
+                if method.name == "sleep" {
+                    self.sleep_thread(duration)?;
+                } else {
+                    // API-21 treats overflowing nanosecond join durations as an indefinite wait.
+                    let forever =
+                        duration == 0 || millis >= (i64::MAX - i64::from(nanos)) / 1_000_000;
+                    self.join_thread(receiver, (!forever).then_some(duration))?;
+                }
+            }
             (THREAD, "interrupt()V") => {
                 self.heap
                     .get_mut(receiver)?

@@ -60,7 +60,10 @@ The following are objectives, not completed capability claims.
    suspend on supported worker waits, and support quit/quitSafely. Routing, order,
    cancellation, GC, exception recovery and bounded dispatch pass authored checks.
    Native bridges/class initialization remain synchronous; main waits, nested
-   message pumps, priorities and join/sleep remain ahead. Notepad passes deferred Thread.start;
+   message pumps and priorities remain ahead. Worker sleep and timed/indefinite
+   joins now preserve frames, monitors and interrupts; compiled checks and a
+   separate desktop Java contract pass. Main blocking waits remain unsupported.
+   Notepad passes deferred Thread.start;
    independently completed transaction execution remains unproven.
    Gate: a real APK completes its queued transactions and posts UI results.
 5. Isolated file/process APIs, broader lists/SQLite/network and independent image-app workflows: follow first failures in substantial third-party

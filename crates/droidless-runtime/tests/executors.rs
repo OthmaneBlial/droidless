@@ -256,10 +256,22 @@ fn queued_pool_identity_results_waits_cancellation_shutdown_and_failure_contract
 
     prepare(&mut vm, 10);
     let error = vm.poll_messages().unwrap_err();
-    assert!(format!("{error:#}").contains("sleep"));
+    assert!(format!("{error:#}").contains("getStackTrace"));
     assert_eq!(vm.stack_depth(), 0);
     let error = invoke(&mut vm, "firstValue", "Ljava/lang/String;", vec![]).unwrap_err();
     assert!(format!("{error:#}").contains("Future task aborted"));
+    call(&mut vm, "shutdown");
+    vm.poll_messages().unwrap();
+
+    prepare(&mut vm, 11);
+    vm.poll_messages().unwrap();
+    call(&mut vm, "feed");
+    vm.collect();
+    vm.advance_time(9).unwrap();
+    assert_eq!(number(&mut vm, "done"), 0);
+    vm.advance_time(1).unwrap();
+    assert_eq!(number(&mut vm, "done"), 1);
+    assert_eq!(text(&mut vm, "firstValue"), "payload");
     call(&mut vm, "shutdown");
     vm.poll_messages().unwrap();
 

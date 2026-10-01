@@ -419,13 +419,40 @@ impl Runtime {
         Ok(())
     }
     pub(crate) fn completion_done(&self, owner: Word) -> Result<bool> {
-        match &self.heap.get(owner)?.data {
+        let object = self.heap.get(owner)?;
+        match &object.data {
             Data::Future(future) => Ok(future.done()),
             Data::Executor(pool) => Ok((pool.shutdown || self.queue.closed)
                 && pool.workers.is_empty()
                 && pool.tasks.is_empty()),
+            _ if self.is_a(&object.class, THREAD) => Ok(!self.thread_word(owner, "alive")?.truth()),
             _ => bail!("invalid completion wait owner"),
         }
+    }
+    pub(crate) fn sleep_thread(&mut self, duration: u64) -> Result<()> {
+        if duration == 0 {
+            return self.check_interrupt();
+        }
+        // The current Thread stays alive, so only the deadline or interrupt wakes this wait.
+        let thread = self.current_thread()?;
+        self.wait_completion(thread, Some(duration))?;
+        Ok(())
+    }
+    pub(crate) fn join_thread(&mut self, owner: Word, duration: Option<u64>) -> Result<()> {
+        let thread = self.current_thread()?;
+        // An interrupted suspended join throws even when termination becomes ready in this poll.
+        if self.thread_word(thread, WAIT_OWNER)? == owner
+            && let Err(error) = self.check_interrupt()
+        {
+            self.clear_completion_wait(owner)?;
+            return Err(error);
+        }
+        if self.completion_done(owner)? {
+            self.clear_completion_wait(owner)?;
+        } else {
+            self.wait_completion(owner, duration)?;
+        }
+        Ok(())
     }
     fn timeout_ms(&self, words: &[Word], unit: Word) -> Result<u64> {
         let Data::TimeUnit(unit) = self.heap.get(unit)?.data else {

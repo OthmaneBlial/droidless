@@ -176,7 +176,7 @@ and games remain future compatibility work. [Exact limits](docs/compatibility.md
 | Preferences | [Authored Java/XML fixture](examples/preferences/MainActivity.java) | Native UTF-8 paste, save/restart/clear, typed values and package/path isolation |
 | Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, snapshot iteration across mutation/GC/worker writes, guest equality, read-only views and limits; same normal list, snapshot, map-copy and immediate queue contracts pass on desktop Java |
 | Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup, reference constructors, runtime/inherited annotations, primitive TYPE identities, guest faults and inherited fields; portable contracts pass on desktop Java. SDK profile field checks are compiled DEX evidence |
-| Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native timer and Future wait/deliver/cancel flows; compiled worker Looper delivery, message waits/quit, TimerTask and executor result/wait/shutdown contracts. [Exact scheduling scope](docs/threading.md) |
+| Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native timer and Future wait/deliver/cancel flows; compiled worker sleep/join, Looper delivery, message waits/quit, TimerTask and executor contracts. Portable thread wait checks also pass on desktop Java. [Exact scheduling scope](docs/threading.md) |
 | Images and XML | [Authored Java/XML fixture](examples/images/MainActivity.java) | XML pull traversal, typed attributes, PNG/JPEG/WebP decoding and four native AppKit ImageViews. Unmodified SwpieView also opens selected-folder images in its native full-screen viewer |
 | Activity results and folders | [Authored Java fixture](examples/results/MainActivity.java) | Actual request codes, copied return data, Back cancellation and native folder selection; stopped callers, GC and failure cleanup pass compiled checks. Bounded read-only document queries and streams are supported; writes and persistent grants remain open |
 | Document images | [Authored Java fixture](examples/documents/MainActivity.java) and [SwpieView 1.3.2](https://f-droid.org/en/packages/org.voidptr.swpieview/) | Folder chooser → three thumbnails → JPEG/PNG/WebP full-screen viewer → Back, verified in native AppKit with the unmodified public APK. URI confinement, GC, links, oversized files and sort contracts pass compiled checks |
@@ -199,7 +199,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 96 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 97 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

@@ -1100,3 +1100,32 @@ target/release/droidless run --headless --ephemeral fixtures/generated/schedulin
 target/release/droidless run --ephemeral fixtures/generated/scheduling.apk \
   --click "Start Looper worker" --click "Finish later" --trace-lifecycle
 ```
+
+## Current-source worker sleep and join
+
+Thread.sleep(long/long,int) and Thread.join(no-arg/long/long,int) now use the
+existing shared completion waits. Guest frames, local values and held monitors
+survive suspension and GC. Compiled checks prove delayed wakeup, actual Thread
+termination, timed/sub-ms/self/indefinite joins, interrupts and cleared flags,
+inactive join on main, catchable timeout argument errors and shutdown cleanup.
+The sleeping Callable check supplies input before its deadline: its Future stays
+incomplete until the sleep finishes. The original unsupported-task Future guard
+now uses getStackTrace, which remains unsupported, rather than sleep.
+
+ThreadWaitContract also passes on desktop Java with a separate driver. Android
+reference-device timing is not verified; sub-ms waits round up on the runtime
+clock. Main positive sleep/live join and native bridge/initializer suspension
+remain explicit diagnostics. The original Notepad includes sleep/join calls, but
+its verified save/edit/restart flows do not establish a completed worker workflow
+using these new APIs.
+
+Local CI passes 97 Rust tests, warning-free Clippy, optimized builds and 4,096
+seeded parser mutations. The original public APK compatibility replays remain
+passing. GitHub Actions stay disabled; the 50% checkpoint remains ahead.
+
+```sh
+sh tools/ci.sh
+cargo test -p droidless-runtime --test thread_waits --test executors --locked
+java -cp examples/scheduling/build/classes org.droidless.scheduling.ThreadWaitContract
+python3 tools/compatibility.py
+```
