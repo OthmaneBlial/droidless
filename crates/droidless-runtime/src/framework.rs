@@ -273,6 +273,496 @@ pub(crate) fn known_class(class: &str) -> bool {
         .contains(&class)
 }
 impl Runtime {
+    fn group_drawable_states(&mut self, receiver: Word, extra: Word) -> Result<Word> {
+        // ponytail: bounded synchronous child snapshots; use managed continuations
+        // if deeper state trees or mutation during these callbacks becomes required.
+        ensure!(
+            self.drawable_state_path.len() < 16 && !self.drawable_state_path.contains(&receiver),
+            "drawable state nesting limit or cycle"
+        );
+        ensure!(
+            (0..=100_000).contains(&extra.int()?),
+            "drawable state capacity limit"
+        );
+        let children = self.view_mut(receiver)?.children.clone();
+        let depth = self.drawable_state_path.len();
+        self.drawable_state_path.push(receiver);
+        let roots = self.native_roots.len();
+        self.native_roots.push(receiver);
+        self.native_roots.extend(children.iter().copied());
+        let state = (|| -> Result<Word> {
+            let aggregate = self
+                .focus_field(receiver, "droidless:view:add-child-states")?
+                .truth();
+            let mut capacity = extra.int()?;
+            if aggregate {
+                for child in &children {
+                    let state = self.invoke(
+                        Method {
+                            class: "Landroid/view/View;".into(),
+                            name: "getDrawableState".into(),
+                            parameters: vec![],
+                            returns: "[I".into(),
+                        },
+                        vec![*child],
+                        true,
+                    )?[0];
+                    if state != Word::ZERO {
+                        let Data::Array { element, values } = &self.heap.get(state)?.data else {
+                            bail!("drawable states require int arrays");
+                        };
+                        ensure!(element == "I", "drawable states require int arrays");
+                        capacity = capacity
+                            .checked_add(i32::try_from(values.len())?)
+                            .context("drawable state capacity overflow")?;
+                        ensure!(capacity <= 100_000, "drawable state capacity limit");
+                    }
+                }
+            }
+            let state = self.invoke(
+                Method {
+                    class: "Landroid/view/View;".into(),
+                    name: "onCreateDrawableState".into(),
+                    parameters: vec!["I".into()],
+                    returns: "[I".into(),
+                },
+                vec![receiver, Word::from(capacity)],
+                false,
+            )?[0];
+            self.native_roots.push(state);
+            if aggregate {
+                for child in children {
+                    let additional = self.invoke(
+                        Method {
+                            class: "Landroid/view/View;".into(),
+                            name: "getDrawableState".into(),
+                            parameters: vec![],
+                            returns: "[I".into(),
+                        },
+                        vec![child],
+                        true,
+                    )?[0];
+                    if additional != Word::ZERO {
+                        self.invoke(
+                            Method {
+                                class: "Landroid/view/View;".into(),
+                                name: "mergeDrawableStates".into(),
+                                parameters: vec!["[I".into(), "[I".into()],
+                                returns: "[I".into(),
+                            },
+                            vec![state, additional],
+                            false,
+                        )?;
+                    }
+                }
+            }
+            Ok(state)
+        })();
+        self.native_roots.truncate(roots);
+        self.drawable_state_path.truncate(depth);
+        state
+    }
+
+    fn drawable_state_native(
+        &mut self,
+        method: &Method,
+        args: &[Word],
+    ) -> Result<Option<Vec<Word>>> {
+        if ![
+            "Landroid/view/View;",
+            "Landroid/view/ViewGroup;",
+            "Landroid/widget/CheckedTextView;",
+        ]
+        .contains(&method.class.as_str())
+            || !matches!(
+                method.name.as_str(),
+                "onCreateDrawableState"
+                    | "getDrawableState"
+                    | "mergeDrawableStates"
+                    | "refreshDrawableState"
+                    | "setAddStatesFromChildren"
+                    | "addStatesFromChildren"
+                    | "childDrawableStateChanged"
+                    | "drawableStateChanged"
+                    | "setDuplicateParentStateEnabled"
+            )
+        {
+            return Ok(None);
+        }
+        self.require_main_thread()?;
+        if self.trace.framework {
+            eprintln!("framework: {} {args:?}", method.key());
+        }
+        let arg = |n| -> Result<Word> {
+            args.get(n)
+                .copied()
+                .context("drawable state argument missing")
+        };
+        let receiver = args.first().copied().unwrap_or(Word::ZERO);
+        let mut result = vec![];
+        match (method.class.as_str(), method.signature().as_str()) {
+            ("Landroid/view/View;", "onCreateDrawableState(I)[I") => {
+                ensure!(self.sync_depth < 32, "drawable state nesting limit");
+                let extra =
+                    usize::try_from(arg(1)?.int()?).context("negative drawable state capacity")?;
+                ensure!(extra <= 100_000, "drawable state capacity limit");
+                let fields = &self.heap.get(receiver)?.fields;
+                if fields
+                    .get("droidless:view:duplicate-parent-state")
+                    .and_then(|values| values.first())
+                    .is_some_and(|word| word.truth())
+                    && let Some(parent) = fields
+                        .get("droidless:view:parent")
+                        .and_then(|values| values.first())
+                        .copied()
+                {
+                    ensure!(
+                        self.drawable_state_path.len() < 16
+                            && parent != receiver
+                            && !self.drawable_state_path.contains(&parent),
+                        "drawable state nesting limit or cycle"
+                    );
+                    let depth = self.drawable_state_path.len();
+                    self.drawable_state_path.push(receiver);
+                    let roots = self.native_roots.len();
+                    self.native_roots.extend([receiver, parent]);
+                    let state = self.invoke(
+                        Method {
+                            class: "Landroid/view/View;".into(),
+                            name: "onCreateDrawableState".into(),
+                            parameters: vec!["I".into()],
+                            returns: "[I".into(),
+                        },
+                        vec![parent, arg(1)?],
+                        true,
+                    );
+                    self.native_roots.truncate(roots);
+                    self.drawable_state_path.truncate(depth);
+                    result.extend(state?);
+                    return Ok(Some(result));
+                }
+                let pressed = fields
+                    .get("droidless:touch:pressed")
+                    .and_then(|values| values.first())
+                    .is_some_and(|word| word.truth());
+                let mut states = vec![];
+                if self.view_mut(receiver)?.enabled {
+                    states.push(Word::from(16842910));
+                }
+                if pressed {
+                    states.push(Word::from(16842919));
+                }
+                if self
+                    .focus_field(receiver, "droidless:view:focused")?
+                    .truth()
+                {
+                    states.push(Word::from(16842908));
+                }
+                // ponytail: enabled/pressed/focused states; add selection/window states with their event lifecycle.
+                let array = self.array("I".into(), states.len() + extra)?;
+                let Data::Array { values, .. } = &mut self.heap.get_mut(array)?.data else {
+                    bail!("drawable state is not array");
+                };
+                for (slot, value) in values.iter_mut().zip(states) {
+                    *slot = vec![value];
+                }
+                result.push(array);
+            }
+            ("Landroid/view/ViewGroup;", "onCreateDrawableState(I)[I") => {
+                result.push(self.group_drawable_states(receiver, arg(1)?)?);
+            }
+            ("Landroid/widget/CheckedTextView;", "onCreateDrawableState(I)[I") => {
+                let extra = arg(1)?
+                    .int()?
+                    .checked_add(1)
+                    .context("drawable state capacity overflow")?;
+                let state = self.invoke(
+                    Method {
+                        class: "Landroid/widget/TextView;".into(),
+                        name: "onCreateDrawableState".into(),
+                        parameters: vec!["I".into()],
+                        returns: "[I".into(),
+                    },
+                    vec![receiver, Word::from(extra)],
+                    false,
+                )?[0];
+                if self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:view:checked")
+                    .and_then(|values| values.first())
+                    .is_some_and(|word| word.truth())
+                {
+                    let Data::Array { values, .. } = &mut self.heap.get_mut(state)?.data else {
+                        bail!("checked drawable state is not array");
+                    };
+                    let end = values
+                        .iter()
+                        .rposition(|words| words.first().is_some_and(|word| word.truth()))
+                        .map_or(0, |i| i + 1);
+                    values[end] = vec![Word::from(16842912)];
+                }
+                result.push(state);
+            }
+            ("Landroid/view/View;", "getDrawableState()[I") => {
+                result.extend(self.invoke(
+                    Method {
+                        class: "Landroid/view/View;".into(),
+                        name: "onCreateDrawableState".into(),
+                        parameters: vec!["I".into()],
+                        returns: "[I".into(),
+                    },
+                    vec![receiver, Word::ZERO],
+                    true,
+                )?);
+            }
+            ("Landroid/view/View;", "mergeDrawableStates([I[I)[I") => {
+                let (base, additional) = (arg(0)?, arg(1)?);
+                let Data::Array { element, values } = &self.heap.get(base)?.data else {
+                    bail!("drawable states require int arrays");
+                };
+                ensure!(element == "I", "drawable states require int arrays");
+                let end = values
+                    .iter()
+                    .rposition(|words| words.first().is_some_and(|word| word.truth()))
+                    .map_or(0, |i| i + 1);
+                let Data::Array { element, values } = &self.heap.get(additional)?.data else {
+                    bail!("drawable states require int arrays");
+                };
+                ensure!(element == "I", "drawable states require int arrays");
+                self.invoke(
+                    Method {
+                        class: "Ljava/lang/System;".into(),
+                        name: "arraycopy".into(),
+                        parameters: vec![
+                            "Ljava/lang/Object;".into(),
+                            "I".into(),
+                            "Ljava/lang/Object;".into(),
+                            "I".into(),
+                            "I".into(),
+                        ],
+                        returns: "V".into(),
+                    },
+                    vec![
+                        additional,
+                        Word::ZERO,
+                        base,
+                        Word::from(end as i32),
+                        Word::from(values.len() as i32),
+                    ],
+                    false,
+                )?;
+                result.push(base);
+            }
+            ("Landroid/view/View;", "refreshDrawableState()V") => {
+                ensure!(self.sync_depth < 32, "drawable state nesting limit");
+                self.focus_root(receiver)
+                    .context("drawable state nesting limit or cycle")?;
+                let roots = self.native_roots.len();
+                self.native_roots.push(receiver);
+                let refreshed = (|| -> Result<()> {
+                    self.invoke(
+                        Method {
+                            class: "Landroid/view/View;".into(),
+                            name: "drawableStateChanged".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    )?;
+                    if let Some(parent) = self
+                        .heap
+                        .get(receiver)?
+                        .fields
+                        .get("droidless:view:parent")
+                        .and_then(|values| values.first())
+                        .copied()
+                    {
+                        self.invoke(
+                            Method {
+                                class: "Landroid/view/ViewGroup;".into(),
+                                name: "childDrawableStateChanged".into(),
+                                parameters: vec!["Landroid/view/View;".into()],
+                                returns: "V".into(),
+                            },
+                            vec![parent, receiver],
+                            true,
+                        )?;
+                    }
+                    Ok(())
+                })();
+                self.native_roots.truncate(roots);
+                refreshed?;
+            }
+            (
+                "Landroid/view/ViewGroup;",
+                "setAddStatesFromChildren(Z)V" | "addStatesFromChildren()Z",
+            ) => {
+                self.view_mut(receiver)?;
+                if method.name == "setAddStatesFromChildren" {
+                    let value = Word::from(i32::from(arg(1)?.int()? != 0));
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert("droidless:view:add-child-states".into(), vec![value]);
+                    self.invoke(
+                        Method {
+                            class: "Landroid/view/View;".into(),
+                            name: "refreshDrawableState".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    )?;
+                } else {
+                    result.push(self.focus_field(receiver, "droidless:view:add-child-states")?);
+                }
+            }
+            ("Landroid/view/ViewGroup;", "childDrawableStateChanged(Landroid/view/View;)V") => {
+                self.view_mut(receiver)?;
+                self.view_mut(arg(1)?)?;
+                if self
+                    .focus_field(receiver, "droidless:view:add-child-states")?
+                    .truth()
+                {
+                    self.invoke(
+                        Method {
+                            class: "Landroid/view/View;".into(),
+                            name: "refreshDrawableState".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    )?;
+                }
+            }
+            ("Landroid/view/ViewGroup;", "drawableStateChanged()V") => {
+                ensure!(self.sync_depth < 32, "drawable state nesting limit");
+                let children = self.view_mut(receiver)?.children.clone();
+                let duplicate = children
+                    .into_iter()
+                    .filter_map(|child| {
+                        match self.focus_field(child, "droidless:view:duplicate-parent-state") {
+                            Ok(flag) if flag.truth() => Some(Ok(child)),
+                            Ok(_) => None,
+                            Err(error) => Some(Err(error)),
+                        }
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                if !duplicate.is_empty()
+                    && self
+                        .focus_field(receiver, "droidless:view:add-child-states")?
+                        .truth()
+                {
+                    return Err(fault(
+                        "Ljava/lang/IllegalStateException;",
+                        "child duplicateParentState conflicts with addStatesFromChildren",
+                    ));
+                }
+                let roots = self.native_roots.len();
+                self.native_roots.push(receiver);
+                self.native_roots.extend(duplicate.iter().copied());
+                let changed = (|| -> Result<()> {
+                    self.invoke(
+                        Method {
+                            class: "Landroid/view/View;".into(),
+                            name: "drawableStateChanged".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        false,
+                    )?;
+                    for child in duplicate {
+                        self.invoke(
+                            Method {
+                                class: "Landroid/view/View;".into(),
+                                name: "refreshDrawableState".into(),
+                                parameters: vec![],
+                                returns: "V".into(),
+                            },
+                            vec![child],
+                            true,
+                        )?;
+                    }
+                    Ok(())
+                })();
+                self.native_roots.truncate(roots);
+                changed?;
+            }
+            ("Landroid/view/View;", "drawableStateChanged()V") => {
+                self.view_mut(receiver)?;
+                let fields = &self.heap.get(receiver)?.fields;
+                ensure!(
+                    !fields
+                        .get("droidless:view:state-list-animator")
+                        .and_then(|values| values.first())
+                        .is_some_and(|word| word.truth()),
+                    "StateListAnimator state changes unsupported"
+                );
+                let background = fields
+                    .get("droidless:view:background-drawable")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO);
+                if background != Word::ZERO {
+                    let stateful = self.invoke(
+                        Method {
+                            class: "Landroid/graphics/drawable/Drawable;".into(),
+                            name: "isStateful".into(),
+                            parameters: vec![],
+                            returns: "Z".into(),
+                        },
+                        vec![background],
+                        true,
+                    )?;
+                    if stateful[0].truth() {
+                        let roots = self.native_roots.len();
+                        self.native_roots.extend([receiver, background]);
+                        let changed = (|| -> Result<()> {
+                            let state = self.invoke(
+                                Method {
+                                    class: "Landroid/view/View;".into(),
+                                    name: "getDrawableState".into(),
+                                    parameters: vec![],
+                                    returns: "[I".into(),
+                                },
+                                vec![receiver],
+                                true,
+                            )?[0];
+                            self.invoke(
+                                Method {
+                                    class: "Landroid/graphics/drawable/Drawable;".into(),
+                                    name: "setState".into(),
+                                    parameters: vec!["[I".into()],
+                                    returns: "Z".into(),
+                                },
+                                vec![background, state],
+                                true,
+                            )?;
+                            Ok(())
+                        })();
+                        self.native_roots.truncate(roots);
+                        changed?;
+                    }
+                }
+            }
+            ("Landroid/view/View;", "setDuplicateParentStateEnabled(Z)V") => {
+                self.view_mut(receiver)?;
+                self.heap.get_mut(receiver)?.fields.insert(
+                    "droidless:view:duplicate-parent-state".into(),
+                    vec![arg(1)?],
+                );
+            }
+            _ => return Ok(None),
+        }
+        Ok(Some(result))
+    }
+
     fn manifest_theme_style(&self, class: &str) -> Option<u32> {
         let application = self
             .apk
@@ -500,8 +990,11 @@ impl Runtime {
         Ok(object)
     }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
-        // Keep recursive focus notifications out of the large fallback dispatcher's
-        // debug stack frame; focus_native retains the same UI-thread guard.
+        // Recursive UI callbacks avoid the large fallback dispatcher's debug stack frame.
+        // Each small dispatcher retains the shared UI-thread guard.
+        if let Some(result) = self.drawable_state_native(method, args)? {
+            return Ok(Some(result));
+        }
         if let Some(result) = self.focus_native(method, args)? {
             return Ok(Some(result));
         }
@@ -4688,87 +5181,9 @@ impl Runtime {
             ("Landroid/view/View;", "setEnabled(Z)V") => {
                 self.view_mut(receiver)?.enabled = arg(1)?.int()? != 0
             }
-            ("Landroid/view/View;", "onCreateDrawableState(I)[I") => {
-                let extra = usize::try_from(arg(1)?.int()?).context("negative drawable state capacity")?;
-                ensure!(extra <= 100_000, "drawable state capacity limit");
-                let fields = &self.heap.get(receiver)?.fields;
-                if fields.get("droidless:view:duplicate-parent-state").and_then(|values| values.first()).is_some_and(|word| word.truth())
-                    && let Some(parent) = fields.get("droidless:view:parent").and_then(|values| values.first()).copied() {
-                    result.extend(self.invoke(Method { class: "Landroid/view/View;".into(), name: "onCreateDrawableState".into(),
-                        parameters: vec!["I".into()], returns: "[I".into(), },vec![parent,arg(1)?],true)?);
-                    return Ok(Some(result));
-                }
-                let pressed = fields.get("droidless:touch:pressed").and_then(|values| values.first()).is_some_and(|word| word.truth());
-                let mut states = vec![];
-                if self.view_mut(receiver)?.enabled { states.push(Word::from(16842910)); }
-                if pressed { states.push(Word::from(16842919)); }
-                if self.focus_field(receiver, "droidless:view:focused")?.truth() { states.push(Word::from(16842908)); }
-                // ponytail: enabled/pressed/focused states; add selection/window states with their event lifecycle.
-                let array = self.array("I".into(),states.len()+extra)?;
-                let Data::Array { values, .. } = &mut self.heap.get_mut(array)?.data else { bail!("drawable state is not array"); };
-                for (slot, value) in values.iter_mut().zip(states) { *slot=vec![value]; }
-                result.push(array);
-            }
-            ("Landroid/widget/CheckedTextView;", "onCreateDrawableState(I)[I") => {
-                let extra = arg(1)?.int()?.checked_add(1).context("drawable state capacity overflow")?;
-                let state = self.invoke(Method { class: "Landroid/widget/TextView;".into(), name: "onCreateDrawableState".into(),
-                    parameters: vec!["I".into()], returns: "[I".into(), },vec![receiver,Word::from(extra)],false)?[0];
-                if self.heap.get(receiver)?.fields.get("droidless:view:checked").and_then(|values| values.first()).is_some_and(|word| word.truth()) {
-                    let Data::Array { values, .. } = &mut self.heap.get_mut(state)?.data else { bail!("checked drawable state is not array"); };
-                    let end=values.iter().rposition(|words| words.first().is_some_and(|word| word.truth())).map_or(0,|i|i+1);
-                    values[end]=vec![Word::from(16842912)];
-                }
-                result.push(state);
-            }
-            ("Landroid/view/View;", "getDrawableState()[I") => {
-                result.extend(self.invoke(Method { class: "Landroid/view/View;".into(), name: "onCreateDrawableState".into(),
-                    parameters: vec!["I".into()], returns: "[I".into(), },vec![receiver,Word::ZERO],true)?);
-            }
-            ("Landroid/view/View;", "mergeDrawableStates([I[I)[I") => {
-                let (base, additional)=(arg(0)?,arg(1)?);
-                let Data::Array { element, values } = &self.heap.get(base)?.data else { bail!("drawable states require int arrays"); };
-                ensure!(element=="I", "drawable states require int arrays");
-                let end=values.iter().rposition(|words| words.first().is_some_and(|word| word.truth())).map_or(0,|i|i+1);
-                let Data::Array { element, values } = &self.heap.get(additional)?.data else { bail!("drawable states require int arrays"); };
-                ensure!(element=="I", "drawable states require int arrays");
-                self.invoke(Method { class: "Ljava/lang/System;".into(), name: "arraycopy".into(),
-                    parameters: vec!["Ljava/lang/Object;".into(),"I".into(),"Ljava/lang/Object;".into(),"I".into(),"I".into()],returns:"V".into(), },
-                    vec![additional,Word::ZERO,base,Word::from(end as i32),Word::from(values.len() as i32)],false)?;
-                result.push(base);
-            }
-            ("Landroid/view/View;", "refreshDrawableState()V") => {
-                self.invoke(Method { class: "Landroid/view/View;".into(), name: "drawableStateChanged".into(),parameters:vec![],returns:"V".into() },vec![receiver],true)?;
-                if let Some(parent)=self.heap.get(receiver)?.fields.get("droidless:view:parent").and_then(|values|values.first()).copied() {
-                    self.invoke(Method { class:"Landroid/view/ViewGroup;".into(),name:"childDrawableStateChanged".into(),parameters:vec!["Landroid/view/View;".into()],returns:"V".into() },vec![parent,receiver],true)?;
-                }
-            }
-            ("Landroid/view/ViewGroup;", "childDrawableStateChanged(Landroid/view/View;)V") => {
-                self.view_mut(receiver)?;self.view_mut(arg(1)?)?;
-                // Base groups do not aggregate child states; enabling that mode remains unsupported.
-            }
-            ("Landroid/view/View;", "drawableStateChanged()V") => {
-                self.view_mut(receiver)?;
-                let fields=&self.heap.get(receiver)?.fields;
-                ensure!(!fields.get("droidless:view:state-list-animator").and_then(|values|values.first()).is_some_and(|word|word.truth()),"StateListAnimator state changes unsupported");
-                let background=fields.get("droidless:view:background-drawable").and_then(|values|values.first()).copied().unwrap_or(Word::ZERO);
-                if background!=Word::ZERO {
-                    let stateful=self.invoke(Method { class:"Landroid/graphics/drawable/Drawable;".into(),name:"isStateful".into(),parameters:vec![],returns:"Z".into() },vec![background],true)?;
-                    if stateful[0].truth() {
-                        let roots=self.native_roots.len();self.native_roots.extend([receiver,background]);
-                        let changed=(|| -> Result<()> {
-                            let state=self.invoke(Method { class:"Landroid/view/View;".into(),name:"getDrawableState".into(),parameters:vec![],returns:"[I".into() },vec![receiver],true)?[0];
-                            self.invoke(Method { class:"Landroid/graphics/drawable/Drawable;".into(),name:"setState".into(),parameters:vec!["[I".into()],returns:"Z".into() },vec![background,state],true)?;Ok(())
-                        })();self.native_roots.truncate(roots);changed?;
-                    }
-                }
-            }
             ("Landroid/graphics/drawable/Drawable;", "isStateful()Z") => {
                 ensure!(matches!(self.heap.get(receiver)?.class.as_str(),"Landroid/graphics/drawable/Drawable;"|"Landroid/graphics/drawable/ColorDrawable;"|"Landroid/graphics/drawable/GradientDrawable;"|"Landroid/graphics/drawable/BitmapDrawable;"),"composite drawable state support incomplete");
                 result.push(Word::ZERO);
-            }
-            ("Landroid/view/View;", "setDuplicateParentStateEnabled(Z)V") => {
-                self.view_mut(receiver)?;
-                self.heap.get_mut(receiver)?.fields.insert("droidless:view:duplicate-parent-state".into(), vec![arg(1)?]);
             }
             ("Landroid/widget/CheckedTextView;", "setChecked(Z)V" | "isChecked()Z") => {
                 self.view_mut(receiver)?;

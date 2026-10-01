@@ -2,6 +2,56 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_child_drawable_states_capacity_callbacks_gc_faults_and_cycle_bound() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    let method = |name: &str, returns: &str| Method {
+        class: "Lorg/droidless/images/ChildStateContract;".into(),
+        name: name.into(),
+        parameters: vec!["Landroid/app/Activity;".into()],
+        returns: returns.into(),
+    };
+    let group = vm
+        .invoke(
+            method("run", "Landroid/widget/LinearLayout;"),
+            vec![activity],
+            false,
+        )
+        .unwrap()[0];
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(group).is_err(),
+        "child states leaked temporary roots"
+    );
+    for name in ["cycle", "queryCycle", "deep"] {
+        let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+        let error = vm
+            .invoke(method(name, "V"), vec![activity], false)
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("drawable state nesting limit"),
+            "{error:#}"
+        );
+        assert_eq!(vm.stack_depth(), 0);
+        vm.collect();
+        assert!(
+            vm.heap.get(activity).is_err(),
+            "state failure leaked temporary roots"
+        );
+    }
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    vm.invoke(
+        method("run", "Landroid/widget/LinearLayout;"),
+        vec![activity],
+        false,
+    )
+    .unwrap();
+}
+
+#[test]
 fn compiled_text_paint_construction_flags_inheritance_fields_and_gc() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
