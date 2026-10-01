@@ -70,6 +70,8 @@ pub struct Class {
     pub access: u32,
     pub super_class: Option<String>,
     pub interfaces: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<Annotation>,
     pub methods: Vec<EncodedMethod>,
     pub static_fields: Vec<usize>,
     pub instance_fields: Vec<usize>,
@@ -213,24 +215,17 @@ impl Dex {
                 string_at(&strings, source_idx)?;
             }
             let annotations = b.u32(p + 20)? as usize;
-            let mut method_annotations = if annotations == 0 {
-                BTreeMap::new()
+            let (class_annotations, mut method_annotations) = if annotations == 0 {
+                (vec![], BTreeMap::new())
             } else {
-                parse_method_annotations(
-                    b,
-                    annotations,
-                    &strings,
-                    &types,
-                    &fields,
-                    &methods,
-                    &name,
-                )?
+                parse_annotations(b, annotations, &strings, &types, &fields, &methods, &name)?
             };
             let mut class = Class {
                 name,
                 access: b.u32(p + 4)?,
                 super_class,
                 interfaces: type_list(b.u32(p + 12)? as usize)?,
+                annotations: class_annotations,
                 methods: vec![],
                 static_fields: vec![],
                 instance_fields: vec![],
@@ -315,7 +310,9 @@ impl Dex {
     }
 }
 
-fn parse_method_annotations(
+type AnnotationDirectory = (Vec<Annotation>, BTreeMap<usize, Vec<Annotation>>);
+
+fn parse_annotations(
     b: Bytes<'_>,
     at: usize,
     strings: &[String],
@@ -323,7 +320,7 @@ fn parse_method_annotations(
     fields: &[Field],
     methods: &[Method],
     owner: &str,
-) -> Result<BTreeMap<usize, Vec<Annotation>>> {
+) -> Result<AnnotationDirectory> {
     b.slice(at, 16)?;
     let class_annotations = b.u32(at)? as usize;
     let field_count = b.u32(at + 4)? as usize;
@@ -335,9 +332,11 @@ fn parse_method_annotations(
         .context("annotation directory count overflow")?;
     ensure!(entries <= 1_000_000, "annotation directory limit reached");
     b.table(at + 16, entries, 8)?;
-    if class_annotations != 0 {
-        let _ = annotation_set(b, class_annotations, strings, types, fields, methods)?;
-    }
+    let class_annotations = if class_annotations == 0 {
+        vec![]
+    } else {
+        annotation_set(b, class_annotations, strings, types, fields, methods)?
+    };
     let mut pos = at + 16 + field_count * 8;
     let mut annotated = BTreeMap::new();
     for _ in 0..method_count {
@@ -374,7 +373,7 @@ fn parse_method_annotations(
         ensure!(count <= 1_000_000, "parameter annotation limit reached");
         b.table(references + 4, count, 4)?;
     }
-    Ok(annotated)
+    Ok((class_annotations, annotated))
 }
 
 fn annotation_set(
@@ -655,4 +654,34 @@ fn encoded_value(
         value <<= (8 - width) * 8;
     }
     Ok(EncodedValue::Bits(value))
+}
+
+#[cfg(test)]
+mod annotation_directory_tests {
+    use super::*;
+    #[test]
+    fn retains_runtime_class_annotation_values() {
+        let mut bytes: Vec<u8> = [16u32, 0, 0, 0, 1, 24]
+            .into_iter()
+            .flat_map(u32::to_le_bytes)
+            .collect();
+        bytes.extend([1, 0, 1, 0, 0x17, 1]);
+        let (classes, methods) = parse_annotations(
+            Bytes(&bytes),
+            0,
+            &["value".into(), "kept".into()],
+            &["LMarker;".into()],
+            &[],
+            &[],
+            "LOwner;",
+        )
+        .unwrap();
+        assert!(methods.is_empty());
+        assert_eq!(classes.len(), 1);
+        assert_eq!(classes[0].class, "LMarker;");
+        assert_eq!(classes[0].visibility, 1);
+        assert_eq!(classes[0].values.len(), 1);
+        assert_eq!(classes[0].values[0].0, "value");
+        assert!(matches!(&classes[0].values[0].1,EncodedValue::String(value) if value=="kept"));
+    }
 }
