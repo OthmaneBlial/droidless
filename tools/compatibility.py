@@ -299,24 +299,36 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
     if fields != [revised_title, body]:
         raise SystemExit("Notepad title/body did not survive restart and reopen in the editor")
 
-    with tempfile.TemporaryDirectory(prefix="droidless-notepad-drawer-") as drawer_root:
-        drawer_data = Path(drawer_root) / "apps"
-        shutil.copytree(app_data, drawer_data)
-        process = subprocess.run([
-            str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(drawer_data),
-            "--tap", "24", "22", "--advance-ms", "100", str(notepad),
-        ], text=True, capture_output=True, check=True, timeout=120)
-        tree = json.loads(process.stdout)
-        frames = [(node, alpha) for node, alpha in visible_nodes(tree)
-            if node["view"]["text"] == "Create or edit folders"]
-        if len(frames) != 1 or any(alpha != 1 or not 0 <= node["rect"]["y"] < 844
-            or node["rect"]["x"] + node["rect"]["width"] <= 0
-            or node["rect"]["x"] >= 390 for node, alpha in frames):
-            raise SystemExit("Notepad original drawer animation did not reveal its folders menu entry")
-        with sqlite3.connect(drawer_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
-            retained = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
-        if retained != rows:
-            raise SystemExit("Notepad drawer animation changed an existing note row")
+    for phase, milliseconds, actions in [
+        ("frame", "100", []),
+        ("open", "1000", []),
+        ("closed", "1000", ["--back", "--advance-ms", "1000"]),
+    ]:
+        with tempfile.TemporaryDirectory(prefix="droidless-notepad-drawer-") as drawer_root:
+            drawer_data = Path(drawer_root) / "apps"
+            shutil.copytree(app_data, drawer_data)
+            process = subprocess.run([
+                str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(drawer_data),
+                "--tap", "24", "22", "--advance-ms", milliseconds, *actions, str(notepad),
+            ], text=True, capture_output=True, check=True, timeout=120)
+            tree = json.loads(process.stdout)
+            if tree is None:
+                raise SystemExit("Notepad drawer replay finished the Activity instead of retaining Notes")
+            frames = [(node, alpha) for node, alpha in visible_nodes(tree)
+                if node["view"]["text"] == "Create or edit folders"]
+            if phase != "closed":
+                if len(frames) != 1 or any(alpha != 1 or not 0 <= node["rect"]["y"] < 844
+                    or node["rect"]["x"] + node["rect"]["width"] <= 0
+                    or node["rect"]["x"] >= 390 for node, alpha in frames):
+                    raise SystemExit(f"Notepad original drawer {phase} did not reveal its folders menu entry")
+            elif frames or not {"Notes", revised_title, probe_titles[1]} <= {
+                node["view"]["text"] for node, _ in visible_nodes(tree)
+            }:
+                raise SystemExit("Notepad Back did not close its drawer and retain the Notes screen")
+            with sqlite3.connect(drawer_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
+                retained = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+            if retained != rows:
+                raise SystemExit(f"Notepad drawer {phase} changed an existing note row")
 
     survivor = next(row for row in rows if row[0] != original_id)
     # Original Undo calls note.save(); the APK's INSERT omits its auto-increment ID.
@@ -409,9 +421,10 @@ report["undo_survivor_id_title_body_retained"] = True
 report["undo_old_timeout_harmless"] = True
 report["headless_drawer_navigation_tap_verified"] = True
 report["headless_drawer_animation_frame_verified"] = True
-report["headless_drawer_open_back_close_verified"] = False
+report["headless_drawer_open_back_close_verified"] = True
 report["drawer_existing_note_rows_retained"] = True
 report["drawer_frame_steps_ms"] = [100]
+report["drawer_open_close_steps_ms"] = [1000, 1000]
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
@@ -420,6 +433,7 @@ print("PASS Notepad: original Delete menu returns to Notes; survivor ID/title/bo
 print("PASS Notepad: original Snackbar message/UNDO show at 250ms and are removed after timed dismissal; exact survivor retained")
 print("PASS Notepad: original UNDO restores title/body with a fresh ID; exact survivor, harmless old timeout, restart and reopen verified")
 print("PASS Notepad: original navigation tap reveals an on-screen drawer animation frame at 100ms; both exact note rows retained")
+print("PASS Notepad: original drawer settles at 1000ms; Back closes it, retains Notes and preserves both exact rows")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.
