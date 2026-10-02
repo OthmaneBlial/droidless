@@ -404,6 +404,39 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             if retained != rows or original != rows or folders != [(1, saved_name)]:
                 raise SystemExit(f"Notepad folder {phase} changed the saved folder or seed/copy notes")
 
+        # Diagnose unfinished backup/restore on separate copies; an error is not a backup.
+        backup_blockers = {}
+        for action, failure in [
+            ("Backup data", "PC 0x0091]: unsupported class Ljava/io/FileOutputStream;"),
+            ("Restore data", "PC 0x00eb]: unsupported method Landroid/widget/Toast;->makeText"),
+        ]:
+            with tempfile.TemporaryDirectory(prefix="droidless-notepad-backup-") as backup_root:
+                backup_data = Path(backup_root) / "apps"
+                shutil.copytree(folder_data, backup_data)
+                copied_db = backup_data / "ir.cafebazaar.notepad/databases/AppDatabase.db"
+                with sqlite3.connect(copied_db) as connection:
+                    before = [connection.execute("SELECT * FROM " + table + " ORDER BY id").fetchall()
+                              for table in ["Note", "Folder"]]
+                process = subprocess.run([
+                    str(args.binary), "run", "--headless", "--trace-methods", "--trace-framework",
+                    "--size", "390x844", "--data-dir", str(backup_data),
+                    "--tap", "24", "22", "--advance-ms", "1000", "--click", action, str(notepad),
+                ], text=True, capture_output=True, timeout=120)
+                if process.returncode != 1 or failure not in process.stderr:
+                    raise SystemExit("Notepad " + action + " did not report its recorded first blocker")
+                if action == "Backup data" and "framework: Ljava/io/FileInputStream;->getChannel()Ljava/nio/channels/FileChannel;" not in process.stderr:
+                    raise SystemExit("Notepad backup did not reach the real private file input channel")
+                for checked_db in [copied_db, folder_data / "ir.cafebazaar.notepad/databases/AppDatabase.db"]:
+                    with sqlite3.connect(checked_db) as connection:
+                        after = [connection.execute("SELECT * FROM " + table + " ORDER BY id").fetchall()
+                                 for table in ["Note", "Folder"]]
+                    if after != before:
+                        raise SystemExit("Notepad " + action + " changed its exact notes/folders or seed")
+                external = backup_data / "ir.cafebazaar.notepad/external"
+                if external.exists() and any(external.iterdir()):
+                    raise SystemExit("Unfinished Notepad backup/restore unexpectedly created a file")
+                backup_blockers[action] = failure
+
         # Replay the original modal buttons and persist the result, using only this copy.
         show_delete = open_folders + ["--focus-at", "1", "--tap", "24", "128"]
         for phase, actions, deleted in [
@@ -592,6 +625,12 @@ report["headless_folder_delete_restart_back_verified"] = True
 report["folder_delete_retains_exact_notes"] = True
 report["native_folder_delete_dialog_input_verified"] = False
 report["folder_deletion_first_blocker"] = dialog_blocker
+report["backup_restore_boundary_diagnosed"] = True
+report["backup_private_input_channel_reached"] = True
+report["backup_restore_exact_notes_folders_and_seed_retained"] = True
+report["headless_backup_verified"] = False
+report["headless_restore_verified"] = False
+report["backup_restore_first_blockers"] = backup_blockers
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
@@ -608,6 +647,7 @@ print("PASS Notepad: saved-row focus and unconfirmed input complete; restart dis
 print("PASS Notepad: host editor focus runs guest callbacks; pending input is discarded on restart with exact notes/folder retained")
 print("PASS Notepad: original rename confirmation completes; same folder ID/name survive restart and Back with both exact notes")
 print("PASS Notepad: original folder-delete modal displays title/message/buttons; Cancel retains folder, confirmation deletes it, restart/Back preserve both exact notes")
+print("PASS Notepad diagnostic: backup reaches private input channel then stops at FileOutputStream; missing-file restore stops at Toast; exact notes/folders and seed retained, no backup created")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.

@@ -36,8 +36,10 @@ current package capability. It grants no shared host volume or cross-package
 access. Directory traversal and symlinks are checked by the same storage boundary.
 
 FileInputStream snapshots regular files only within the package capability,
-with no-follow opens, hard-link rejection and a 64 MiB read ceiling. Output
-streams and general file channels remain unavailable.
+with no-follow opens, hard-link rejection and a 64 MiB read ceiling. Its input
+channel shares the snapshot's position and close state without granting a host
+descriptor. Output streams, transfer/mapping/locking and general file channels
+remain unavailable.
 
 Network, clipboard, camera, microphone, location, process and
 native-library APIs are unavailable. Inspected manifest permissions grant no host

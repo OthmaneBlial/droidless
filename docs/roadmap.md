@@ -82,7 +82,7 @@ The following are objectives, not completed capability claims.
    execute real DEX, and scalar animation/color/shadow state passes checks. Rename
    confirmation now completes with actual host-font ascent/descent. The same
    folder ID/new name survive restart and Back while both notes stay exact.
-   Folder deletion, software IME and native folder input remain ahead; Android
+   Software IME and native folder input remain ahead; Android
    font parity is not established.
    Native editor first-responder gains now invoke real guest focus callbacks;
    component checks cover key-view traversal, selection and refusal/failure.
@@ -94,6 +94,11 @@ The following are objectives, not completed capability claims.
    in headless replay. Cancel preserves the folder; confirmed deletion, restart
    and Back preserve both exact notes. Text ellipsis offsets/snapshots and native
    display projection have compiled checks. Physical public-dialog input remains ahead.
+   Private FileInputStream snapshots and shared input-channel state now pass
+   compiled and confined-storage checks. The virtual external directory stays
+   inside the current package. Original backup reaches its private input channel
+   and stops at FileOutputStream; missing-file restore stops at Toast. Full copied-
+   data backup/restore, writes and channel transfer remain future work.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
