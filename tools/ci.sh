@@ -12,7 +12,7 @@ cargo run --release --locked -p droidless-formats --example fuzz-smoke
 if [ "$(uname -s)" = Darwin ]; then
     native_check=$(mktemp -t droidless-native-check)
     trap 'rm -f "$native_check"' EXIT HUP INT TERM
-    for source in tools/native-font-check.m tools/native-focus-check.m tools/native-dialog-check.m tools/native-foreground-check.m; do
+    for source in tools/native-font-check.m tools/native-focus-check.m tools/native-dialog-check.m tools/native-foreground-check.m tools/native-clip-check.m; do
         xcrun clang -fobjc-arc -Wall -Wextra -Werror -framework AppKit -framework QuartzCore "$source" -o "$native_check"
         "$native_check"
     done

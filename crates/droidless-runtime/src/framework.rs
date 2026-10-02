@@ -7443,6 +7443,34 @@ impl Runtime {
                 // Custom drawing-order configuration remains unsupported.
                 result.push(Word::ZERO);
             }
+            (
+                "Landroid/view/ViewGroup;",
+                "setClipChildren(Z)V"
+                | "setClipToPadding(Z)V"
+                | "getClipChildren()Z"
+                | "getClipToPadding()Z",
+            ) => {
+                ensure!(
+                    self.is_a(&self.heap.get(receiver)?.class, "Landroid/view/ViewGroup;"),
+                    "clipping requires ViewGroup"
+                );
+                let value = if method.name.starts_with("set") {
+                    Some(arg(1)?.int()? != 0)
+                } else {
+                    None
+                };
+                let view = self.view_mut(receiver)?;
+                let flag = if method.name.ends_with("Children") {
+                    &mut view.clip_children
+                } else {
+                    &mut view.clip_to_padding
+                };
+                if let Some(value) = value {
+                    *flag = value;
+                } else {
+                    result.push(Word::from(i32::from(*flag)));
+                }
+            }
             ("Landroid/view/View;", "getParent()Landroid/view/ViewParent;") => {
                 let parent = self
                     .heap
@@ -9320,6 +9348,8 @@ impl Runtime {
                     }
                 }
                 "orientation" => view.orientation = raw.data as i32,
+                "clipChildren" => view.clip_children = self.attribute(raw)?.data != 0,
+                "clipToPadding" => view.clip_to_padding = self.attribute(raw)?.data != 0,
                 "scaleType" if view.kind == "ImageView" => {
                     ensure!(
                         (1..=7).contains(&raw.data),

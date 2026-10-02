@@ -14,6 +14,8 @@ typedef struct {
     int32_t image_scale;
     uint32_t font_family, font_style;
     float x, y, width, height, text_size, alpha, padding[4];
+    uint32_t has_clips;
+    float paint_clip[4], input_clip[4];
     const char *text;
     const char *description;
     size_t click_target;
@@ -30,6 +32,35 @@ static NSFont *viewFont(const NativeView *node) {
 @implementation FlippedView
 - (BOOL)isFlipped { return YES; }
 @end
+
+@interface DroidlessSurface : FlippedView
+@property NSMapTable<NSView *,NSValue *> *inputClips;
+@property NSMapTable<NSView *,NSValue *> *paintClips;
+@end
+@implementation DroidlessSurface
+- (NSView *)hitTest:(NSPoint)point {
+    NSPoint local = [self convertPoint:point fromView:self.superview];
+    if (self.hidden || !NSPointInRect(local, self.bounds)) return nil;
+    for (NSView *child in self.subviews.reverseObjectEnumerator) {
+        NSValue *clip = [self.inputClips objectForKey:child];
+        if (clip && !NSPointInRect(local, clip.rectValue)) continue;
+        NSView *hit = [child hitTest:local];
+        if (hit) return hit;
+    }
+    return self;
+}
+@end
+
+static void clipView(NSView *view, NSRect clip) {
+    // Keep the control frame intact: cropping its frame would reflow text and images.
+    CAShapeLayer *mask = [CAShapeLayer layer];
+    mask.frame = view.bounds;
+    NSRect local = [view convertRect:clip fromView:view.superview];
+    CGPathRef path = CGPathCreateWithRect(local, NULL);
+    mask.path = path;
+    CGPathRelease(path);
+    view.layer.mask = mask;
+}
 
 @interface DroidlessForeground : FlippedView
 @end
@@ -219,7 +250,7 @@ void *dl_open(const char *title, float width, float height, void *context, Callb
     host.window.title = [NSString stringWithUTF8String:title];
     host.window.releasedWhenClosed = NO;
     host.window.delegate = host;
-    host.window.contentView = [[FlippedView alloc] initWithFrame:NSMakeRect(0,0,width,height)];
+    host.window.contentView = [[DroidlessSurface alloc] initWithFrame:NSMakeRect(0,0,width,height)];
     [host.window center];
     [host.window makeKeyAndOrderFront:nil];
     [NSApp activateIgnoringOtherApps:YES];
@@ -263,7 +294,7 @@ void *dl_dialog(void *opaque, size_t handle, float width, float height) {
             backing:NSBackingStoreBuffered defer:NO];
         host.window.releasedWhenClosed = NO;
         host.window.delegate = host;
-        host.window.contentView = [[FlippedView alloc] initWithFrame:NSMakeRect(0,0,width,height)];
+        host.window.contentView = [[DroidlessSurface alloc] initWithFrame:NSMakeRect(0,0,width,height)];
         NSRect parent = owner.window.frame;
         [host.window setFrameOrigin:NSMakePoint(NSMidX(parent)-host.window.frame.size.width/2,
             NSMidY(parent)-host.window.frame.size.height/2)];
@@ -335,6 +366,19 @@ void dl_view(void *opaque, const NativeView *node) {
     view.hidden = node->visible != 0;
     view.alphaValue = node->alpha;
     view.wantsLayer = YES;
+    DroidlessSurface *surface = (DroidlessSurface *)host.window.contentView;
+    if (!surface.inputClips) surface.inputClips = [NSMapTable weakToStrongObjectsMapTable];
+    if (!surface.paintClips) surface.paintClips = [NSMapTable weakToStrongObjectsMapTable];
+    if (node->has_clips) {
+        NSRect clip = NSMakeRect(node->paint_clip[0],node->paint_clip[1],node->paint_clip[2],node->paint_clip[3]);
+        clipView(view, clip);
+        [surface.paintClips setObject:[NSValue valueWithRect:clip] forKey:view];
+        [surface.inputClips setObject:[NSValue valueWithRect:NSMakeRect(node->input_clip[0],node->input_clip[1],node->input_clip[2],node->input_clip[3])] forKey:view];
+    } else {
+        view.layer.mask = nil;
+        [surface.inputClips removeObjectForKey:view];
+        [surface.paintClips removeObjectForKey:view];
+    }
     view.layer.backgroundColor = node->has_background ? color(node->background).CGColor : NULL;
     NSString *text = [NSString stringWithUTF8String:node->text];
     NSString *description = node->description ? [NSString stringWithUTF8String:node->description] : nil;
@@ -419,6 +463,8 @@ void dl_foreground(void *opaque, size_t handle, uint32_t argb, float x, float y,
     view.alphaValue = alpha;
     // Foreground is painted after the entire descendant subtree and never captures input.
     [host.window.contentView addSubview:view positioned:NSWindowAbove relativeTo:nil];
+    NSValue *clip = [((DroidlessSurface *)host.window.contentView).paintClips objectForKey:host.views[key]];
+    if (clip) clipView(view, clip.rectValue); else view.layer.mask = nil;
 }
 void dl_menu_clear(void *opaque) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;

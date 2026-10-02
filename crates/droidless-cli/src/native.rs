@@ -25,6 +25,9 @@ struct NativeView {
     text_size: f32,
     alpha: f32,
     padding: [f32; 4],
+    has_clips: u32,
+    paint_clip: [f32; 4],
+    input_clip: [f32; 4],
     text: *const c_char,
     description: *const c_char,
     click_target: usize,
@@ -275,6 +278,19 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
             text_size: n.view.text_size,
             alpha,
             padding: n.view.padding,
+            has_clips: 1,
+            paint_clip: [
+                n.paint_clip.x,
+                n.paint_clip.y,
+                n.paint_clip.width,
+                n.paint_clip.height,
+            ],
+            input_clip: [
+                n.input_clip.x,
+                n.input_clip.y,
+                n.input_clip.width,
+                n.input_clip.height,
+            ],
             text: text.as_ptr(),
             description: description
                 .as_ref()

@@ -17,6 +17,8 @@ pub struct View {
     pub height: f32,
     pub weight: f32,
     pub padding: [f32; 4],
+    pub clip_children: bool,
+    pub clip_to_padding: bool,
     pub margins: [f32; 4],
     pub visible: i32,
     pub enabled: bool,
@@ -103,6 +105,8 @@ impl View {
             height: -2.0,
             weight: 0.0,
             padding: [0.0; 4],
+            clip_children: true,
+            clip_to_padding: true,
             margins: [0.0; 4],
             visible: 0,
             enabled: true,
@@ -196,18 +200,32 @@ pub(crate) fn grid_metrics(view: &View, available: f32) -> Result<GridMetrics> {
     })
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub struct Rect {
     pub x: f32,
     pub y: f32,
     pub width: f32,
     pub height: f32,
 }
+impl Rect {
+    pub fn intersection(self, other: Self) -> Self {
+        let x = self.x.max(other.x);
+        let y = self.y.max(other.y);
+        Self {
+            x,
+            y,
+            width: ((self.x + self.width).min(other.x + other.width) - x).max(0.0),
+            height: ((self.y + self.height).min(other.y + other.height) - y).max(0.0),
+        }
+    }
+}
 #[derive(Debug, Serialize)]
 pub struct Node {
     pub handle: usize,
     pub view: View,
     pub rect: Rect,
+    pub paint_clip: Rect,
+    pub input_clip: Rect,
     pub children: Vec<Node>,
 }
 
@@ -278,17 +296,44 @@ pub(crate) fn margins(heap: &Heap, word: Word) -> Result<[f32; 4]> {
 }
 
 pub fn layout(heap: &Heap, root: Word, width: f32, height: f32) -> Result<Node> {
-    build(
-        heap,
-        root,
-        Rect {
-            x: 0.0,
-            y: 0.0,
-            width,
-            height,
-        },
-        &mut vec![],
-    )
+    let viewport = Rect {
+        x: 0.0,
+        y: 0.0,
+        width,
+        height,
+    };
+    let mut tree = build(heap, root, viewport, &mut vec![])?;
+    apply_clips(&mut tree, viewport, viewport, true);
+    Ok(tree)
+}
+fn apply_clips(node: &mut Node, paint: Rect, input: Rect, clip_child: bool) {
+    node.paint_clip = if clip_child {
+        paint.intersection(node.rect)
+    } else {
+        paint
+    };
+    // Android touch targeting follows ancestor bounds, independently of drawing flags/padding.
+    node.input_clip = input.intersection(node.rect);
+    let [left, top, right, bottom] = node.view.padding;
+    let children_paint = if node.view.clip_to_padding && node.view.padding.iter().any(|p| *p != 0.0)
+    {
+        node.paint_clip.intersection(Rect {
+            x: node.rect.x + left,
+            y: node.rect.y + top,
+            width: (node.rect.width - left - right).max(0.0),
+            height: (node.rect.height - top - bottom).max(0.0),
+        })
+    } else {
+        node.paint_clip
+    };
+    for child in &mut node.children {
+        apply_clips(
+            child,
+            children_paint,
+            node.input_clip,
+            node.view.clip_children,
+        );
+    }
 }
 fn laid_out_rect(heap: &Heap, word: Word, parent: Rect) -> Result<Option<Rect>> {
     let fields = &heap.get(word)?.fields;
@@ -513,6 +558,8 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
         handle,
         view,
         rect,
+        paint_clip: rect,
+        input_clip: rect,
         children,
     })
 }

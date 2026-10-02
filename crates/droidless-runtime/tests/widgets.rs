@@ -4,6 +4,137 @@ use droidless_runtime::{
     heap::{Data, Word},
 };
 
+#[test]
+fn compiled_viewgroup_clipping_xml_ancestors_zero_padding_and_faults() {
+    use droidless_runtime::ui::{Rect, layout};
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    let rect = |x, y, width, height| Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+    let method = |name: &str, parameters: Vec<String>, returns: &str| Method {
+        class: "Lorg/droidless/images/ClipContract;".into(),
+        name: name.into(),
+        parameters,
+        returns: returns.into(),
+    };
+    let activity = vm.activity.unwrap();
+    let viewport = rect(0.0, 0.0, 120.0, 90.0);
+    for (flags, middle_clip, leaf_clip) in [
+        (0, viewport, viewport),
+        (1, rect(0.0, 10.0, 70.0, 60.0), rect(0.0, 10.0, 70.0, 60.0)),
+        (
+            2,
+            rect(10.0, 10.0, 100.0, 70.0),
+            rect(10.0, 10.0, 100.0, 70.0),
+        ),
+        (
+            3,
+            rect(10.0, 10.0, 60.0, 60.0),
+            rect(10.0, 10.0, 60.0, 60.0),
+        ),
+        (4, viewport, rect(0.0, 15.0, 80.0, 75.0)),
+        (8, viewport, rect(0.0, 15.0, 65.0, 50.0)),
+        (
+            15,
+            rect(10.0, 10.0, 60.0, 60.0),
+            rect(10.0, 15.0, 55.0, 50.0),
+        ),
+    ] {
+        let root = vm
+            .invoke(
+                method(
+                    "build",
+                    vec!["Landroid/app/Activity;".into(), "I".into()],
+                    "Landroid/view/View;",
+                ),
+                vec![activity, Word::from(flags)],
+                false,
+            )
+            .unwrap()[0];
+        let tree = layout(&vm.heap, root, 120.0, 90.0).unwrap();
+        let middle = &tree.children[0];
+        let leaf = &middle.children[0];
+        assert_eq!(middle.rect, rect(-10.0, 10.0, 80.0, 60.0));
+        assert_eq!(leaf.rect, rect(-20.0, 15.0, 100.0, 80.0));
+        assert_eq!(middle.paint_clip, middle_clip, "flags {flags}");
+        assert_eq!(leaf.paint_clip, leaf_clip, "flags {flags}");
+        assert_eq!(
+            leaf.input_clip,
+            rect(0.0, 15.0, 70.0, 55.0),
+            "drawing flags must not change input bounds"
+        );
+    }
+    let root = vm
+        .invoke(
+            method(
+                "build",
+                vec!["Landroid/app/Activity;".into(), "I".into()],
+                "Landroid/view/View;",
+            ),
+            vec![activity, Word::from(2)],
+            false,
+        )
+        .unwrap()[0];
+    vm.invoke(
+        Method {
+            class: "Landroid/view/View;".into(),
+            name: "setPadding".into(),
+            parameters: vec!["I".into(); 4],
+            returns: "V".into(),
+        },
+        vec![root, Word::ZERO, Word::ZERO, Word::ZERO, Word::ZERO],
+        true,
+    )
+    .unwrap();
+    assert_eq!(
+        layout(&vm.heap, root, 120.0, 90.0).unwrap().children[0].paint_clip,
+        viewport
+    );
+    let root = vm
+        .invoke(
+            method(
+                "xml",
+                vec!["Landroid/app/Activity;".into()],
+                "Landroid/view/View;",
+            ),
+            vec![activity],
+            false,
+        )
+        .unwrap()[0];
+    let tree = layout(&vm.heap, root, 120.0, 90.0).unwrap();
+    assert!(!tree.view.clip_children && !tree.view.clip_to_padding);
+    assert_eq!(tree.children[0].paint_clip, viewport);
+    let plain = Word::Ref(tree.children[0].handle);
+    for (name, params, returns) in [
+        ("setClipToPadding", vec!["Z".into()], "V"),
+        ("getClipChildren", vec![], "Z"),
+    ] {
+        let call = Method {
+            class: "Landroid/view/ViewGroup;".into(),
+            name: name.into(),
+            parameters: params,
+            returns: returns.into(),
+        };
+        for receiver in [Word::ZERO, Word::from(1), plain, activity] {
+            let args = if name.starts_with("set") {
+                vec![receiver, Word::from(1)]
+            } else {
+                vec![receiver]
+            };
+            assert!(vm.invoke(call.clone(), args, false).is_err());
+            assert_eq!(vm.stack_depth(), 0);
+        }
+    }
+    vm.close().unwrap();
+    vm.collect();
+}
+
 fn dialog_surface_call(
     vm: &mut Runtime,
     name: &str,

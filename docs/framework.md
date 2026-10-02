@@ -1042,6 +1042,28 @@ foregrounds, tint and general Canvas painting remain outside this profile.
 
 [API-21 FrameLayout reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/FrameLayout.java).
 
+### ViewGroup drawing clips
+
+setClipChildren/getClipChildren and setClipToPadding/getClipToPadding share
+validated ViewGroup state, with both flags true by default. XML clipChildren and
+clipToPadding boolean values use the same model. Layout snapshots carry the
+intersection of ancestor drawing clips separately from ancestor input bounds.
+Padding clips apply only when padding is nonzero; disabling a descendant flag
+cannot erase an ancestor's clip. Translations retain the child's full frame.
+
+The AppKit bridge masks native layers and foreground overlays rather than
+cropping control frames, preserving text/image layout and editor identity.
+Native mouse targeting follows parent bounds independently of painting flags
+and padding, matching the guest touch dispatcher. Activity and Dialog surfaces
+use the same path. Compiled DEX checks cover flags, XML, nested clips, zero
+padding, GC and invalid receivers; the native check samples actual clipped paint
+and checks button targeting, foregrounds, reuse and panel surfaces.
+EdgeEffect rendering, scroll-coordinate clipping, arbitrary transforms and
+custom Canvas overflow remain outside this profile.
+
+[ViewGroup clipping reference](https://developer.android.com/reference/android/view/ViewGroup#setClipToPadding(boolean)),
+[API-21 drawing and touch paths](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
+
 ### Weak references and collector reachability
 
 WeakReference retains a weak managed heap edge, including APK subclasses and
