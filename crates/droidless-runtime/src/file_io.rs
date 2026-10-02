@@ -6,6 +6,8 @@ use anyhow::{Context, Result, ensure};
 use droidless_formats::dex::Method;
 
 const EXTERNAL_ROOT: &str = "/storage/emulated/0";
+const CHANNEL: &str = "droidless:file:channel";
+const CHANNEL_STREAM: &str = "droidless:file:channel-stream";
 
 impl Runtime {
     pub(crate) fn file_io_native(
@@ -21,6 +23,102 @@ impl Runtime {
                 .with_context(|| format!("{} argument missing", method.key()))
         };
         match (method.class.as_str(), signature.as_str()) {
+            ("Ljava/io/FileInputStream;", "getChannel()Ljava/nio/channels/FileChannel;") => {
+                ensure!(args.len() == 1, "invalid getChannel arguments");
+                let object = self.heap.get(receiver)?;
+                ensure!(
+                    matches!(object.data, Data::ByteStream { .. }),
+                    fault(
+                        "Ljava/lang/IllegalStateException;",
+                        "FileInputStream is not initialized"
+                    )
+                );
+                if let Some(channel) = object.fields.get(CHANNEL).and_then(|v| v.first()) {
+                    return Ok(Some(vec![*channel]));
+                }
+                let channel = self.heap.instance("Ljava/nio/channels/FileChannel;")?;
+                self.heap
+                    .get_mut(channel)?
+                    .fields
+                    .insert(CHANNEL_STREAM.into(), vec![receiver]);
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert(CHANNEL.into(), vec![channel]);
+                Ok(Some(vec![channel]))
+            }
+            (
+                "Ljava/nio/channels/FileChannel;",
+                "size()J" | "position()J" | "position(J)Ljava/nio/channels/FileChannel;",
+            )
+            | (
+                "Ljava/nio/channels/FileChannel;"
+                | "Ljava/nio/channels/spi/AbstractInterruptibleChannel;"
+                | "Ljava/nio/channels/Channel;",
+                "isOpen()Z" | "close()V",
+            ) => {
+                ensure!(
+                    args.len() == if method.parameters.is_empty() { 1 } else { 3 },
+                    "invalid file channel arguments"
+                );
+                let stream = *self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get(CHANNEL_STREAM)
+                    .and_then(|v| v.first())
+                    .context("uninitialized file channel")?;
+                let Data::ByteStream {
+                    bytes,
+                    position,
+                    closed,
+                } = &self.heap.get(stream)?.data
+                else {
+                    return Err(fault(
+                        "Ljava/lang/IllegalStateException;",
+                        "file channel has no input stream",
+                    ));
+                };
+                if method.name == "isOpen" {
+                    return Ok(Some(vec![Word::from(i32::from(!closed))]));
+                }
+                if method.name == "close" {
+                    if let Data::ByteStream { closed, .. } = &mut self.heap.get_mut(stream)?.data {
+                        *closed = true;
+                    }
+                    return Ok(Some(vec![]));
+                }
+                ensure!(
+                    !closed,
+                    fault(
+                        "Ljava/nio/channels/ClosedChannelException;",
+                        "Channel closed"
+                    )
+                );
+                if signature == "position(J)Ljava/nio/channels/FileChannel;" {
+                    let next = bits64(&args[1..])? as i64;
+                    ensure!(
+                        next >= 0,
+                        fault(
+                            "Ljava/lang/IllegalArgumentException;",
+                            "negative channel position"
+                        )
+                    );
+                    let next = usize::try_from(next)
+                        .context("channel position exceeds host index size")?;
+                    if let Data::ByteStream { position, .. } = &mut self.heap.get_mut(stream)?.data
+                    {
+                        *position = next;
+                    }
+                    Ok(Some(vec![receiver]))
+                } else {
+                    Ok(Some(wide(if method.name == "size" {
+                        bytes.len()
+                    } else {
+                        *position
+                    } as u64)))
+                }
+            }
             ("Landroid/os/Environment;", "getExternalStorageDirectory()Ljava/io/File;") => {
                 ensure!(
                     args.is_empty(),
@@ -341,7 +439,7 @@ impl Runtime {
                     ));
                 };
                 ensure!(!closed, fault("Ljava/io/IOException;", "Stream closed"));
-                let (bytes, position) = (bytes.clone(), *position);
+                let position = *position;
                 let remaining = bytes.len().saturating_sub(position);
                 let result = match signature.as_str() {
                     "read()I" => {
@@ -402,13 +500,13 @@ impl Runtime {
                         } else if count == 0 {
                             -1
                         } else {
+                            let read = bytes[position..position + count].to_vec();
                             let values = match &mut self.heap.get_mut(array)?.data {
                                 Data::Array { values, .. } => values,
                                 _ => unreachable!(),
                             };
-                            for (target, byte) in values[offset..offset + count]
-                                .iter_mut()
-                                .zip(&bytes[position..position + count])
+                            for (target, byte) in
+                                values[offset..offset + count].iter_mut().zip(&read)
                             {
                                 *target = vec![Word::from(i32::from(*byte as i8))];
                             }

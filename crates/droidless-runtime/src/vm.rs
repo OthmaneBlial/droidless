@@ -1145,6 +1145,18 @@ impl Runtime {
             "Landroid/text/TextUtils$TruncateAt;" => "Ljava/lang/Enum;",
             "Ljava/lang/ref/WeakReference;" => "Ljava/lang/ref/Reference;",
             "Ljava/io/FileInputStream;" => "Ljava/io/InputStream;",
+            "Ljava/nio/channels/FileChannel;" => {
+                "Ljava/nio/channels/spi/AbstractInterruptibleChannel;"
+            }
+            "Ljava/nio/channels/SeekableByteChannel;" => "Ljava/nio/channels/ByteChannel;",
+            "Ljava/nio/channels/GatheringByteChannel;" => "Ljava/nio/channels/WritableByteChannel;",
+            "Ljava/nio/channels/ScatteringByteChannel;" => {
+                "Ljava/nio/channels/ReadableByteChannel;"
+            }
+            "Ljava/nio/channels/ReadableByteChannel;"
+            | "Ljava/nio/channels/WritableByteChannel;" => "Ljava/nio/channels/Channel;",
+            "Ljava/nio/channels/Channel;" => "Ljava/io/Closeable;",
+            "Ljava/io/Closeable;" => "Ljava/lang/AutoCloseable;",
             "Ljava/io/InputStream;" => "Ljava/lang/Object;",
             "Ljava/io/File;" => "Ljava/lang/Object;",
             "Ljava/lang/Double;" => "Ljava/lang/Number;",
@@ -1356,6 +1368,33 @@ impl Runtime {
             }
             if current == "Landroid/database/Cursor;" {
                 work.extend(["Ljava/io/Closeable;", "Ljava/lang/AutoCloseable;"].map(String::from));
+            }
+            if current == "Ljava/io/InputStream;"
+                || current == "Ljava/nio/channels/spi/AbstractInterruptibleChannel;"
+            {
+                work.push("Ljava/io/Closeable;".into());
+                if current == "Ljava/nio/channels/spi/AbstractInterruptibleChannel;" {
+                    work.push("Ljava/nio/channels/Channel;".into());
+                }
+            }
+            if current == "Ljava/nio/channels/FileChannel;" {
+                work.extend(
+                    [
+                        "Ljava/nio/channels/SeekableByteChannel;",
+                        "Ljava/nio/channels/GatheringByteChannel;",
+                        "Ljava/nio/channels/ScatteringByteChannel;",
+                    ]
+                    .map(String::from),
+                );
+            }
+            if current == "Ljava/nio/channels/ByteChannel;" {
+                work.extend(
+                    [
+                        "Ljava/nio/channels/ReadableByteChannel;",
+                        "Ljava/nio/channels/WritableByteChannel;",
+                    ]
+                    .map(String::from),
+                );
             }
             if current == "Landroid/app/Activity;" {
                 work.push("Landroid/view/Window$Callback;".into());

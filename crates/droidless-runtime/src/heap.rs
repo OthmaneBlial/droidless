@@ -70,6 +70,7 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         "Ljava/lang/Exception;" => "Ljava/lang/Throwable;",
         "Ljava/lang/Throwable;" => "Ljava/lang/Object;",
         "Ljava/io/FileNotFoundException;" => "Ljava/io/IOException;",
+        "Ljava/nio/channels/ClosedChannelException;" => "Ljava/io/IOException;",
         "Ljava/io/IOException;" => "Ljava/lang/Exception;",
         _ => return None,
     })

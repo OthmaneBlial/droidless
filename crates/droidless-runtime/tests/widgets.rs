@@ -2318,6 +2318,47 @@ fn compiled_focus_ownership_callbacks_gc_removal_and_fault_recovery() {
 }
 
 #[test]
+fn compiled_file_channel_shared_position_close_wide_values_and_gc() {
+    let mut vm = Runtime::new(
+        Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
+    )
+    .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    let channel = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/counter/FileChannelContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "Ljava/nio/channels/FileChannel;".into(),
+            },
+            vec![activity],
+            false,
+        )
+        .unwrap()[0];
+    let source = vm.heap.get(channel).unwrap().fields["droidless:file:channel-stream"][0];
+    vm.collect();
+    assert!(vm.heap.get(channel).is_ok() && vm.heap.get(source).is_ok());
+    vm.invoke(
+        Method {
+            class: "Lorg/droidless/counter/FileChannelContract;".into(),
+            name: "release".into(),
+            parameters: vec![],
+            returns: "V".into(),
+        },
+        vec![],
+        false,
+    )
+    .unwrap();
+    vm.collect();
+    assert!(
+        vm.heap.get(channel).is_err() && vm.heap.get(source).is_err(),
+        "channel cycle retained a released stream"
+    );
+    assert_eq!(vm.stack_depth(), 0);
+}
+
+#[test]
 fn compiled_ellipsis_utf16_invalidation_xml_and_native_projection() {
     let mut vm = Runtime::new(
         Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),

@@ -43,7 +43,17 @@ FileNotFoundException. Reads snapshot at most 64 MiB at construction, so later
 file replacement does not change that stream. Existing read/skip/available/close
 behavior applies to the snapshot. Ephemeral runtimes have no disk file access;
 the bounded virtual `/proc/self/cmdline` file remains available. Live descriptors,
-output streams and FileChannel operations remain unsupported.
+output streams and channel transfer operations remain unsupported.
+
+FileInputStream.getChannel returns one retained FileChannel for that stream.
+The read-only snapshot channel exposes size, shared position, isOpen and close.
+Seeking changes subsequent stream reads; seeking beyond EOF preserves size and
+returns EOF on reading. Negative positions fail. Closing either object closes
+the other, with catchable ClosedChannelException from closed channel operations.
+Compiled DEX checks cover wide positions, interface identity, aliasing, faults
+and collection of the source/channel cycle. ByteBuffer reads, transfers, writes,
+mapping, locking and interruptible descriptor I/O remain unsupported.
+Reference: [FileChannel API](https://developer.android.com/reference/java/nio/channels/FileChannel).
 
 ## API behavior
 
