@@ -5,6 +5,23 @@ use crate::{
 use anyhow::{Context, Result};
 use droidless_formats::dex::Method;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GuestExit(i32);
+
+impl GuestExit {
+    pub fn code(self) -> i32 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for GuestExit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "guest requested process exit with code {}", self.0)
+    }
+}
+
+impl std::error::Error for GuestExit {}
+
 impl Runtime {
     pub(crate) fn system_native(
         &mut self,
@@ -47,6 +64,10 @@ impl Runtime {
             return Ok(None);
         }
         match method.signature().as_str() {
+            "exit(I)V" => {
+                let code = args.first().context("System.exit status missing")?.int()?;
+                Err(GuestExit(code).into())
+            }
             "currentTimeMillis()J" => {
                 let millis = self.wall_time_ms();
                 Ok(Some(wide(millis as u64)))

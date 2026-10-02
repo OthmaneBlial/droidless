@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use droidless_formats::apk::Apk;
-use droidless_runtime::{Runtime, Trace};
+use droidless_runtime::{GuestExit, Runtime, Trace};
 #[cfg(target_os = "macos")]
 mod native;
 
@@ -15,10 +15,16 @@ enum Action {
     Advance(u64),
 }
 
-fn main() {
-    if let Err(error) = run() {
-        eprintln!("DROIDLESS: {error:#}");
-        std::process::exit(1);
+fn main() -> std::process::ExitCode {
+    match run() {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(error) => {
+            if let Some(exit) = error.downcast_ref::<GuestExit>() {
+                return std::process::ExitCode::from(exit.code() as u8);
+            }
+            eprintln!("DROIDLESS: {error:#}");
+            std::process::ExitCode::FAILURE
+        }
     }
 }
 fn run() -> Result<()> {

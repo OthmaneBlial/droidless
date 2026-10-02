@@ -449,9 +449,10 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
                 "--click", "notepad_backup.nbu", "--advance-ms", "1000", "--click", "Restore",
                 "--advance-ms", "1000", str(notepad),
             ], text=True, capture_output=True, timeout=120)
-            exit_boundary = "unsupported method Ljava/lang/System;->exit(I)V"
-            if process.returncode != 1 or exit_boundary not in process.stderr:
-                raise SystemExit("Notepad restore did not reach its known post-restore System.exit boundary")
+            exit_call = "framework: Ljava/lang/System;->exit(I)V"
+            if process.returncode != 0 or exit_call not in process.stderr:
+                raise SystemExit("Notepad restore did not exit cleanly through System.exit(0)")
+            backup_restore_status = process.returncode
             if copied_db.read_bytes() != backup_file.read_bytes():
                 raise SystemExit("Notepad Restore did not recover the exact backup database bytes")
             with sqlite3.connect(copied_db) as connection:
@@ -480,8 +481,6 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
                 }
             if untouched != before:
                 raise SystemExit("Notepad backup/restore modified the test seed copy")
-        backup_restore_boundary = exit_boundary
-
         # Replay the original modal buttons and persist the result, using only this copy.
         show_delete = open_folders + ["--focus-at", "1", "--tap", "24", "128"]
         for phase, actions, deleted in [
@@ -676,7 +675,9 @@ report["backup_restore_exact_notes_folders_and_seed_retained"] = True
 report["headless_backup_verified"] = True
 report["headless_restore_verified"] = True
 report["backup_restore_completes_before_guest_system_exit"] = True
-report["backup_restore_exit_boundary"] = backup_restore_boundary
+report["guest_system_exit_handled_verified"] = True
+report["guest_system_exit_status_code"] = backup_restore_status
+report["backup_restore_exit_boundary"] = None
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
@@ -694,7 +695,7 @@ print("PASS Notepad: host editor focus runs guest callbacks; pending input is di
 print("PASS Notepad: original rename confirmation completes; same folder ID/name survive restart and Back with both exact notes")
 print("PASS Notepad: original folder-delete modal displays title/message/buttons; Cancel retains folder, confirmation deletes it, restart/Back preserve both exact notes")
 print("PASS Notepad: APK creates a byte-exact SQLite backup; Restore recovers tampered notes/folder and fresh launch renders them")
-print("NOTE Notepad: guest System.exit(0) remains unsupported after the exact database restore")
+print("PASS Notepad: guest System.exit(0) returns CLI status 0 after the exact database restore")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.

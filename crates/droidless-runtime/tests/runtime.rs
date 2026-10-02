@@ -1,6 +1,6 @@
 use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{
-    Runtime,
+    GuestExit, Runtime,
     heap::{Word, bits64, wide},
     ui::Node,
 };
@@ -430,18 +430,22 @@ fn text_selection_uses_the_nearest_click_owner_without_bubbling_guest_clicks() {
 }
 
 #[test]
-fn unsupported_apis_fail_without_succeeding_silently() {
+fn system_exit_returns_guest_status_without_a_host_exit() {
     let mut vm = runtime();
-    let method = Method {
-        class: "Ljava/lang/System;".into(),
-        name: "exit".into(),
-        parameters: vec!["I".into()],
-        returns: "V".into(),
-    };
-    assert!(
-        vm.invoke(method, vec![Word::ZERO], false)
-            .unwrap_err()
-            .to_string()
-            .contains("unsupported method")
-    );
+    for code in [0, 23] {
+        let error = vm
+            .invoke(
+                Method {
+                    class: "Ljava/lang/System;".into(),
+                    name: "exit".into(),
+                    parameters: vec!["I".into()],
+                    returns: "V".into(),
+                },
+                vec![Word::from(code)],
+                false,
+            )
+            .unwrap_err();
+        assert_eq!(error.downcast_ref::<GuestExit>().unwrap().code(), code);
+        assert_eq!(vm.stack_depth(), 0);
+    }
 }

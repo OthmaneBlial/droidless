@@ -1090,8 +1090,9 @@ mod tests {
             vec![Word::from(4)],
         )
         .unwrap_err();
+        assert_eq!(error.downcast_ref::<crate::GuestExit>().unwrap().code(), 3);
         let message = format!("{error:#}");
-        assert!(message.contains("System;->exit"));
+        assert!(message.contains("guest requested process exit with code 3"));
         assert_eq!(
             message
                 .matches("FrameContract;->unsupported(I)V [classes.dex, PC")
