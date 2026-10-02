@@ -482,8 +482,9 @@ rectangles. Self conversion returns immediately, including a null Rect; a
 foreign ancestor raises IllegalArgumentException after any preceding translations.
 Chains beyond 128 steps or cycles are rejected, and worker calls retain the UI
 thread guard. Compiled checks cover nested groups, both directions, overflow,
-fault recovery and GC. Scroll setters, matrix transforms and clipping are outside
-this profile. Rect.width/height use signed wrapping subtraction; negative bounds
+fault recovery and GC. Scroll setters and matrix transforms are outside this
+coordinate-conversion profile; ViewGroup drawing clips are described below.
+Rect.width/height use signed wrapping subtraction; negative bounds
 are not normalized. The behavior follows the
 [API-21 ViewGroup reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
 
@@ -1042,6 +1043,42 @@ foregrounds, tint and general Canvas painting remain outside this profile.
 
 [API-21 FrameLayout reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/FrameLayout.java).
 
+### ViewGroup drawing clips
+
+setClipChildren/getClipChildren and setClipToPadding/getClipToPadding share
+validated ViewGroup state, with both flags true by default. XML clipChildren and
+clipToPadding boolean values use the same model. Layout snapshots carry the
+intersection of ancestor drawing clips separately from ancestor input bounds.
+Padding clips apply only when padding is nonzero; disabling a descendant flag
+cannot erase an ancestor's clip. Translations retain the child's full frame.
+Drawing clips use the View's own padding; a FrameLayout foreground's extra
+padding reserves layout space without enlarging that clip or enabling a padding
+clip when the View's own padding is zero.
+
+The AppKit bridge masks native layers and foreground overlays rather than
+cropping control frames, preserving text/image layout and editor identity.
+Native mouse targeting follows parent bounds independently of painting flags
+and padding, matching the guest touch dispatcher. Activity and Dialog surfaces
+use the same path. Compiled DEX checks cover flags, XML, nested clips, zero
+padding, GC and invalid receivers; the native check samples actual clipped paint
+and checks button targeting, foregrounds, reuse and panel surfaces.
+EdgeEffect rendering, scroll-coordinate clipping, arbitrary transforms and
+custom Canvas overflow remain outside this profile.
+
+[ViewGroup clipping reference](https://developer.android.com/reference/android/view/ViewGroup#setClipToPadding(boolean)),
+[API-21 drawing and touch paths](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
+
+View.canScrollVertically/canScrollHorizontally now invoke the actual virtual
+offset, range and extent methods, in that order. Default View metrics use its
+layout size and retained scroll offsets; APK overrides execute their own DEX.
+The queries retain API-21 directional boundaries, zero-direction behavior and
+Java integer wrapping. Callback GC and faults preserve receiver ownership and
+unwind temporary roots. The compiled contract covers both axes, overscroll,
+end boundaries, empty/negative ranges, integer overflow, defaults, call order,
+callback faults and recovery. This implements scrollability queries, not host
+scrolling or Android scrollbars.
+[API-21 View scroll metrics](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/View.java).
+
 ### Weak references and collector reachability
 
 WeakReference retains a weak managed heap edge, including APK subclasses and
@@ -1114,8 +1151,9 @@ This is the main-thread modal profile. Dialog OnKeyListener delivery, native
 window-focus callback delivery, state save/restore, arbitrary WindowManager
 add/remove operations, nonmodal/floating-window flags and composite foreground
 painting remain unsupported. The public Notepad APK completes its own AppCompat
-dialog layout inflation, then fails at NestedScrollView.setClipToPadding at
-onCreate PC 0x019d;
+dialog creation/start/guest attachment, clipping setup and both queued scroll
+queries, then fails at Layout.getEllipsisCount during DialogTitle.onMeasure
+at PC 0x0012 under ContentFrameLayout.onMeasure at PC 0x007d;
 its confirmation dialog and folder deletion are not yet verified. Authored DEX
 contracts and real AppKit component checks cover the implemented surface behavior;
 physical interaction with a public dialog remains unverified.

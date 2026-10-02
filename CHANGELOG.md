@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- ViewGroup clipping flags now affect native descendant and foreground painting.
+  Input follows ancestor bounds separately; foreground padding reserves layout
+  space without enlarging the drawing clip. Compiled DEX and native pixel/input
+  checks cover nested flags, XML, zero padding, editor selection and panels.
+  View scrollability queries execute actual virtual offset/range/extent callbacks,
+  retaining directional boundaries, integer wrapping, GC and callback faults.
+  The unchanged Notepad APK passes dialog creation/start/attachment and both
+  queued scroll queries; title measurement now stops at Layout.getEllipsisCount.
+  The exact folder and notes survive. Public confirmation remains unverified.
+
 - Typed resource resolution now honors selected default styles, XML styles and
   explicit XML precedence. Null ImageView sources clear the drawable; TypedValue
   floats preserve their bits. TypedArray.getValue fills real scalar/string output,
@@ -9,8 +19,8 @@
   Compiled DEX checks cover snapshots, GC, cycles and invalid input. Recognized
   Material themes supply bounded flat text defaults, disabled alpha and action-bar
   size; numeric getters resolve theme aliases. The unchanged
-  Notepad APK completes AppCompat dialog layout inflation and now stops at
-  NestedScrollView clipping setup, preserving the folder and exact notes.
+  Notepad APK completes AppCompat dialog layout inflation; its current title
+  measurement boundary is recorded above, preserving the folder and exact notes.
   Public confirmation and confirmed folder deletion remain unverified.
 
 - FrameLayout foregrounds now retain real Drawable identity, use weak callbacks,

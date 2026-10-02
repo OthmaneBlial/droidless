@@ -1,7 +1,9 @@
 # First interactive milestone evidence
 
-Latest local source gate: 142 Rust tests, warning-free Clippy, optimized builds
+Latest local source gate: 144 Rust tests, warning-free Clippy, optimized builds
 and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
+The [latest source increment](#current-source-clipping-and-scroll-query-dialog-boundary)
+also passes five native component checks and the full public APK replay.
 
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
 plus AppKit controls. Native observations and headless tests are separated below.
@@ -2440,3 +2442,51 @@ workflows plus the dialog diagnostic. That CLI and the unsigned development
 bundle are byte-identical: SHA-256 `523d33070d626864073c5372b2c5ce83d29808647ac8c297b0591578f1797d74`.
 The 50% checkpoint remains active; no new release or physical public-dialog
 interaction is claimed.
+
+## Current-source clipping and scroll-query dialog boundary
+
+Date: 2026-10-02. Source increments: 9396b64 (native clipping), 1e83566
+(virtual scroll queries), 0c77360 (foreground/drawing padding separation) and
+b412e65 (permanent public replay). These increments are beyond v0.1.0.
+
+ViewGroup clipping flags and XML booleans feed separate drawing and input
+rectangles. Native layer masks clip descendants and foregrounds without cropping
+control frames. Input follows ancestor bounds independently of padding/drawing
+flags. Foreground padding still reserves layout space; only the View's own
+padding controls the drawing clip. Compiled DEX checks cover nested flags, XML,
+zero padding, actual padded Drawable callbacks, GC and invalid receivers. Native
+checks sample clipped painted pixels, preserve editor selection, verify button
+orientation/input, and exercise the same path on real Dialog panels. EdgeEffect,
+scroll-coordinate clipping, arbitrary transforms and custom Canvas overflow
+remain outside this profile. [Methods and references](framework.md#viewgroup-drawing-clips).
+
+View.canScrollVertically/canScrollHorizontally call actual virtual offset, range
+and extent methods in order, including APK overrides. Default metrics use layout
+size and retained scroll offsets. Compiled checks cover both axes, overscroll,
+end/empty/negative ranges, zero direction, Java integer wrapping, callback order,
+GC, faults and recovery. Host scrolling and Android scrollbar rendering remain
+outside this query profile.
+
+The unmodified Notepad APK passes its original focused saved-folder delete
+listener, dialog creation/start/guest attachment and both queued scroll-indicator
+queries. Its next exact failure occurs during title measurement:
+`unsupported method Landroid/text/Layout;->getEllipsisCount(I)I`.
+The stack retains DialogTitle.onMeasure at PC 0x0012 under
+ContentFrameLayout.onMeasure at PC 0x007d. The permanent replay requires the
+original listener, clipping/start/attachment traces and both query directions,
+then checks that the same folder ID/name, both exact note IDs/titles/bodies and
+the seed remain unchanged. APK SHA-256 remains
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+Guest attachment does not establish public presentation: measurement still fails,
+and public confirmation, Cancel, confirmed folder deletion and physical folder
+input remain unverified. No APK patch or replacement confirmation is used.
+
+The complete local gate passes 144 Rust tests, warning-free Clippy, optimized
+workspace/document-replay builds, 4,096 seeded parser mutations and five native
+font/focus/dialog/foreground/clipping component checks. The full public replay
+passes calculator, image/grid/result, SwpieView and Notepad workflows, including
+the new diagnostic, against one unchanged optimized CLI. Its unsigned development
+bundle is byte-identical: SHA-256
+`613eebd7e8b22b76ed271841133937f73d4336995b06665fcc02969b8fb4c849`.
+GitHub Actions remain disabled. The 50% checkpoint remains active; no new release
+or physical public-dialog interaction is claimed.

@@ -1151,8 +1151,9 @@ This is the main-thread modal profile. Dialog OnKeyListener delivery, native
 window-focus callback delivery, state save/restore, arbitrary WindowManager
 add/remove operations, nonmodal/floating-window flags and composite foreground
 painting remain unsupported. The public Notepad APK completes its own AppCompat
-dialog layout inflation, then fails at NestedScrollView.setClipToPadding at
-onCreate PC 0x019d;
+dialog creation/start/guest attachment, clipping setup and both queued scroll
+queries, then fails at Layout.getEllipsisCount during DialogTitle.onMeasure
+at PC 0x0012 under ContentFrameLayout.onMeasure at PC 0x007d;
 its confirmation dialog and folder deletion are not yet verified. Authored DEX
 contracts and real AppKit component checks cover the implemented surface behavior;
 physical interaction with a public dialog remains unverified.
