@@ -785,6 +785,7 @@ impl Runtime {
                     self.view_mut(receiver)?.background =
                         self.background_drawable_color(background, 0)?;
                 }
+                self.refresh_foreground(receiver, true)?;
             }
             ("Landroid/view/View;", "setDuplicateParentStateEnabled(Z)V") => {
                 self.view_mut(receiver)?;
@@ -1687,6 +1688,9 @@ impl Runtime {
         Ok(object)
     }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+        if let Some(result) = self.foreground_native(method, args)? {
+            return Ok(Some(result));
+        }
         if let Some(result) = self.selector_drawable_native(method, args)? {
             return Ok(Some(result));
         }
@@ -2343,6 +2347,22 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .insert("color".into(), vec![arg(1)?]);
+                if method.name == "setColor" {
+                    let roots = self.native_roots.len();
+                    self.native_roots.push(receiver);
+                    let changed = self.invoke(
+                        Method {
+                            class: "Landroid/graphics/drawable/Drawable;".into(),
+                            name: "invalidateSelf".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    );
+                    self.native_roots.truncate(roots);
+                    changed?;
+                }
             }
             ("Landroid/graphics/drawable/ColorDrawable;", "getColor()I") => {
                 result.push(
@@ -2735,7 +2755,8 @@ impl Runtime {
                 result.push(visible);
             }
             ("Landroid/graphics/drawable/Drawable;", "setVisible(ZZ)Z") => {
-                let visible = arg(1)?;
+                let visible = Word::from(i32::from(arg(1)?.int()? != 0));
+                arg(2)?.int()?;
                 let previous = self
                     .heap
                     .get(receiver)?
@@ -2748,7 +2769,23 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .insert("droidless:drawable:visible".into(), vec![visible]);
-                result.push(Word::from(i32::from(previous != visible)));
+                if previous.truth() != visible.truth() {
+                    let roots = self.native_roots.len();
+                    self.native_roots.push(receiver);
+                    let changed = self.invoke(
+                        Method {
+                            class: "Landroid/graphics/drawable/Drawable;".into(),
+                            name: "invalidateSelf".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    );
+                    self.native_roots.truncate(roots);
+                    changed?;
+                }
+                result.push(Word::from(i32::from(previous.truth() != visible.truth())));
             }
             ("Landroid/graphics/drawable/Drawable;", "getState()[I") => {
                 let state = if let Some(state) = self
@@ -2902,9 +2939,6 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .insert("droidless:drawable:configurations".into(), vec![arg(1)?]);
-            }
-            ("Landroid/graphics/drawable/Drawable;", "invalidateSelf()V") => {
-                self.heap.get(receiver)?;
             }
             ("Landroid/graphics/drawable/Drawable;", "setTint(I)V") => {
                 let colors = self
@@ -7390,6 +7424,24 @@ impl Runtime {
                 let v = arg(1)?.int()?;
                 ensure!([0, 4, 8].contains(&v), "invalid View visibility");
                 self.view_mut(receiver)?.visible = v;
+                let foreground = self.window_word(receiver, "droidless:view:foreground")?;
+                if foreground != Word::ZERO {
+                    let roots = self.native_roots.len();
+                    self.native_roots.extend([receiver, foreground]);
+                    let changed = self.invoke(
+                        Method {
+                            class: "Landroid/graphics/drawable/Drawable;".into(),
+                            name: "setVisible".into(),
+                            parameters: vec!["Z".into(), "Z".into()],
+                            returns: "Z".into(),
+                        },
+                        vec![foreground, Word::from(i32::from(v == 0)), Word::ZERO],
+                        true,
+                    );
+                    self.native_roots.truncate(roots);
+                    changed?;
+                }
+
                 if self.find_focus(receiver)? != Word::ZERO
                     && (v == 8 || (v == 4 && self.focus_root(receiver)? != receiver))
                 {

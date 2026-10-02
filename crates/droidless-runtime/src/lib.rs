@@ -13,6 +13,7 @@ mod enums;
 mod executors;
 mod file_io;
 mod focus;
+mod foreground;
 mod fragments;
 mod framework;
 mod graphics;

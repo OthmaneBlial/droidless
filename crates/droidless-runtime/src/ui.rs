@@ -27,6 +27,8 @@ pub struct View {
     pub alpha: f32,
     pub text_color: u32,
     pub background: Option<u32>,
+    pub foreground_overlay: Option<u32>,
+    pub foreground_padding: [f32; 4],
     pub gravity: u32,
     pub image_scale: i32,
     pub grid: Option<Grid>,
@@ -111,12 +113,18 @@ impl View {
             alpha: 1.0,
             text_color: 0xff222222,
             background: None,
+            foreground_overlay: None,
+            foreground_padding: [0.0; 4],
             gravity: 0,
             image_scale: 3,
             grid: (name == "GridView").then(Grid::default),
             image: None,
         })
     }
+}
+
+fn content_padding(view: &View) -> [f32; 4] {
+    std::array::from_fn(|edge| view.padding[edge].max(view.foreground_padding[edge]))
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -344,6 +352,7 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
     }
     view.weight = weight(heap, word)?;
     view.margins = margins(heap, word)?;
+    view.padding = content_padding(&view);
     let mut children = vec![];
     let available = Rect {
         x: rect.x + view.padding[0],
@@ -591,6 +600,7 @@ fn dimension_inner(
         ensure!(depth < 128, "View measurement nesting limit");
         let object = heap.get(word)?;
         let v = object.view.as_ref().context("expected View")?;
+        let padding = content_padding(v);
         let field = if horizontal { "width" } else { "height" };
         if measured && let Some(value) = measured_dimension(heap, word, horizontal)? {
             return Ok(value.min(parent));
@@ -627,7 +637,7 @@ fn dimension_inner(
                 .transpose()?
                 .unwrap_or(grid.columns.max(1))
                 .max(1) as usize;
-            let mut height = v.padding[1] + v.padding[3];
+            let mut height = padding[1] + padding[3];
             for (index, row) in v.children.chunks(columns).enumerate() {
                 if index > 0 {
                     height += grid.vertical_spacing as f32;
@@ -658,7 +668,7 @@ fn dimension_inner(
                         .max()
                         .unwrap_or(0)
                 };
-                (characters as f32 * text_advance(v.text_size) + 24.0 + v.padding[0] + v.padding[2])
+                (characters as f32 * text_advance(v.text_size) + 24.0 + padding[0] + padding[2])
                     .max(48.0)
                     .min(parent)
             } else {
@@ -695,7 +705,7 @@ fn dimension_inner(
                     })
                     .max(limit("droidless:text:setMinLines", 0)?)
                     .max(0);
-                (v.text_size * lines as f32 + 24.0 + v.padding[1] + v.padding[3])
+                (v.text_size * lines as f32 + 24.0 + padding[1] + padding[3])
                     .max(44.0)
                     .min(parent)
             });
@@ -732,9 +742,9 @@ fn dimension_inner(
         };
         Ok((total
             + if horizontal {
-                v.padding[0] + v.padding[2]
+                padding[0] + padding[2]
             } else {
-                v.padding[1] + v.padding[3]
+                padding[1] + padding[3]
             })
         .min(parent))
     }

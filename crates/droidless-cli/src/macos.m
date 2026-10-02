@@ -31,6 +31,12 @@ static NSFont *viewFont(const NativeView *node) {
 - (BOOL)isFlipped { return YES; }
 @end
 
+@interface DroidlessForeground : FlippedView
+@end
+@implementation DroidlessForeground
+- (NSView *)hitTest:(NSPoint)point { (void)point; return nil; }
+@end
+
 @interface DroidlessImage : NSImageView
 @property int32_t scaleType;
 @property NSEdgeInsets contentPadding;
@@ -71,6 +77,8 @@ static NSFont *viewFont(const NativeView *node) {
 @property NSMenu *options;
 @property NSMutableDictionary<NSNumber *,NSView *> *views;
 @property NSMutableSet<NSNumber *> *touched;
+@property NSMutableDictionary<NSNumber *,NSView *> *foregrounds;
+@property NSMutableSet<NSNumber *> *foregroundTouched;
 @property void *context;
 @property Callback callback;
 @property BOOL running;
@@ -201,6 +209,8 @@ void *dl_open(const char *title, float width, float height, void *context, Callb
     [menu addItem:optionsItem];
     host.views = [NSMutableDictionary new];
     host.touched = [NSMutableSet new];
+    host.foregrounds = [NSMutableDictionary new];
+    host.foregroundTouched = [NSMutableSet new];
     host.dialogs = [NSMutableDictionary new];
     host.dialogTouched = [NSMutableSet new];
     host.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,width,height)
@@ -246,6 +256,8 @@ void *dl_dialog(void *opaque, size_t handle, float width, float height) {
         host.drawing = YES;
         host.views = [NSMutableDictionary new];
         host.touched = [NSMutableSet new];
+        host.foregrounds = [NSMutableDictionary new];
+        host.foregroundTouched = [NSMutableSet new];
         host.window = [[NSPanel alloc] initWithContentRect:NSMakeRect(0,0,width,height)
             styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable
             backing:NSBackingStoreBuffered defer:NO];
@@ -290,6 +302,7 @@ void dl_begin(void *opaque, const char *title, uint32_t touchEnabled, uint32_t t
     host.touchEnabled = touchEnabled != 0;
     if (!host.touchEnabled || !touchActive) host.touchTracking = NO;
     [host.touched removeAllObjects];
+    [host.foregroundTouched removeAllObjects];
     host.keyTarget = 0;
 }
 void dl_view(void *opaque, const NativeView *node) {
@@ -385,9 +398,27 @@ void dl_end(void *opaque) {
     for (NSNumber *key in [host.views.allKeys copy]) {
         if (![host.touched containsObject:key]) {[host.views[key] removeFromSuperview];[host.views removeObjectForKey:key];}
     }
+    for (NSNumber *key in host.foregrounds.allKeys) {
+        if (![host.foregroundTouched containsObject:key]) {
+            [host.foregrounds[key] removeFromSuperview]; [host.foregrounds removeObjectForKey:key];
+        }
+    }
     // Initial drawing happens after Rust has installed the returned host pointer.
     host.options.delegate = host;
     host.drawing = NO;
+}
+void dl_foreground(void *opaque, size_t handle, uint32_t argb, float x, float y, float width, float height, float alpha) {
+    DroidlessHost *host = (__bridge DroidlessHost *)opaque;
+    NSNumber *key = @(handle);
+    NSView *view = host.foregrounds[key];
+    if (!view) { view = [DroidlessForeground new]; host.foregrounds[key] = view; }
+    [host.foregroundTouched addObject:key];
+    view.frame = NSMakeRect(x,y,width,height);
+    view.wantsLayer = YES;
+    view.layer.backgroundColor = color(argb).CGColor;
+    view.alphaValue = alpha;
+    // Foreground is painted after the entire descendant subtree and never captures input.
+    [host.window.contentView addSubview:view positioned:NSWindowAbove relativeTo:nil];
 }
 void dl_menu_clear(void *opaque) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;

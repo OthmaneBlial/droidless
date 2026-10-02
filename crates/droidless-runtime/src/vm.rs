@@ -468,6 +468,18 @@ impl Runtime {
         self.native_roots.truncate(roots);
         result?;
         self.compute_scroll_frame(root, &mut vec![])?;
+        let tree = ui::layout(&self.heap, root, width, height)?;
+        let roots = self.native_roots.len();
+        fn retain(node: &Node, roots: &mut Vec<Word>) {
+            roots.push(Word::Ref(node.handle));
+            for child in &node.children {
+                retain(child, roots);
+            }
+        }
+        retain(&tree, &mut self.native_roots);
+        let foregrounds = self.layout_foregrounds(&tree);
+        self.native_roots.truncate(roots);
+        foregrounds?;
         ui::layout(&self.heap, root, width, height)
     }
     fn compute_scroll_frame(&mut self, view: Word, path: &mut Vec<Word>) -> Result<()> {
@@ -1338,6 +1350,9 @@ impl Runtime {
             }
             if current == "Landroid/os/Binder;" {
                 work.push("Landroid/os/IBinder;".into());
+            }
+            if current == "Landroid/view/View;" {
+                work.push("Landroid/graphics/drawable/Drawable$Callback;".into());
             }
             if current == "Landroid/database/Cursor;" {
                 work.extend(["Ljava/io/Closeable;", "Ljava/lang/AutoCloseable;"].map(String::from));

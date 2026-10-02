@@ -21,6 +21,156 @@ fn dialog_surface_call(
 }
 
 #[test]
+fn compiled_foreground_overlay_padding_state_weak_callbacks_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    let activity = vm.activity.unwrap();
+    let call = |vm: &mut Runtime, name: &str, params: &[&str], returns: &str, args: Vec<Word>| {
+        vm.invoke(
+            Method {
+                class: "Lorg/droidless/images/ForegroundContract;".into(),
+                name: name.into(),
+                parameters: params.iter().map(|s| (*s).into()).collect(),
+                returns: returns.into(),
+            },
+            args,
+            false,
+        )
+    };
+    let frame = call(
+        &mut vm,
+        "begin",
+        &["Landroid/app/Activity;"],
+        "Landroid/view/View;",
+        vec![activity],
+    )
+    .unwrap()[0];
+    let tree = vm.layout_snapshot().unwrap();
+    assert_eq!(tree.view.foreground_overlay, Some(0x80224466));
+    let gravity = Method {
+        class: "Landroid/widget/FrameLayout;".into(),
+        name: "setForegroundGravity".into(),
+        parameters: vec!["I".into()],
+        returns: "V".into(),
+    };
+    assert!(
+        format!(
+            "{:#}",
+            vm.invoke(gravity, vec![frame, Word::from(55)], true)
+                .unwrap_err()
+        )
+        .contains("painting foreground gravity other than FILL unsupported")
+    );
+    assert_eq!(tree.view.padding, [9.0, 11.0, 20.0, 15.0]);
+    assert_eq!(
+        (tree.children[0].rect.x, tree.children[0].rect.y),
+        (9.0, 11.0)
+    );
+    assert!(vm.click_text("Through foreground").unwrap());
+    assert_eq!(
+        call(&mut vm, "clicks", &[], "I", vec![]).unwrap(),
+        [Word::from(1)]
+    );
+    call(&mut vm, "visible", &["Z"], "V", vec![Word::ZERO]).unwrap();
+    assert_eq!(vm.snapshot().unwrap().view.foreground_overlay, None);
+    call(&mut vm, "visible", &["Z"], "V", vec![Word::from(1)]).unwrap();
+    assert_eq!(
+        vm.snapshot().unwrap().view.foreground_overlay,
+        Some(0x80224466)
+    );
+    call(&mut vm, "recolor", &[], "V", vec![]).unwrap();
+    assert_eq!(
+        vm.snapshot().unwrap().view.foreground_overlay,
+        Some(0x80446688)
+    );
+    call(&mut vm, "select", &[], "V", vec![]).unwrap();
+    assert_eq!(
+        vm.snapshot().unwrap().view.foreground_overlay,
+        Some(0x80335577)
+    );
+    call(&mut vm, "press", &["Z"], "V", vec![Word::from(1)]).unwrap();
+    assert_eq!(
+        vm.snapshot().unwrap().view.foreground_overlay,
+        Some(0x806699aa)
+    );
+    call(&mut vm, "press", &["Z"], "V", vec![Word::ZERO]).unwrap();
+    assert_eq!(
+        vm.snapshot().unwrap().view.foreground_overlay,
+        Some(0x80335577)
+    );
+    call(&mut vm, "clear", &[], "V", vec![]).unwrap();
+    assert_eq!(vm.snapshot().unwrap().view.foreground_overlay, None);
+    assert_eq!(vm.snapshot().unwrap().view.padding, [3.0, 4.0, 20.0, 6.0]);
+    assert!(
+        format!("{:#}", call(&mut vm, "fail", &[], "V", vec![]).unwrap_err())
+            .contains("foreground padding failure")
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    call(&mut vm, "recover", &[], "V", vec![]).unwrap();
+    assert_eq!(
+        vm.layout_snapshot().unwrap().view.foreground_overlay,
+        Some(0x80446688)
+    );
+    let orphan = call(
+        &mut vm,
+        "orphan",
+        &["Landroid/app/Activity;"],
+        "Landroid/graphics/drawable/Drawable;",
+        vec![activity],
+    )
+    .unwrap()[0];
+    vm.collect();
+    assert_eq!(
+        call(
+            &mut vm,
+            "cleared",
+            &["Landroid/graphics/drawable/Drawable;"],
+            "Z",
+            vec![orphan]
+        )
+        .unwrap(),
+        [Word::from(1)]
+    );
+    let setter = Method {
+        class: "Landroid/widget/FrameLayout;".into(),
+        name: "setForeground".into(),
+        parameters: vec!["Landroid/graphics/drawable/Drawable;".into()],
+        returns: "V".into(),
+    };
+    for invalid in [Word::from(4), Word::Ref(usize::MAX), activity] {
+        assert!(
+            vm.invoke(setter.clone(), vec![frame, invalid], true)
+                .is_err()
+        );
+    }
+    let unsupported = vm
+        .heap
+        .instance("Landroid/graphics/drawable/Drawable;")
+        .unwrap();
+    assert!(
+        format!(
+            "{:#}",
+            vm.invoke(setter, vec![frame, unsupported], true)
+                .unwrap_err()
+        )
+        .contains("rendering unsupported")
+    );
+    vm.collect();
+    assert!(vm.heap.get(unsupported).is_err());
+    assert_eq!(
+        vm.layout_snapshot().unwrap().view.foreground_overlay,
+        Some(0x80446688)
+    );
+    call(&mut vm, "drop", &[], "V", vec![]).unwrap();
+    vm.close().unwrap();
+    vm.collect();
+    assert!(vm.heap.get(frame).is_err());
+    assert!(vm.heap.get(orphan).is_err());
+}
+
+#[test]
 fn compiled_dialog_surfaces_lifecycle_modal_input_back_gc_and_fault_recovery() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

@@ -51,6 +51,16 @@ unsafe extern "C" {
     fn dl_begin(host: *mut c_void, title: *const c_char, touch_enabled: u32, touch_active: u32);
     fn dl_view(host: *mut c_void, node: *const NativeView);
     fn dl_end(host: *mut c_void);
+    fn dl_foreground(
+        host: *mut c_void,
+        handle: usize,
+        color: u32,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        alpha: f32,
+    );
     fn dl_menu_clear(host: *mut c_void);
     fn dl_menu_item(
         host: *mut c_void,
@@ -279,6 +289,21 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
         }
         for child in &n.children {
             node(host, child, click_target, alpha)?;
+        }
+        if let Some(color) = n.view.foreground_overlay {
+            // SAFETY: the live host copies these bounded scalar layout values synchronously.
+            unsafe {
+                dl_foreground(
+                    host,
+                    n.handle,
+                    color,
+                    n.rect.x,
+                    n.rect.y,
+                    n.rect.width,
+                    n.rect.height,
+                    alpha,
+                );
+            }
         }
         Ok(())
     }
