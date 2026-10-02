@@ -80,8 +80,10 @@ The following are objectives, not completed capability claims.
    within its parent and accepts headless focus/pending input; restart discards
    an unconfirmed name. Typeface state reaches native fonts, TextWatcher callbacks
    execute real DEX, and scalar animation/color/shadow state passes checks. Rename
-   confirmation persists the name but fails at TextPaint.ascent; usable rename,
-   folder deletion, software IME and native input remain ahead.
+   confirmation now completes with actual host-font ascent/descent. The same
+   folder ID/new name survive restart and Back while both notes stay exact.
+   Folder deletion, software IME and native folder input remain ahead; Android
+   font parity is not established.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

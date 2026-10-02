@@ -77,11 +77,13 @@ to Notes through Back. Both exact seed/copy note rows remain unchanged.
 Convenience attachment now runs the actual TextInputLayout indexed binding
 callback. Its saved editor stays within the parent bounds, accepts headless focus
 and pending input, and a fresh process discards the unconfirmed name. Both exact
-note rows and the saved Folder row remain intact. Rename confirmation changes
-the same Folder name, then fails at TextPaint.ascent()F in collapsed-label layout;
-the isolated diagnosis checks that partial write and exact notes. Rename/deletion
-and physical folder input remain unverified; software keyboards are not implemented.
-[Saved-row evidence](verification.md#current-source-saved-folder-binding-and-focus).
+note rows and the saved Folder row remain intact. Paint/TextPaint ascent/descent
+now use the same actual AppKit font selection as native controls. Original rename
+confirmation completes; the same folder ID/new name survive restart and Back
+with both exact notes. Folder deletion and physical folder input remain
+unverified; software keyboards are not implemented. Host metrics do not establish
+Android font parity.
+[Rename evidence](verification.md#current-source-folder-rename-and-host-font-metrics).
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree

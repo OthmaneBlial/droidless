@@ -2055,3 +2055,44 @@ and the isolated rename diagnosis. The unsigned development bundle matches the
 optimized CLI byte for byte (SHA-256 `8f7003d36e3c415cd1fc3b991fb1ce454cb673665c1e83a527ea50da0d10ffb2`). No new public release or
 physical folder interaction is claimed. GitHub Actions remain disabled; the
 50% checkpoint stays active.
+
+## Current-source folder rename and host font metrics
+
+Date: 2026-10-02. Source commit b6701fc, beyond the published v0.1.0 archive.
+
+The baseline reproduced the original Notepad rename's partial write: Folder ID 1
+received the new name, then EditFolderViewHolder.u failed at DEX PC 0x0018 on
+TextPaint.ascent()F. Paint/TextPaint now retain the API-21 default size of 12,
+ignore negative sizes and support zero. Ascent/descent come from the same actual
+AppKit font selection used by native buttons, labels and editors. Family/style,
+finite size and the 4096-pixel ceiling are checked on both sides of the scalar
+FFI. This is host-font measurement, not Android font or pixel parity.
+
+The compiled FontMetricsContract checks three families and four styles, retained
+size/face across GC, size scaling, nullable faces, ignored negative sizes and
+zero metrics. The native component check compares the metric outputs with the
+actual fonts assigned to all 36 control/family/style combinations and rejects
+invalid family/style/size inputs. Font measurement currently requires macOS;
+asset fonts, shaping and Android baseline parity remain unsupported.
+
+The unchanged Notepad APK retains SHA-256
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+A fresh-data optimized probe completes six separate processes: create, saved-row
+restart, Back, original rename confirmation, renamed-row restart and Back.
+Each exits zero. The visible row is checked inside the viewport; new SQLite
+connections confirm the same folder ID/new name and preserve both seed/copy note
+IDs, titles and bodies exactly at every phase. The permanent public replay now
+checks rename confirmation/restart/Back alongside focus and unconfirmed-input
+discard. No APK patch, class alias or replacement callback is used. Folder
+deletion and physical native folder input remain unverified.
+
+The local gate passes 126 Rust tests, Clippy with warnings rejected, optimized
+workspace/document-replay builds, 4,096 seeded parser mutations and the native
+font component check. The full optimized public replay also passes both
+calculators, image/grid/result fixtures, SwpieView folder/viewer/Back/gesture
+checks and its slideshow diagnosis, plus every existing Notepad save/edit,
+Delete/Undo/timed feedback, drawer/folder and malformed-body preservation check.
+The refreshed unsigned development bundle matches the optimized CLI byte for
+byte (SHA-256 `074b87a0c697295efbf74e0af07dc340b52477cc67384f0bd100b7b4b41c5153`).
+No new public release or physical folder interaction is claimed. GitHub Actions
+remain disabled; the 50% checkpoint remains active.
