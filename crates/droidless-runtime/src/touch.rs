@@ -1086,10 +1086,24 @@ impl Runtime {
                     _ => "droidless:view:system-ui",
                 };
                 if method_.name.starts_with("set") {
+                    let value = arg(1)?;
+                    value.int()?;
+                    let previous = field(self, receiver, key)?;
                     self.heap
                         .get_mut(receiver)?
                         .fields
-                        .insert(key.into(), vec![arg(1)?]);
+                        .insert(key.into(), vec![value]);
+                    if method_.name == "setPressed" && previous.truth() != value.truth() {
+                        let roots = self.native_roots.len();
+                        self.native_roots.push(receiver);
+                        let refreshed = self.invoke(
+                            method(VIEW, "refreshDrawableState", &[], "V"),
+                            vec![receiver],
+                            true,
+                        );
+                        self.native_roots.truncate(roots);
+                        refreshed?;
+                    }
                 } else if method_.name == "isClickable" {
                     result.push(Word::from(i32::from(self.view_clickable(receiver)?)));
                 } else {
@@ -1109,10 +1123,11 @@ impl Runtime {
                 if clickable && enabled {
                     match m.action {
                         0 => {
-                            self.heap
-                                .get_mut(receiver)?
-                                .fields
-                                .insert("droidless:touch:pressed".into(), vec![Word::from(1)]);
+                            self.invoke(
+                                method(VIEW, "setPressed", &["Z"], "V"),
+                                vec![receiver, Word::from(1)],
+                                true,
+                            )?;
                         }
                         2 => {
                             if let Ok(tree) = self.snapshot()
@@ -1122,18 +1137,20 @@ impl Runtime {
                                     || m.x >= node.rect.width + 8.0
                                     || m.y >= node.rect.height + 8.0)
                             {
-                                self.heap
-                                    .get_mut(receiver)?
-                                    .fields
-                                    .remove("droidless:touch:pressed");
+                                self.invoke(
+                                    method(VIEW, "setPressed", &["Z"], "V"),
+                                    vec![receiver, Word::ZERO],
+                                    true,
+                                )?;
                             }
                         }
                         1 => {
                             let pressed = field(self, receiver, "droidless:touch:pressed")?.truth();
-                            self.heap
-                                .get_mut(receiver)?
-                                .fields
-                                .remove("droidless:touch:pressed");
+                            self.invoke(
+                                method(VIEW, "setPressed", &["Z"], "V"),
+                                vec![receiver, Word::ZERO],
+                                true,
+                            )?;
                             if pressed {
                                 let focus_taken = if self
                                     .focus_field(receiver, "droidless:setFocusable")?
@@ -1166,19 +1183,21 @@ impl Runtime {
                             }
                         }
                         3 => {
-                            self.heap
-                                .get_mut(receiver)?
-                                .fields
-                                .remove("droidless:touch:pressed");
+                            self.invoke(
+                                method(VIEW, "setPressed", &["Z"], "V"),
+                                vec![receiver, Word::ZERO],
+                                true,
+                            )?;
                         }
                         _ => unreachable!(),
                     }
                 }
                 if m.action == 1 || m.action == 3 {
-                    self.heap
-                        .get_mut(receiver)?
-                        .fields
-                        .remove("droidless:touch:pressed");
+                    self.invoke(
+                        method(VIEW, "setPressed", &["Z"], "V"),
+                        vec![receiver, Word::ZERO],
+                        true,
+                    )?;
                 }
                 result.push(Word::from(i32::from(clickable)));
             }

@@ -31,6 +31,7 @@ impl Runtime {
                     "connectivity" => "Landroid/net/ConnectivityManager;",
                     "accessibility" => "Landroid/view/accessibility/AccessibilityManager;",
                     "input_method" => "Landroid/view/inputmethod/InputMethodManager;",
+                    "window" => "Landroid/view/WindowManager;",
                     _ => return Ok(Some(vec![Word::ZERO])),
                 };
                 let key = format!("droidless:service:{name}");

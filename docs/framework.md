@@ -727,7 +727,7 @@ Null bases, repeated attachment, wrong argument types, callback faults and
 wrapper chains are checked; native delegation is bounded to 32 synchronous calls.
 Temporary roots retain callbacks through GC and unwind on errors. Themed-wrapper
 operations use the main-thread profile. Configuration overrides, complete system
-theme resources, automatic XML theme wrapping and Dialog windows remain unsupported.
+theme resources, automatic XML theme wrapping and native Dialog presentation remain unsupported.
 [ContextThemeWrapper reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/ContextThemeWrapper.java)
 and [Resources/Theme reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/res/Resources.java).
 
@@ -945,3 +945,40 @@ AppKit hit testing converts mouse positions to the content view's superview
 coordinates; guest MotionEvents retain flipped content coordinates. This keeps
 editable native controls on their focus/text-selection route.
 [NSView hitTest contract](https://developer.apple.com/documentation/appkit/nsview/hittest(_:)).
+
+
+### Owned Dialog/Window construction and state selectors
+
+Dialog(Context) and Dialog(Context, theme) create an independent themed context
+and Window. A zero theme resolves android:dialogTheme through the actual virtual
+Theme callback. Theme.resolveAttribute now fills TypedValue for supported theme
+values, attribute/resource aliases and style-bag references; missing/cyclic values
+return false without changing the output. resolveRefs=false retains the reference
+without a resolved resourceId. Alias traversal is bounded to 20 steps. Full system
+theme resources remain unsupported.
+
+The managed Window retains its context, actual window service, callback, inflater,
+feature bits and LayoutParams identity. Dialog decor has its own content container;
+inflation uses the real cloned inflater/factories. Replacement detaches prior
+content without replacing the Activity root. Supported content and attribute
+changes invoke actual guest callbacks. Dialog.create runs onCreate(null) once after
+a successful return and can retry a failed callback. Layout/gravity/flag/title
+state is managed; it does not resize or display a native dialog. show, hide,
+dismiss, cancel, dialog input and confirmation/deletion remain unsupported.
+Calls retain temporary GC roots and enforce the 32-call callback bound.
+
+StateListDrawable supports construction, ordered addState, positive/negative and
+zero-terminated specifications, wildcard selection, retained state/spec arrays,
+isStateful, getCurrent and real onStateChange/child setState callbacks. Equal state
+arrays retain the original array and avoid another selector callback. State arrays
+and each selector are capped at 4,096 entries; graph validation caps traversal at
+8,192 edges and nesting at 16. Cyclic children are rejected. The native background
+profile renders selected ColorDrawable/resolved-color leaves, including nested
+selectors; unsupported selected leaf painting fails explicitly. Selected-child
+intrinsic size queries support drawer measurement. Pressed/enabled changes refresh drawable state through shared setters,
+and normal touch down/up/cancel use those setters. General selector XML inflation,
+composite drawable painting, transition animations and native dialog presentation
+remain future work. View.EMPTY_STATE_SET resolves as one shared inherited empty
+int array; APK-declared fields with the same name retain their own identity.
+
+[API-21 StateListDrawable reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/graphics/java/android/graphics/drawable/StateListDrawable.java)

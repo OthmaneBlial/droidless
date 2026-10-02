@@ -10,6 +10,7 @@
         <item name="testPaletteAlias">?attr/testPalette</item>
     </style>
     <style name="PaletteAlternate"><item name="testPalette">#778899</item></style>
+    <style name="DialogHostTheme"><item name="android:dialogTheme">@style/PaletteAlternate</item></style>
     <style name="PaletteCycle">
         <item name="testPalette">?attr/testPaletteAlias</item>
         <item name="testPaletteAlias">?attr/testPalette</item>

@@ -717,6 +717,8 @@ impl Runtime {
                         vec![self.class_object(primitive)?]
                     } else if self.sdk_field(&field) {
                         vec![Word::from(crate::framework::SDK_INT)]
+                    } else if self.view_empty_state_field(&field) {
+                        vec![self.view_empty_state_object(&field)?]
                     } else if self.collections_empty_list_field(&field) {
                         let value = if let Some(value) = self
                             .statics
@@ -782,6 +784,7 @@ impl Runtime {
                 } else {
                     if self.primitive_field(&field).is_some()
                         || self.sdk_field(&field)
+                        || self.view_empty_state_field(&field)
                         || self.collections_empty_list_field(&field)
                         || self.view_outline_provider_field(&field)
                         || self.typeface_field(&field)

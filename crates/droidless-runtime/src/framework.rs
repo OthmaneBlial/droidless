@@ -185,6 +185,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/content/res/Configuration;",
             "Landroid/content/ContextWrapper;",
             "Landroid/view/ContextThemeWrapper;",
+            "Landroid/app/Dialog;",
+            "Landroid/content/DialogInterface;",
             "Landroid/content/res/TypedArray;",
             "Landroid/util/TypedValue;",
             "Landroid/util/StateSet;",
@@ -194,6 +196,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/graphics/drawable/Drawable$ConstantState;",
             "Landroid/graphics/drawable/Drawable$Callback;",
             "Landroid/graphics/drawable/ColorDrawable;",
+            "Landroid/graphics/drawable/DrawableContainer;",
+            "Landroid/graphics/drawable/StateListDrawable;",
             "Landroid/graphics/drawable/GradientDrawable;",
             "Landroid/graphics/drawable/LayerDrawable;",
             "Landroid/graphics/drawable/RippleDrawable;",
@@ -387,6 +391,7 @@ impl Runtime {
                     | "addStatesFromChildren"
                     | "childDrawableStateChanged"
                     | "drawableStateChanged"
+                    | "setEnabled"
                     | "setDuplicateParentStateEnabled"
             )
         {
@@ -697,6 +702,26 @@ impl Runtime {
                 self.native_roots.truncate(roots);
                 changed?;
             }
+            ("Landroid/view/View;", "setEnabled(Z)V") => {
+                let enabled = arg(1)?.int()? != 0;
+                if self.view_mut(receiver)?.enabled != enabled {
+                    self.view_mut(receiver)?.enabled = enabled;
+                    let roots = self.native_roots.len();
+                    self.native_roots.push(receiver);
+                    let refreshed = self.invoke(
+                        Method {
+                            class: "Landroid/view/View;".into(),
+                            name: "refreshDrawableState".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    );
+                    self.native_roots.truncate(roots);
+                    refreshed?;
+                }
+            }
             ("Landroid/view/View;", "drawableStateChanged()V") => {
                 self.view_mut(receiver)?;
                 let fields = &self.heap.get(receiver)?.fields;
@@ -752,6 +777,8 @@ impl Runtime {
                         self.native_roots.truncate(roots);
                         changed?;
                     }
+                    self.view_mut(receiver)?.background =
+                        self.background_drawable_color(background, 0)?;
                 }
             }
             ("Landroid/view/View;", "setDuplicateParentStateEnabled(Z)V") => {
@@ -1204,7 +1231,11 @@ impl Runtime {
         .contains(&method.class.as_str())
             || !matches!(
                 method.name.as_str(),
-                "obtainStyledAttributes" | "obtainAttributes" | "getColor" | "getColorStateList"
+                "obtainStyledAttributes"
+                    | "obtainAttributes"
+                    | "getColor"
+                    | "getColorStateList"
+                    | "resolveAttribute"
             )
         {
             return Ok(None);
@@ -1224,6 +1255,83 @@ impl Runtime {
         self.native_roots.extend(args.iter().copied());
         let result = (|| -> Result<Option<Vec<Word>>> {
             match (method.class.as_str(), signature.as_str()) {
+                (
+                    "Landroid/content/res/Resources$Theme;",
+                    "resolveAttribute(ILandroid/util/TypedValue;Z)Z",
+                ) => {
+                    ensure!(
+                        self.is_a(
+                            &self.heap.get(receiver)?.class,
+                            "Landroid/content/res/Resources$Theme;"
+                        ),
+                        "resolveAttribute expects Theme"
+                    );
+                    let output = arg(2)?;
+                    let class = "Landroid/util/TypedValue;";
+                    ensure!(
+                        self.is_a(&self.heap.get(output)?.class, class),
+                        "resolveAttribute expects TypedValue"
+                    );
+                    let resolve = arg(3)?.int()? != 0;
+                    let attributes = self.styled_attributes(&self.theme_styles(receiver)?)?;
+                    let Some(mut value) = attributes.get(&(arg(1)?.int()? as u32)).cloned() else {
+                        return Ok(Some(vec![Word::ZERO]));
+                    };
+                    let mut seen = std::collections::BTreeSet::new();
+                    while value.kind == 2 {
+                        if seen.len() == 20 || !seen.insert(value.data) {
+                            return Ok(Some(vec![Word::ZERO]));
+                        }
+                        let Some(next) = attributes.get(&value.data) else {
+                            return Ok(Some(vec![Word::ZERO]));
+                        };
+                        value = next.clone();
+                    }
+                    if value.kind == 0 {
+                        return Ok(Some(vec![Word::ZERO]));
+                    }
+                    let mut resource_id = 0;
+                    let mut asset_cookie = 1;
+                    if resolve {
+                        for _ in 0..20 {
+                            if value.kind != 1 || value.data == 0 {
+                                break;
+                            }
+                            resource_id = value.data;
+                            if let Some(entry) = self.apk.resources.entries.get(&value.data) {
+                                let Some(next) = &entry.value else {
+                                    break;
+                                };
+                                value = next.clone();
+                            } else if matches!(value.data, 0x0106_000b..=0x0106_000d) {
+                                value = self.attribute(&value)?;
+                                asset_cookie = 0;
+                            } else {
+                                return Ok(Some(vec![Word::ZERO]));
+                            }
+                        }
+                    }
+                    let string = if value.kind == 3 {
+                        self.heap.string(value.display())?
+                    } else {
+                        Word::ZERO
+                    };
+                    let fields = &mut self.heap.get_mut(output)?.fields;
+                    for (name, data) in [
+                        ("type", i32::from(value.kind)),
+                        ("data", value.data as i32),
+                        ("resourceId", resource_id as i32),
+                        ("assetCookie", asset_cookie),
+                        ("changingConfigurations", 0),
+                    ] {
+                        fields.insert(format!("{class}->{name}:I"), vec![Word::from(data)]);
+                    }
+                    fields.insert(
+                        format!("{class}->string:Ljava/lang/CharSequence;"),
+                        vec![string],
+                    );
+                    Ok(Some(vec![Word::from(1)]))
+                }
                 (
                     "Landroid/content/Context;",
                     "obtainStyledAttributes([I)Landroid/content/res/TypedArray;"
@@ -1462,6 +1570,20 @@ impl Runtime {
             && field.name == "SDK_INT"
             && self.class_location(&field.class).is_none()
     }
+    pub(crate) fn view_empty_state_field(&self, field: &Field) -> bool {
+        field.class == "Landroid/view/View;"
+            && field.name == "EMPTY_STATE_SET"
+            && self.class_location(&field.class).is_none()
+    }
+    pub(crate) fn view_empty_state_object(&mut self, field: &Field) -> Result<Word> {
+        let key = field.key();
+        if let Some(value) = self.statics.get(&key).and_then(|words| words.first()) {
+            return Ok(*value);
+        }
+        let value = self.array("I".into(), 0)?;
+        self.statics.insert(key, vec![value]);
+        Ok(value)
+    }
     pub(crate) fn collections_empty_list_field(&self, field: &Field) -> bool {
         field.class == "Ljava/util/Collections;"
             && field.name == "EMPTY_LIST"
@@ -1548,6 +1670,15 @@ impl Runtime {
         Ok(object)
     }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+        if let Some(result) = self.selector_drawable_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.dialog_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.window_native(method, args)? {
+            return Ok(Some(result));
+        }
         if let Some(result) = self.context_native(method, args)? {
             return Ok(Some(result));
         }
@@ -2505,12 +2636,13 @@ impl Runtime {
                     }) as i32
                 } else {
                     ensure!(
-                        matches!(
-                            object.class.as_str(),
-                            "Landroid/graphics/drawable/Drawable;"
-                                | "Landroid/graphics/drawable/ColorDrawable;"
-                                | "Landroid/graphics/drawable/GradientDrawable;"
-                        ),
+                        object.class == "Landroid/graphics/drawable/Drawable;"
+                            || [
+                                "Landroid/graphics/drawable/ColorDrawable;",
+                                "Landroid/graphics/drawable/GradientDrawable;"
+                            ]
+                            .iter()
+                            .any(|class| self.is_a(&object.class, class)),
                         "composite drawable intrinsic size unsupported"
                     );
                     -1
@@ -2877,24 +3009,7 @@ impl Runtime {
                 };
                 let colors = self.color_states(receiver)?;
                 let matched = colors.iter().find(|(required, _)| {
-                    let Some(states) = &states else {
-                        return required.is_empty() || required[0] == 0;
-                    };
-                    required
-                        .iter()
-                        .take_while(|state| **state != 0)
-                        .all(|state| {
-                            let wanted = if *state > 0 {
-                                *state
-                            } else {
-                                state.wrapping_neg()
-                            };
-                            let present = states
-                                .iter()
-                                .take_while(|value| **value != 0)
-                                .any(|value| *value == wanted);
-                            present == (*state > 0)
-                        })
+                    crate::drawables::state_matches(required, states.as_deref())
                 });
                 result.push(Word::from(
                     matched.map_or(arg(2)?.int()?, |(_, color)| *color),
@@ -4553,12 +4668,6 @@ impl Runtime {
                     .fields
                     .insert("droidless:theme:styles".into(), styles);
             }
-            (
-                "Landroid/content/res/Resources$Theme;",
-                "resolveAttribute(ILandroid/util/TypedValue;Z)Z",
-            ) => {
-                result.push(Word::ZERO);
-            }
             ("Landroid/content/res/TypedArray;", sig)
                 if [
                     "getBoolean(IZ)Z",
@@ -4715,137 +4824,6 @@ impl Runtime {
                     vec![receiver],
                     false,
                 )?;
-            }
-            ("Landroid/app/Activity;", "getWindow()Landroid/view/Window;") => {
-                self.screen(receiver)?;
-                let window = self
-                    .heap
-                    .get(receiver)?
-                    .fields
-                    .get("droidless:window")
-                    .and_then(|values| values.first())
-                    .copied();
-                result.push(if let Some(window) = window {
-                    window
-                } else {
-                    let window = self.heap.instance("Landroid/view/Window;")?;
-                    self.heap
-                        .get_mut(window)?
-                        .fields
-                        .insert("droidless:window:owner".into(), vec![receiver]);
-                    self.heap
-                        .get_mut(window)?
-                        .fields
-                        .insert("droidless:window:callback".into(), vec![receiver]);
-                    self.heap
-                        .get_mut(receiver)?
-                        .fields
-                        .insert("droidless:window".into(), vec![window]);
-                    window
-                });
-            }
-            (
-                "Landroid/view/Window;",
-                "getDecorView()Landroid/view/View;" | "peekDecorView()Landroid/view/View;",
-            ) => {
-                let owner = self
-                    .heap
-                    .get(receiver)?
-                    .fields
-                    .get("droidless:window:owner")
-                    .and_then(|values| values.first())
-                    .copied()
-                    .context("Window has no Activity")?;
-                let root = if let Some(root) = self.screen(owner)?.root {
-                    root
-                } else {
-                    let root = self.heap.instance("Landroid/widget/FrameLayout;")?;
-                    self.set_content(owner, root)?;
-                    root
-                };
-                result.push(root);
-            }
-            ("Landroid/view/Window;", "setContentView(Landroid/view/View;)V") => {
-                let owner = self
-                    .heap
-                    .get(receiver)?
-                    .fields
-                    .get("droidless:window:owner")
-                    .and_then(|values| values.first())
-                    .copied()
-                    .context("Window has no Activity")?;
-                let view = arg(1)?;
-                ensure!(
-                    self.heap.get(view)?.view.is_some(),
-                    "Window content must be a View"
-                );
-                self.install_android_content_id(view, 0)?;
-                self.set_content(owner, view)?;
-            }
-            ("Landroid/view/Window;", "findViewById(I)Landroid/view/View;") => {
-                let owner = self
-                    .heap
-                    .get(receiver)?
-                    .fields
-                    .get("droidless:window:owner")
-                    .and_then(|values| values.first())
-                    .copied()
-                    .context("Window has no Activity")?;
-                result.push(if let Some(root) = self.screen(owner)?.root {
-                    self.find_view(root, arg(1)?.int()? as u32, 0)?
-                        .unwrap_or(Word::ZERO)
-                } else {
-                    Word::ZERO
-                });
-            }
-            ("Landroid/view/Window;", "getCallback()Landroid/view/Window$Callback;") => {
-                result.push(
-                    self.heap
-                        .get(receiver)?
-                        .fields
-                        .get("droidless:window:callback")
-                        .and_then(|values| values.first())
-                        .copied()
-                        .unwrap_or(Word::ZERO),
-                );
-            }
-            ("Landroid/view/Window;", "setCallback(Landroid/view/Window$Callback;)V") => {
-                self.heap
-                    .get_mut(receiver)?
-                    .fields
-                    .insert("droidless:window:callback".into(), vec![arg(1)?]);
-            }
-            ("Landroid/view/Window;", "requestFeature(I)Z") => {
-                self.heap.get_mut(receiver)?.fields.insert(
-                    format!("droidless:window:feature:{}", arg(1)?.int()?),
-                    vec![Word::from(1)],
-                );
-                result.push(Word::from(1));
-            }
-            ("Landroid/view/Window;", "setFlags(II)V") => {
-                let object = self.heap.get_mut(receiver)?;
-                let old = object
-                    .fields
-                    .get("droidless:window:flags")
-                    .and_then(|values| values.first())
-                    .copied()
-                    .unwrap_or(Word::ZERO)
-                    .int()?;
-                let flags = arg(1)?.int()?;
-                let mask = arg(2)?.int()?;
-                object.fields.insert(
-                    "droidless:window:flags".into(),
-                    vec![Word::from((old & !mask) | (flags & mask))],
-                );
-            }
-            (
-                "Landroid/view/Window;",
-                "getAttributes()Landroid/view/WindowManager$LayoutParams;",
-            ) => {
-                result.push(
-                    self.heap
-                        .instance("Landroid/view/WindowManager$LayoutParams;")?,
-                );
             }
             ("Landroid/view/WindowManager;", "getDefaultDisplay()Landroid/view/Display;") => {
                 result.push(self.heap.instance("Landroid/view/Display;")?)
@@ -7456,18 +7434,17 @@ impl Runtime {
                 // ponytail: counted state and subtree queries; add ViewParent change callbacks
                 // with a compiled parent-notification contract when that lifecycle is needed.
             }
-            ("Landroid/view/View;", "setEnabled(Z)V") => {
-                self.view_mut(receiver)?.enabled = arg(1)?.int()? != 0
-            }
             ("Landroid/graphics/drawable/Drawable;", "isStateful()Z") => {
+                let class = &self.heap.get(receiver)?.class;
                 ensure!(
-                    matches!(
-                        self.heap.get(receiver)?.class.as_str(),
-                        "Landroid/graphics/drawable/Drawable;"
-                            | "Landroid/graphics/drawable/ColorDrawable;"
-                            | "Landroid/graphics/drawable/GradientDrawable;"
-                            | "Landroid/graphics/drawable/BitmapDrawable;"
-                    ),
+                    class == "Landroid/graphics/drawable/Drawable;"
+                        || [
+                            "Landroid/graphics/drawable/ColorDrawable;",
+                            "Landroid/graphics/drawable/GradientDrawable;",
+                            "Landroid/graphics/drawable/BitmapDrawable;"
+                        ]
+                        .iter()
+                        .any(|parent| self.is_a(class, parent)),
                     "composite drawable state support incomplete"
                 );
                 result.push(Word::ZERO);
@@ -7877,38 +7854,33 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .remove("droidless:view:background-resource");
-                let color = if drawable == Word::ZERO {
-                    None
-                } else if let Some(id) = self
-                    .heap
-                    .get(drawable)?
-                    .fields
-                    .get("resourceId")
-                    .and_then(|values| values.first())
-                {
-                    self.apk
-                        .resources
-                        .resolve(id.int()? as u32)
-                        .ok()
-                        .and_then(|value| self.drawable_color(value, 0).ok().flatten())
-                } else if self.heap.get(drawable)?.class
-                    == "Landroid/graphics/drawable/ColorDrawable;"
-                {
-                    self.heap
-                        .get(drawable)?
-                        .fields
-                        .get("color")
-                        .and_then(|values| values.first())
-                        .map(|value| value.int().map(|color| color as u32))
-                        .transpose()?
-                } else {
-                    None
-                };
+                let color = self.background_drawable_color(drawable, 0)?;
                 self.view_mut(receiver)?.background = color;
                 self.heap
                     .get_mut(receiver)?
                     .fields
                     .insert("droidless:view:background-drawable".into(), vec![drawable]);
+                if drawable != Word::ZERO
+                    && self.is_a(
+                        &self.heap.get(drawable)?.class,
+                        "Landroid/graphics/drawable/StateListDrawable;",
+                    )
+                {
+                    let roots = self.native_roots.len();
+                    self.native_roots.extend([receiver, drawable]);
+                    let changed = self.invoke(
+                        Method {
+                            class: "Landroid/view/View;".into(),
+                            name: "drawableStateChanged".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    );
+                    self.native_roots.truncate(roots);
+                    changed?;
+                }
             }
             ("Landroid/view/View;", "setBackground(Landroid/graphics/drawable/Drawable;)V") => {
                 let drawable = arg(1)?;
@@ -8357,7 +8329,7 @@ impl Runtime {
             _ => bail!("uninitialized AttributeSet"),
         }
     }
-    fn find_view(&self, word: Word, id: u32, depth: usize) -> Result<Option<Word>> {
+    pub(crate) fn find_view(&self, word: Word, id: u32, depth: usize) -> Result<Option<Word>> {
         ensure!(depth < 128, "View search nesting limit");
         let view = self
             .heap
@@ -8375,7 +8347,7 @@ impl Runtime {
         }
         Ok(None)
     }
-    fn install_android_content_id(&mut self, word: Word, depth: usize) -> Result<bool> {
+    pub(crate) fn install_android_content_id(&mut self, word: Word, depth: usize) -> Result<bool> {
         ensure!(depth < 128, "content view nesting limit");
         if self.heap.get(word)?.class == "Landroid/support/v7/widget/ContentFrameLayout;" {
             self.view_mut(word)?.id = 0x0102_0002;
@@ -8698,7 +8670,7 @@ impl Runtime {
             text: None,
         })
     }
-    fn color_int_array(&self, array: Word) -> Result<Vec<i32>> {
+    pub(crate) fn color_int_array(&self, array: Word) -> Result<Vec<i32>> {
         let Data::Array { element, values } = &self.heap.get(array)?.data else {
             bail!("color states require int[]")
         };
@@ -9181,7 +9153,7 @@ impl Runtime {
         )?;
         Ok(word)
     }
-    fn drawable_color(&self, raw: &Value, depth: usize) -> Result<Option<u32>> {
+    pub(crate) fn drawable_color(&self, raw: &Value, depth: usize) -> Result<Option<u32>> {
         ensure!(depth < 32, "drawable reference nesting limit");
         let value = self.attribute(raw)?;
         if (0x1c..=0x1f).contains(&value.kind) {

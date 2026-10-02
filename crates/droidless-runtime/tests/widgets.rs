@@ -2,6 +2,374 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_selector_drawable_order_state_rendering_gc_faults_and_cycles() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    let view = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/SelectorDrawableContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "Landroid/view/View;".into(),
+            },
+            vec![vm.activity.unwrap()],
+            false,
+        )
+        .unwrap()[0];
+    assert_eq!(vm.root, Some(view));
+    vm.invoke(
+        Method {
+            class: "Landroid/view/View;".into(),
+            name: "setClickable".into(),
+            parameters: vec!["Z".into()],
+            returns: "V".into(),
+        },
+        vec![view, Word::from(1)],
+        true,
+    )
+    .unwrap();
+    for finish in [1, 3] {
+        assert!(vm.touch(0, 20.0, 20.0).unwrap());
+        assert_eq!(
+            vm.layout_snapshot().unwrap().view.background,
+            Some(0xff1687ff)
+        );
+        assert!(vm.touch(finish, 20.0, 20.0).unwrap());
+        assert_eq!(
+            vm.layout_snapshot().unwrap().view.background,
+            Some(0xff112233)
+        );
+    }
+    for (name, enabled, color) in [
+        ("setPressed", 1, 0xff1687ff),
+        ("setPressed", 0, 0xff112233),
+        ("setEnabled", 0, 0xff444444),
+        ("setEnabled", 1, 0xff112233),
+    ] {
+        vm.invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: name.into(),
+                parameters: vec!["Z".into()],
+                returns: "V".into(),
+            },
+            vec![view, Word::from(enabled)],
+            true,
+        )
+        .unwrap();
+        assert_eq!(vm.layout_snapshot().unwrap().view.background, Some(color));
+    }
+    assert_eq!(
+        vm.layout_snapshot().unwrap().view.background,
+        Some(0xff112233)
+    );
+    let fault = Method {
+        class: "Lorg/droidless/images/SelectorDrawableContract;".into(),
+        name: "fault".into(),
+        parameters: vec!["Landroid/view/View;".into(), "Z".into()],
+        returns: "V".into(),
+    };
+    assert!(
+        format!(
+            "{:#}",
+            vm.invoke(fault.clone(), vec![view, Word::from(1)], false)
+                .unwrap_err()
+        )
+        .contains("selector callback failed")
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.invoke(fault, vec![view, Word::ZERO], false).unwrap();
+    assert_eq!(
+        vm.layout_snapshot().unwrap().view.background,
+        Some(0xff112233)
+    );
+    let selector = vm
+        .heap
+        .instance("Landroid/graphics/drawable/StateListDrawable;")
+        .unwrap();
+    vm.invoke(
+        Method {
+            class: "Landroid/graphics/drawable/StateListDrawable;".into(),
+            name: "<init>".into(),
+            parameters: vec![],
+            returns: "V".into(),
+        },
+        vec![selector],
+        false,
+    )
+    .unwrap();
+    let add = Method {
+        class: "Landroid/graphics/drawable/StateListDrawable;".into(),
+        name: "addState".into(),
+        parameters: vec!["[I".into(), "Landroid/graphics/drawable/Drawable;".into()],
+        returns: "V".into(),
+    };
+    assert!(
+        format!(
+            "{:#}",
+            vm.invoke(add.clone(), vec![selector, Word::ZERO, selector], true)
+                .unwrap_err()
+        )
+        .contains("cyclic selector child")
+    );
+    let wrong = vm.heap.string("bad state".into()).unwrap();
+    let child = vm
+        .heap
+        .instance("Landroid/graphics/drawable/ColorDrawable;")
+        .unwrap();
+    let oversized = vm.heap.instance("[I").unwrap();
+    vm.heap.get_mut(oversized).unwrap().data = droidless_runtime::heap::Data::Array {
+        element: "I".into(),
+        values: vec![vec![Word::ZERO]; 4097],
+    };
+    assert!(
+        format!(
+            "{:#}",
+            vm.invoke(add.clone(), vec![selector, oversized, child], true)
+                .unwrap_err()
+        )
+        .contains("oversized color state array")
+    );
+    assert!(
+        vm.invoke(add.clone(), vec![selector, wrong, child], true)
+            .is_err()
+    );
+    assert!(
+        vm.invoke(add.clone(), vec![selector, Word::ZERO, wrong], true)
+            .is_err()
+    );
+    assert!(
+        vm.invoke(
+            add.clone(),
+            vec![selector, Word::ZERO, Word::Ref(usize::MAX)],
+            true
+        )
+        .is_err()
+    );
+    let gradient = vm
+        .heap
+        .instance("Landroid/graphics/drawable/GradientDrawable;")
+        .unwrap();
+    vm.invoke(add, vec![selector, Word::ZERO, gradient], true)
+        .unwrap();
+    let previous = vm
+        .invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: "getBackground".into(),
+                parameters: vec![],
+                returns: "Landroid/graphics/drawable/Drawable;".into(),
+            },
+            vec![view],
+            true,
+        )
+        .unwrap()[0];
+    let background = Method {
+        class: "Landroid/view/View;".into(),
+        name: "setBackground".into(),
+        parameters: vec!["Landroid/graphics/drawable/Drawable;".into()],
+        returns: "V".into(),
+    };
+    assert!(
+        format!(
+            "{:#}",
+            vm.invoke(background.clone(), vec![view, selector], true)
+                .unwrap_err()
+        )
+        .contains("selector background child rendering unsupported")
+    );
+    vm.invoke(background, vec![view, previous], true).unwrap();
+    vm.collect();
+    assert!(
+        vm.heap.get(selector).is_err(),
+        "selector failure retained roots"
+    );
+    vm.close().unwrap();
+}
+
+#[test]
+fn compiled_dialog_window_ownership_callbacks_theme_values_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    let root = vm.root;
+    let dialog = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/DialogWindowContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "Landroid/app/Dialog;".into(),
+            },
+            vec![vm.activity.unwrap()],
+            false,
+        )
+        .unwrap()[0];
+    assert_eq!(vm.root, root, "Dialog content replaced Activity root");
+    let recursive = Method {
+        class: "Lorg/droidless/images/DialogWindowContract;".into(),
+        name: "recursive".into(),
+        parameters: vec!["Landroid/app/Dialog;".into(), "Z".into()],
+        returns: "V".into(),
+    };
+    let window = vm
+        .invoke(
+            Method {
+                class: "Landroid/app/Dialog;".into(),
+                name: "getWindow".into(),
+                parameters: vec![],
+                returns: "Landroid/view/Window;".into(),
+            },
+            vec![dialog],
+            true,
+        )
+        .unwrap()[0];
+    let set_layout = Method {
+        class: "Landroid/view/Window;".into(),
+        name: "setLayout".into(),
+        parameters: vec!["I".into(), "I".into()],
+        returns: "V".into(),
+    };
+    vm.invoke(recursive.clone(), vec![dialog, Word::from(1)], false)
+        .unwrap();
+    let error = vm
+        .invoke(
+            set_layout.clone(),
+            vec![window, Word::from(272), Word::from(174)],
+            true,
+        )
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("callback nesting limit"),
+        "{error:#}"
+    );
+    vm.invoke(recursive, vec![dialog, Word::ZERO], false)
+        .unwrap();
+    vm.invoke(
+        set_layout,
+        vec![window, Word::from(272), Word::from(174)],
+        true,
+    )
+    .unwrap();
+    let error = vm
+        .invoke(
+            Method {
+                class: "Landroid/app/Dialog;".into(),
+                name: "show".into(),
+                parameters: vec![],
+                returns: "V".into(),
+            },
+            vec![dialog],
+            true,
+        )
+        .unwrap_err();
+    assert!(
+        format!("{error:#}").contains("unsupported method Landroid/app/Dialog;->show()V"),
+        "{error:#}"
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(dialog).is_err(),
+        "Dialog/window callback roots leaked"
+    );
+    vm.close().unwrap();
+}
+
+#[test]
+fn dialog_window_invalid_references_receivers_and_types_release_roots() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let dialog = vm.heap.instance("Landroid/app/Dialog;").unwrap();
+    let base = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    let wrong = vm.heap.instance("Ljava/lang/Object;").unwrap();
+    let constructor = Method {
+        class: "Landroid/app/Dialog;".into(),
+        name: "<init>".into(),
+        parameters: vec!["Landroid/content/Context;".into(), "I".into()],
+        returns: "V".into(),
+    };
+    for args in [
+        vec![dialog, wrong, Word::ZERO],
+        vec![wrong, base, Word::ZERO],
+        vec![dialog, base, wrong],
+        vec![dialog, Word::ZERO, Word::ZERO],
+        vec![dialog, Word::Ref(usize::MAX), Word::ZERO],
+    ] {
+        assert!(vm.invoke(constructor.clone(), args, false).is_err());
+        assert_eq!(vm.stack_depth(), 0);
+    }
+    vm.invoke(constructor, vec![dialog, base, Word::ZERO], false)
+        .unwrap();
+    let window = vm
+        .invoke(
+            Method {
+                class: "Landroid/app/Dialog;".into(),
+                name: "getWindow".into(),
+                parameters: vec![],
+                returns: "Landroid/view/Window;".into(),
+            },
+            vec![dialog],
+            true,
+        )
+        .unwrap()[0];
+    for (name, ty) in [
+        ("setAttributes", "Landroid/view/WindowManager$LayoutParams;"),
+        ("setCallback", "Landroid/view/Window$Callback;"),
+    ] {
+        let method = Method {
+            class: "Landroid/view/Window;".into(),
+            name: name.into(),
+            parameters: vec![ty.into()],
+            returns: "V".into(),
+        };
+        for value in [wrong, Word::Ref(usize::MAX)] {
+            assert!(
+                vm.invoke(method.clone(), vec![window, value], true)
+                    .is_err()
+            );
+        }
+    }
+    let method = Method {
+        class: "Landroid/view/Window;".into(),
+        name: "getDecorView".into(),
+        parameters: vec![],
+        returns: "Landroid/view/View;".into(),
+    };
+    assert!(vm.invoke(method.clone(), vec![wrong], false).is_err());
+    vm.invoke(method, vec![window], true).unwrap();
+    let theme = vm
+        .heap
+        .instance("Landroid/content/res/Resources$Theme;")
+        .unwrap();
+    assert!(
+        vm.invoke(
+            Method {
+                class: "Landroid/content/res/Resources$Theme;".into(),
+                name: "resolveAttribute".into(),
+                parameters: vec!["I".into(), "Landroid/util/TypedValue;".into(), "Z".into()],
+                returns: "Z".into()
+            },
+            vec![theme, Word::ZERO, wrong, Word::from(1)],
+            true
+        )
+        .is_err()
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(dialog).is_err(),
+        "Constructor/Window failures leaked roots"
+    );
+    assert!(vm.heap.get(window).is_err(), "Window failures leaked roots");
+}
+
+#[test]
 fn compiled_themed_context_snapshots_factories_callbacks_gc_and_faults() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

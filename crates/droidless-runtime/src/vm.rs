@@ -777,7 +777,7 @@ impl Runtime {
                     "I",
                 ) => Some("Landroid/view/ViewGroup$MarginLayoutParams;"),
                 (class, "width" | "height", "I")
-                    if self.is_a(class, "Landroid/view/ViewGroup$MarginLayoutParams;") =>
+                    if self.is_a(class, "Landroid/view/ViewGroup$LayoutParams;") =>
                 {
                     Some("Landroid/view/ViewGroup$LayoutParams;")
                 }
@@ -802,6 +802,8 @@ impl Runtime {
             Some("Ljava/lang/Class;")
         } else if self.sdk_field(field) {
             Some("I")
+        } else if self.view_empty_state_field(field) {
+            Some("[I")
         } else if self.collections_empty_list_field(field) {
             Some("Ljava/util/List;")
         } else if self.view_outline_provider_field(field) {
@@ -854,6 +856,8 @@ impl Runtime {
         }
         ensure!(
             self.class_location(&field.class).is_some()
+                || (field.name == "EMPTY_STATE_SET"
+                    && self.is_a(&field.class, "Landroid/view/View;"))
                 || (!static_field
                     && [
                         "Landroid/util/DisplayMetrics;",
@@ -864,6 +868,7 @@ impl Runtime {
                         "Landroid/text/TextPaint;",
                         "Landroid/view/ViewGroup$LayoutParams;",
                         "Landroid/view/ViewGroup$MarginLayoutParams;",
+                        "Landroid/view/WindowManager$LayoutParams;",
                         "Landroid/widget/LinearLayout$LayoutParams;",
                         "Landroid/widget/FrameLayout$LayoutParams;",
                         "Landroid/widget/TableLayout$LayoutParams;",
@@ -911,7 +916,9 @@ impl Runtime {
                     work.push(parent.clone());
                 }
                 work.extend(def.interfaces.iter().rev().cloned());
-            } else if class == "Landroid/os/Build$VERSION;" && field.name == "SDK_INT" {
+            } else if (class == "Landroid/os/Build$VERSION;" && field.name == "SDK_INT")
+                || (class == "Landroid/view/View;" && field.name == "EMPTY_STATE_SET")
+            {
                 return self.resolve_field(
                     &Field {
                         class,
@@ -996,6 +1003,9 @@ impl Runtime {
                             .contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/widget/FrameLayout$LayoutParams;"
                         && [("gravity", "I")].contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/view/WindowManager$LayoutParams;"
+                        && [("type", "I"), ("gravity", "I"), ("flags", "I")]
+                            .contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/os/Message;"
                         && [
                             ("what", "I"),
@@ -1051,6 +1061,11 @@ impl Runtime {
                     ..field.clone()
                 });
             }
+            if self.class_location(&class).is_none()
+                && let Some(parent) = self.parent(&class)
+            {
+                work.push(parent);
+            }
         }
         Err(fault("Ljava/lang/NoSuchFieldError;", field.key()))
     }
@@ -1091,6 +1106,12 @@ impl Runtime {
             "Ljava/lang/Double;" => "Ljava/lang/Number;",
             "Ljava/lang/Integer;" | "Ljava/lang/Long;" => "Ljava/lang/Number;",
             "Landroid/graphics/drawable/ColorDrawable;" => "Landroid/graphics/drawable/Drawable;",
+            "Landroid/graphics/drawable/StateListDrawable;" => {
+                "Landroid/graphics/drawable/DrawableContainer;"
+            }
+            "Landroid/graphics/drawable/DrawableContainer;" => {
+                "Landroid/graphics/drawable/Drawable;"
+            }
             "Landroid/graphics/drawable/BitmapDrawable;" => "Landroid/graphics/drawable/Drawable;",
             "Landroid/graphics/drawable/GradientDrawable;" => {
                 "Landroid/graphics/drawable/Drawable;"
@@ -1104,6 +1125,7 @@ impl Runtime {
             "Landroid/view/ViewGroup$MarginLayoutParams;" => {
                 "Landroid/view/ViewGroup$LayoutParams;"
             }
+            "Landroid/view/WindowManager$LayoutParams;" => "Landroid/view/ViewGroup$LayoutParams;",
             "Landroid/widget/TableLayout$LayoutParams;"
             | "Landroid/widget/TableRow$LayoutParams;" => {
                 "Landroid/widget/LinearLayout$LayoutParams;"
@@ -1290,6 +1312,18 @@ impl Runtime {
             }
             if current == "Landroid/app/Activity;" {
                 work.push("Landroid/view/Window$Callback;".into());
+            }
+            if current == "Landroid/app/Dialog;" {
+                work.extend(
+                    [
+                        "Landroid/content/DialogInterface;",
+                        "Landroid/view/Window$Callback;",
+                        "Landroid/view/KeyEvent$Callback;",
+                        "Landroid/view/View$OnCreateContextMenuListener;",
+                        "Landroid/view/Window$OnWindowDismissedCallback;",
+                    ]
+                    .map(String::from),
+                );
             }
             if current == "Ljava/util/concurrent/LinkedBlockingQueue;" {
                 work.extend(
