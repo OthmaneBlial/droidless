@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- TextView ellipsizing now records line-relative UTF-16 offsets, preserves source
+  text and old Layout snapshots, and sends shortened display text to native
+  controls with full accessibility labels. XML line/ellipsis settings share the
+  same scalar-width layout. Compiled checks cover modes, Unicode, GC and clearing.
+  The unmodified Notepad APK now displays its original folder-delete confirmation
+  in headless replay. Cancel retains the folder; confirmation removes it, while
+  restart and Back retain both exact notes. Physical public-dialog input remains
+  unverified. No APK patch or replacement dialog is used.
+
 - ViewGroup clipping flags now affect native descendant and foreground painting.
   Input follows ancestor bounds separately; foreground padding reserves layout
   space without enlarging the drawing clip. Compiled DEX and native pixel/input
@@ -9,8 +18,7 @@
   View scrollability queries execute actual virtual offset/range/extent callbacks,
   retaining directional boundaries, integer wrapping, GC and callback faults.
   The unchanged Notepad APK passes dialog creation/start/attachment and both
-  queued scroll queries; title measurement now stops at Layout.getEllipsisCount.
-  The exact folder and notes survive. Public confirmation remains unverified.
+  queued scroll queries; title measurement and confirmation are covered above.
 
 - Typed resource resolution now honors selected default styles, XML styles and
   explicit XML precedence. Null ImageView sources clear the drawable; TypedValue
@@ -19,9 +27,9 @@
   Compiled DEX checks cover snapshots, GC, cycles and invalid input. Recognized
   Material themes supply bounded flat text defaults, disabled alpha and action-bar
   size; numeric getters resolve theme aliases. The unchanged
-  Notepad APK completes AppCompat dialog layout inflation; its current title
-  measurement boundary is recorded above, preserving the folder and exact notes.
-  Public confirmation and confirmed folder deletion remain unverified.
+  Notepad APK completes AppCompat dialog layout inflation; title measurement and
+  confirmed folder deletion are covered above. Physical public-dialog input remains
+  unverified.
 
 - FrameLayout foregrounds now retain real Drawable identity, use weak callbacks,
   refresh supported color/state leaves and padding, and paint above native child
@@ -30,7 +38,7 @@
   painting is supported; theme/XML, composite and Canvas foregrounds remain ahead.
   The unchanged Notepad delete listener passes AppCompat foreground setup.
   Its current dialog boundary is recorded above.
-  Public confirmation and confirmed folder deletion remain unverified.
+  Headless public confirmation and confirmed deletion are covered above; physical public-dialog input remains unverified.
 
 - Modal Dialog surfaces now use separate native AppKit panels and guest View
   trees. Actual creation/start/attachment/detachment/stop callbacks execute; the
@@ -41,7 +49,7 @@
   cover real panels, native controls, close routing, resize and retirement.
   The unchanged Notepad APK enters its own dialog onCreate; its current boundary
   is recorded above, with the exact folder and both notes preserved.
-  Public confirmation and physical dialog input remain unverified.
+  Headless confirmation is covered above; physical dialog input remains unverified.
 
 - WeakReference now excludes its referent from strong heap traversal and clears
   unreachable targets, including cycles. APK subclasses retain their other strong
@@ -54,7 +62,7 @@
   The listener handler holds its dialog weakly, so queued callbacks can receive
   null after collection. Guest callbacks, payload snapshots, custom messages,
   callback faults and temporary-root cleanup pass compiled checks. The modal
-  surface profile now adds visible lifecycle; public confirmation remains unverified.
+  surface profile now adds visible lifecycle; physical public-dialog input remains unverified.
 
 - Message.obtain(Message) snapshots supported fields/targets/callbacks without
   copying queue-use state or delivery time; sendToTarget uses the real Handler.
@@ -74,25 +82,16 @@
   and normal touch down/up/cancel refresh through shared setters. Unsupported
   selector leaf painting fails explicitly; composite painting remains unsupported.
 
-- The unchanged Notepad APK now passes Dialog construction and reaches the
-  unsupported cancellation setter. The full permanent replay records that new
-  boundary and retains the exact folder and both notes. Authored ownership/state,
-  rendering, GC, faults, invalid arguments, bounds and cycle checks pass. Native
-  dialog presentation, Cancel and confirmed deletion remain unverified.
-
 - Public replay now records the exact CLI digest, certifies it only after the
-  complete suite passes and rejects a runtime changed during execution. The
-  earlier original focused folder-delete listener reached the unsupported Dialog
-  constructor; that explicit boundary check retained the exact folder and notes
-  and keeps deletion marked unverified.
+  complete suite passes and rejects a runtime changed during execution.
 
 - ContextThemeWrapper now copies the base theme into an independent cached theme,
   invokes actual guest theme callbacks and clones the base inflater with its
   factories and wrapper context. Supported ContextWrapper calls delegate to the
   actual base. New themes start empty; Theme.setTo retains destination ownership.
   Compiled checks cover isolation, immutable arrays, default IDs, GC, faults,
-  invalid constructors and bounded recursive wrappers. Native dialog presentation
-  and folder deletion remain unsupported or unverified.
+  invalid constructors and bounded recursive wrappers. Physical public-dialog
+  and folder input remain unverified.
 
 - Native editor first-responder transitions now request actual guest View focus.
   AppKit retains selection; rejected focus cancels editing and callback faults
@@ -105,7 +104,7 @@
   the same AppKit fonts used by native controls. Compiled checks cover all
   supported families/styles, size scaling, zero/negative sizes and GC. The
   unchanged Notepad APK completes folder rename; restart and Back preserve the
-  folder ID/new name and both exact notes. Android font parity, folder deletion
+  folder ID/new name and both exact notes. Android font parity
   and physical native folder input remain unverified.
 
 - Optimized public replay also checks saved-folder focus, pending input and

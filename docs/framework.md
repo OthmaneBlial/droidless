@@ -1172,8 +1172,8 @@ window-focus callback delivery, state save/restore, arbitrary WindowManager
 add/remove operations, nonmodal/floating-window flags and composite foreground
 painting remain unsupported. The public Notepad APK completes its own AppCompat
 dialog creation/start/guest attachment, clipping setup and both queued scroll
-queries, then fails at Layout.getEllipsisCount during DialogTitle.onMeasure
-at PC 0x0012 under ContentFrameLayout.onMeasure at PC 0x007d;
-its confirmation dialog and folder deletion are not yet verified. Authored DEX
+queries and title measurement. Headless replay displays its original confirmation,
+exercises Cancel and confirmed folder deletion, and preserves both exact notes
+through restart and Back. Authored DEX
 contracts and real AppKit component checks cover the implemented surface behavior;
 physical interaction with a public dialog remains unverified.

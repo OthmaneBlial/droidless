@@ -65,10 +65,11 @@ The same folder ID/new name survive restart and Back with both exact notes.
 Authored DEX and AppKit checks cover lifecycle, input, nesting and dismissal.
 ✂️ Native ViewGroups now clip descendants and foregrounds while keeping input
 bounds separate. The original Notepad delete listener passes dialog creation,
-clipping setup, guest start/attachment and both scroll-indicator queries. Its next
-failure is title measurement: Layout.getEllipsisCount. The attempt preserves the
-folder and both exact notes. Public confirmation, folder deletion and physical
-folder input remain unverified. [Current dialog evidence](docs/verification.md#current-source-clipping-and-scroll-query-dialog-boundary).
+clipping setup, guest start/attachment, both scroll-indicator queries and title
+measurement. Headless replay now shows its original confirmation and buttons:
+Cancel keeps the folder; Delete Folder removes it. Restart and Back preserve both
+exact notes. Physical folder/dialog input remains unverified.
+[Current dialog evidence](docs/verification.md#current-source-public-folder-deletion-and-text-ellipses).
 [Folder rename and font-metrics evidence](docs/verification.md#current-source-folder-rename-and-host-font-metrics).
 
 ```sh
@@ -235,7 +236,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 144 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 145 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

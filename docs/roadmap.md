@@ -90,9 +90,10 @@ The following are objectives, not completed capability claims.
    Physical folder input and complete bidirectional focus remain unverified.
    Generic modal Dialog surfaces now use separate native panels with guest lifecycle,
    input, nesting, cancellation and GC checks. The public folder-delete listener
-   completes its bundled AppCompat dialog layout inflation and now stops at
-   NestedScrollView.setClipToPadding. Default/XML styles, explicit null images
-   and typed values have compiled checks; public confirmation and confirmed deletion remain ahead.
+   completes its bundled AppCompat inflation and displays its original confirmation
+   in headless replay. Cancel preserves the folder; confirmed deletion, restart
+   and Back preserve both exact notes. Text ellipsis offsets/snapshots and native
+   display projection have compiled checks. Physical public-dialog input remains ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

@@ -1,8 +1,8 @@
 # First interactive milestone evidence
 
-Latest local source gate: 144 Rust tests, warning-free Clippy, optimized builds
+Latest local source gate: 145 Rust tests, warning-free Clippy, optimized builds
 and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
-The [latest source increment](#current-source-clipping-and-scroll-query-dialog-boundary)
+The [latest source increment](#current-source-public-folder-deletion-and-text-ellipses)
 also passes five native component checks and the full public APK replay.
 
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
@@ -2488,5 +2488,49 @@ passes calculator, image/grid/result, SwpieView and Notepad workflows, including
 the new diagnostic, against one unchanged optimized CLI. Its unsigned development
 bundle is byte-identical: SHA-256
 `613eebd7e8b22b76ed271841133937f73d4336995b06665fcc02969b8fb4c849`.
+GitHub Actions remain disabled. The 50% checkpoint remains active; no new release
+or physical public-dialog interaction is claimed.
+
+## Current-source public folder deletion and text ellipses
+
+Date: 2026-10-02. Source increments: 681d639 (text ellipses), 0d69186
+(native accessibility check) and 23724f1 (permanent public confirmation replay).
+These increments are beyond v0.1.0.
+
+The shared scalar-width TextView layout now implements get/setEllipsize and
+Layout.getEllipsisStart/getEllipsisCount. XML line and ellipsis settings feed
+that state. Layout text retains UTF-16 length through ellipsis/filler replacement;
+source text and old snapshots remain intact. Native controls receive shortened
+visible text while keeping full accessibility labels. Compiled DEX checks cover
+START/MIDDLE/END, fitting/empty/zero-width text, surrogate pairs, line limits,
+XML, editable/read-only policy changes, invalid indices/enum objects and GC.
+The expanded AppKit font check verifies shortened button/label values, full
+accessibility labels and replacement. Shaping, styled metrics, Android font
+parity, single-line transformations and marquee animation remain outside the
+profile. [Methods and references](framework.md#guest-layout-callbacks-and-xml-metadata).
+
+The unmodified Notepad APK now completes DialogTitle measurement and displays
+its original headless confirmation: “Delete folder?”, the named-folder warning,
+Cancel and Delete Folder. Both buttons retain actual guest listeners. The
+permanent replay requires the original saved-row listener, clipping/start/guest
+attachment, both scroll-query directions and the actual Layout ellipsis getter.
+It then exercises Cancel, restart and Back, preserving the exact folder ID/name.
+Confirmation dismisses the original Dialog and removes the saved Folder row.
+A fresh process reopens Edit Folders without that row; Back restores both exact
+note IDs/titles/bodies. Every phase checks SQLite and the untouched seed.
+This proves the tested saved-folder workflow with two existing notes; it does
+not establish physical public-dialog input or broader folder-assignment behavior.
+APK SHA-256 remains
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+No APK patch or substitute confirmation is used.
+
+The local gate passes 145 Rust tests, warning-free Clippy, optimized
+workspace/document-replay builds, 4,096 seeded parser mutations and five native
+font/focus/dialog/foreground/clipping checks. The expanded native font check
+also passes separately. The complete public replay passes calculator,
+image/grid/result, SwpieView and Notepad workflows, including the original
+confirmation/Cancel/deletion sequence, against one unchanged optimized CLI.
+The unsigned development bundle is byte-identical: SHA-256
+`76f48bbc9a356cd0d62ccdd6ee6befc491bcefa7485608eab4956a219e459beb`.
 GitHub Actions remain disabled. The 50% checkpoint remains active; no new release
 or physical public-dialog interaction is claimed.

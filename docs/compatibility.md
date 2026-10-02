@@ -94,13 +94,13 @@ unverified. [Host-focus evidence](verification.md#current-source-native-editor-f
 The actual saved-folder delete listener now completes bundled AppCompat themed
 context/inflater setup, state-list drawer measurement and Dialog construction with
 its own context/window. Cancellation settings and listener setup also complete.
-It completes the bundled AppCompat dialog layout inflation after resolving
-default/XML styles, null images and typed floats. Its next explicit failure is
-`NestedScrollView.setClipToPadding(Z)` at dialog onCreate PC 0x019d. The failed
-attempt retains the same folder and both exact note rows. The confirmation window,
-Cancel, confirmed folder deletion and native folder input remain unverified. The
-permanent replay tracks this boundary without treating it as a completed delete
-workflow. [Dialog inflation evidence](verification.md#current-source-styled-resources-and-dialog-inflation).
+It completes bundled AppCompat inflation, clipping, guest start/attachment,
+both scroll-indicator queries and title measurement. Headless replay displays the
+original confirmation title, message and guest-bound buttons. Cancel dismisses
+the modal and retains the folder ID/name. Delete Folder removes the saved folder;
+restart and Back retain both exact note IDs/titles/bodies. The seed remains
+untouched. Physical public-dialog and folder input remain unverified.
+[Folder deletion evidence](verification.md#current-source-public-folder-deletion-and-text-ellipses).
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree
