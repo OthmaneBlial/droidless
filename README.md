@@ -62,7 +62,7 @@ contracts, not arbitrary APK compatibility. [Read the verification record](docs/
 
 </div>
 
-<sub>Backup/restore is verified on an isolated data copy. The original APK calls `System.exit(0)` after restoring; that shutdown API remains unsupported, but a fresh DROIDLESS run confirms the exact database and notes were recovered.</sub>
+<sub>Backup/restore is verified on an isolated data copy. Current `main` maps the original APK's `System.exit(0)` to CLI status 0; the v0.3.0 archive predates that follow-up and reports the guest exit after data recovery.</sub>
 
 ## 🚀 Get your first APK running
 
@@ -151,12 +151,12 @@ code path; Linux builds and native UI have not been verified.
 | 💾 **Bounded file I/O** | App-private reads/writes and package-isolated external files; staged output commits atomically up to 64 MiB; input/output channels share position and close state, with bounded transfers |
 | 🧩 **Everyday APIs** | Toast feedback, filtered file listing, selected reflected fields, UTF-8 form URLs, file-extension MIME lookup and fragment containers |
 
-These are bounded profiles with explicit ceilings. The unchanged Notepad APK now
-creates a byte-exact `.nbu` database backup and restores a tampered database; a
-fresh process shows the original note and folder rows. Its post-restore
-`System.exit(0)` call is still unsupported, so the restore run reports that
-shutdown boundary after the data has been recovered. Custom Bundle serializables
-are same-runtime references, not Java serialization or durable snapshots.
+These are bounded profiles with explicit ceilings. The unchanged Notepad APK
+creates a byte-exact `.nbu` backup and restores a tampered database; a fresh
+process shows the original note and folder rows. On current `main`, the APK's
+post-restore `System.exit(0)` returns CLI status 0; the tagged v0.3.0 archive
+retains its earlier unsupported-exit behavior. Custom Bundle serializables are
+same-runtime references, not Java serialization or durable snapshots.
 Physical public folder/dialog input, Android font/pixel parity, GIF animation
 and usable slideshow remain unverified. Broad AndroidX/Compose, JNI, networking,
 JIT and games are future work. [Exact compatibility](docs/compatibility.md) · [Storage limits](docs/storage.md)

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Guest `System.exit(status)` now unwinds DEX frames as an uncatchable process
+  termination signal and maps to the CLI exit status. The unchanged Notepad APK's
+  byte-exact backup/restore replay now completes with status 0.
+
 ## 0.3.0 — 2026-10-02
 
 - Added bounded, package-confined `FileOutputStream`, append, flush/close,

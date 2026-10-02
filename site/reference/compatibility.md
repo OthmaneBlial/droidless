@@ -216,9 +216,10 @@ before an atomic commit. FileChannel input/output transfers share stream state.
 Mapping, locking, ByteBuffer I/O and unrestricted file paths remain unsupported.
 The original Notepad creates a byte-identical SQLite backup and restores a
 deliberately changed database. All Note/Folder rows and integrity check match,
-and a fresh process renders the restored note/folder state. Its `System.exit(0)`
-call after restore remains unsupported, so that run returns a guest error after
-the data is safely recovered. [Storage limits](storage.md).
+and a fresh process renders the restored note/folder state. Current source
+unwinds guest frames on `System.exit(status)` and maps its status to the CLI;
+the optimized restore replay exits 0. The tagged v0.3.0 archive predates this
+follow-up and retains the earlier guest-error boundary. [Storage limits](storage.md).
 [Storage limits](storage.md).
 HashSet/ArrayList/HashMap and basic LinkedHashMap add bounded operations using
 guest equals; lists preserve duplicates/order and support indexed operations.

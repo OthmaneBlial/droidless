@@ -94,11 +94,14 @@ The following are objectives, not completed capability claims.
    in headless replay. Cancel preserves the folder; confirmed deletion, restart
    and Back preserve both exact notes. Text ellipsis offsets/snapshots and native
    display projection have compiled checks. Physical public-dialog input remains ahead.
-   Private FileInputStream snapshots and shared input-channel state now pass
-   compiled and confined-storage checks. The virtual external directory stays
-   inside the current package. Original backup reaches its private input channel
-   and stops at FileOutputStream; missing-file restore stops at Toast. Full copied-
-   data backup/restore, writes and channel transfer remain future work.
+   Private FileInputStream snapshots, staged package-confined FileOutputStream
+   writes and shared bounded input/output channel transfers pass compiled checks.
+   The unchanged Notepad APK now writes a byte-exact SQLite backup, restores a
+   tampered copy and renders every Note/Folder row after a fresh launch. Guest
+   System.exit(status) unwinds DEX frames without entering Java catch handlers;
+   the CLI returns that status. The restore replay exits with status 0. The v0.3.0
+   archive predates this follow-up and still reports the earlier exit boundary.
+   General file APIs and native folder/dialog input remain future work.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

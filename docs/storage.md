@@ -71,8 +71,9 @@ and `listFiles(FileFilter)` return only safe entries from the same package space
 with guest filter callbacks for the latter. The original Notepad 1.0.0 APK now
 backs up its SQLite database byte-for-byte and restores it after a test copy is
 tampered. SQLite integrity, every Note/Folder row and a fresh-process display
-are verified. Its callback then calls unsupported `System.exit(0)` after the
-restore has completed; process-shutdown parity remains open.
+are verified. Current source treats its final `System.exit(0)` as an uncatchable
+guest termination signal and returns CLI status 0. The v0.3.0 release archive
+predates this change and retains the earlier status-1 boundary.
 
 ## API behavior
 

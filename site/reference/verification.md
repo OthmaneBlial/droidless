@@ -2600,7 +2600,7 @@ unfinished and the 50% goal remains active. GitHub Actions stay disabled.
 
 [v0.2.0 scope and download](releases/0.2.0.md).
 
-## Current source: bounded output and Notepad backup/restore
+## v0.3.0 runtime checkpoint: bounded output and Notepad backup/restore
 
 Date: 2026-10-02. Runtime checkpoint: `64017cc`.
 
@@ -2628,14 +2628,31 @@ recovery has succeeded. This evidence is a bounded workflow check, not complete
 process-shutdown or Android compatibility. Custom Bundle Serializable objects
 are same-runtime references, not Java serialization or cross-process persistence.
 
-The final v0.3.0 local release gate passed on 2026-10-02: `sh tools/ci.sh`
-completed formatting, workspace checks, 150 Rust tests, warning-free Clippy,
+The v0.3.0 release gate passed on 2026-10-02 with local CI and an optimized
+public replay. Its optimized CLI SHA-256 is
+`c793225d9963e1186774eca5b0a5b0488963d14cbcc1f5aba3b236c514fdc438`.
+GitHub Actions were not used. Backup and restore recovered the exact
+database, but that tagged binary still reports the original APK's unsupported
+`System.exit(0)` after the data has been verified.
+
+## Current source: guest process exit after Notepad restore
+
+Date: 2026-10-02. Runtime commit: `a161749`.
+
+`System.exit(status)` now raises a typed, uncatchable guest-termination signal.
+DEX frames and monitors unwind, Java catch handlers do not intercept it, and
+the CLI returns the requested process status through `ExitCode`. The host is
+not terminated from inside a runtime callback.
+
+`sh tools/ci.sh` passes formatting/checks, 150 Rust tests, warning-free Clippy,
 optimized workspace/document-replay builds, 4,096 seeded parser mutations and
 five AppKit component checks. GitHub Actions were not used. The optimized
-`python3 tools/compatibility.py --binary target/release/droidless` replay passed
-calculator, image/grid/result, SwpieView and Notepad scenarios with one
-unchanged CLI, SHA-256
-`c793225d9963e1186774eca5b0a5b0488963d14cbcc1f5aba3b236c514fdc438`. The
-machine-readable Notepad replay is `artifacts/notepad-compatibility.json`.
-Backup and restore both pass; the only reported boundary is the original APK's
-unsupported `System.exit(0)` after its restored data has been verified.
+`python3 tools/compatibility.py --binary target/release/droidless` replay passes
+calculator, image/grid/result, SwpieView and Notepad scenarios with one unchanged
+CLI, SHA-256
+`5dd847d22b9610989e0aa0b518170e5f01ddeddc0c22d7c744d1d07f559cba71`. The
+original Notepad APK writes an exact backup, restores the tampered database,
+preserves SQLite integrity and every Note/Folder row, then returns CLI status 0;
+a fresh process renders the restored data. The machine-readable replay is
+`artifacts/notepad-compatibility.json`. The v0.3.0 tag remains an accurate record
+of the earlier release binary; 50% remains the active project milestone.
