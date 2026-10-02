@@ -2,6 +2,35 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_text_appearance_context_callbacks_gc_size_and_fault_recovery() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let view = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/StyleColorContract;".into(),
+                name: "appearance".into(),
+                parameters: vec![],
+                returns: "Landroid/widget/TextView;".into(),
+            },
+            vec![],
+            false,
+        )
+        .unwrap()[0];
+    assert_eq!(
+        vm.heap.get(view).unwrap().view.as_ref().unwrap().text_color,
+        0xff224466
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(view).is_err(),
+        "text appearance leaked temporary roots"
+    );
+}
+
+#[test]
 fn compiled_typed_colors_theme_dispatch_snapshot_gc_and_faults() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

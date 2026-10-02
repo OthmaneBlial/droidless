@@ -364,9 +364,9 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             "--tap", "24", "22", "--advance-ms", "1000", "--click", "Create or edit folders",
             "--tap", "180", "72", "--input", "Runtime folder", "--tap", "362", "72", str(notepad),
         ], text=True, capture_output=True, timeout=120)
-        folder_blocker = "unsupported text appearance color state list or theme value"
+        folder_blocker = "unsupported method Landroid/support/design/widget/TextInputLayout;->addView(Landroid/view/View;II)V"
         if process.returncode == 0 or folder_blocker not in process.stderr or "TextInputLayout;->setErrorEnabled(Z)V" not in process.stderr:
-            raise SystemExit("Notepad saved folder row did not reach its diagnosed TextInputLayout error-label appearance dependency")
+            raise SystemExit("Notepad saved folder row did not reach its diagnosed TextInputLayout sized-child attachment dependency")
         with sqlite3.connect(folder_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
             retained = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
             folders = connection.execute("SELECT id,name FROM Folder ORDER BY id").fetchall()
@@ -488,7 +488,7 @@ print("PASS Notepad: original navigation tap reveals an on-screen drawer animati
 print("PASS Notepad: original drawer settles at 1000ms; Back closes it, retains Notes and preserves both exact rows")
 
 print("PASS Notepad: original Edit Folders binds its editor/listener; Back retains both exact note rows")
-print("PASS Notepad diagnosis: original editor focus/Done persists one folder; row rendering stops at error-label color/theme appearance while both exact seed/copy notes remain")
+print("PASS Notepad diagnosis: original editor focus/Done persists one folder; row rendering stops at sized-child attachment while both exact seed/copy notes remain")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.

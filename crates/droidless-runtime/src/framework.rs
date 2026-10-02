@@ -838,6 +838,125 @@ impl Runtime {
         Ok(attributes)
     }
 
+    fn text_appearance_native(
+        &mut self,
+        method: &Method,
+        args: &[Word],
+    ) -> Result<Option<Vec<Word>>> {
+        if method.class != "Landroid/widget/TextView;"
+            || !matches!(
+                method.signature().as_str(),
+                "setTextAppearance(Landroid/content/Context;I)V" | "setTextAppearance(I)V"
+            )
+        {
+            return Ok(None);
+        }
+        self.require_main_thread()?;
+        ensure!(self.sync_depth < 32, "text appearance nesting limit");
+        let arg = |n| -> Result<Word> {
+            args.get(n)
+                .copied()
+                .context("text appearance argument missing")
+        };
+        let receiver = arg(0)?;
+        if self.trace.framework {
+            eprintln!("framework: {} {args:?}", method.key());
+        }
+        let roots = self.native_roots.len();
+        self.native_roots.extend(args.iter().copied());
+        let applied = (|| -> Result<()> {
+            let context = if method.parameters.len() == 2 {
+                arg(1)?
+            } else {
+                self.invoke(
+                    Method {
+                        class: "Landroid/view/View;".into(),
+                        name: "getContext".into(),
+                        parameters: vec![],
+                        returns: "Landroid/content/Context;".into(),
+                    },
+                    vec![receiver],
+                    true,
+                )?[0]
+            };
+            self.native_roots.push(context);
+            let style = Word::from(arg(method.parameters.len())?.int()?);
+            let attributes = self.array("I".into(), 2)?;
+            self.native_roots.push(attributes);
+            let Data::Array { values, .. } = &mut self.heap.get_mut(attributes)?.data else {
+                bail!("text appearance attributes are not an array");
+            };
+            values[0] = vec![Word::from(0x0101_0098)];
+            values[1] = vec![Word::from(0x0101_0095)];
+            let appearance = self.invoke(
+                Method {
+                    class: "Landroid/content/Context;".into(),
+                    name: "obtainStyledAttributes".into(),
+                    parameters: vec!["I".into(), "[I".into()],
+                    returns: "Landroid/content/res/TypedArray;".into(),
+                },
+                vec![context, style, attributes],
+                true,
+            )?[0];
+            self.native_roots.push(appearance);
+            let colors = self.invoke(
+                Method {
+                    class: "Landroid/content/res/TypedArray;".into(),
+                    name: "getColorStateList".into(),
+                    parameters: vec!["I".into()],
+                    returns: "Landroid/content/res/ColorStateList;".into(),
+                },
+                vec![appearance, Word::ZERO],
+                true,
+            )?[0];
+            if colors != Word::ZERO {
+                self.native_roots.push(colors);
+                self.invoke(
+                    Method {
+                        class: "Landroid/widget/TextView;".into(),
+                        name: "setTextColor".into(),
+                        parameters: vec!["Landroid/content/res/ColorStateList;".into()],
+                        returns: "V".into(),
+                    },
+                    vec![receiver, colors],
+                    true,
+                )?;
+            }
+            let pixels = self.invoke(
+                Method {
+                    class: "Landroid/content/res/TypedArray;".into(),
+                    name: "getDimensionPixelSize".into(),
+                    parameters: vec!["I".into(), "I".into()],
+                    returns: "I".into(),
+                },
+                vec![appearance, Word::from(1), Word::ZERO],
+                true,
+            )?[0]
+                .int()?;
+            ensure!(pixels >= 0, "invalid text appearance size");
+            if pixels != 0 && self.view_mut(receiver)?.text_size != pixels as f32 {
+                self.view_mut(receiver)?.text_size = pixels as f32;
+                self.invalidate_text_layout(receiver)?;
+            }
+            // ponytail: color and pixel size profile; add typeface, hint/link/shadow
+            // appearance attributes with their native text rendering contracts.
+            self.invoke(
+                Method {
+                    class: "Landroid/content/res/TypedArray;".into(),
+                    name: "recycle".into(),
+                    parameters: vec![],
+                    returns: "V".into(),
+                },
+                vec![appearance],
+                true,
+            )?;
+            Ok(())
+        })();
+        self.native_roots.truncate(roots);
+        applied?;
+        Ok(Some(vec![]))
+    }
+
     fn styled_array_native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
         if ![
             "Landroid/content/Context;",
@@ -982,7 +1101,16 @@ impl Runtime {
                         )
                     })?;
                     let value = value
-                        .map(|value| self.themed_attribute(receiver, &value))
+                        .map(|value| {
+                            self.themed_attribute(receiver, &value).map_err(|error| {
+                                fault(
+                                    "Ljava/lang/RuntimeException;",
+                                    format!(
+                                        "Failed to resolve attribute at index {index}: {error:#}"
+                                    ),
+                                )
+                            })
+                        })
                         .transpose()?;
                     let colors = if let Some(value) = value
                         .filter(|value| value.kind != 0 && !(value.kind == 1 && value.data == 0))
@@ -1189,6 +1317,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.styled_array_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.text_appearance_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.focus_native(method, args)? {
@@ -5920,25 +6051,8 @@ impl Runtime {
                 self.view_mut(receiver)?.text_size = size;
                 self.invalidate_text_layout(receiver)?;
             }
-            ("Landroid/widget/TextView;", "setTextAppearance(Landroid/content/Context;I)V")
-            | ("Landroid/widget/TextView;", "setTextAppearance(I)V") => {
-                let style = arg(if args.len() == 3 { 2 } else { 1 })?.int()? as u32;
-                let attributes = self.apk.resources.style(style)?;
-                if let Some(size) = attributes.get(&0x0101_0095) {
-                    let size = dimension(&self.attribute(size)?)?;
-                    ensure!(size >= 0., "invalid text appearance size");
-                    self.view_mut(receiver)?.text_size = size;
-                    self.invalidate_text_layout(receiver)?;
-                }
-                if let Some(color) = attributes.get(&0x0101_0098) {
-                    let color = self.attribute(color)?;
-                    ensure!(
-                        (0x1c..=0x1f).contains(&color.kind),
-                        "unsupported text appearance color state list or theme value"
-                    );
-                    self.view_mut(receiver)?.text_color = color.data;
-                }
-                // ponytail: apply size and flat color; typography/state lists need a richer native text model.
+            ("Landroid/widget/TextView;", "getTextSize()F") => {
+                result.push(Word::Bits(self.view_mut(receiver)?.text_size.to_bits()));
             }
             ("Landroid/widget/TextView;", "setTextColor(I)V") => {
                 self.view_mut(receiver)?.text_color = arg(1)?.int()? as u32
