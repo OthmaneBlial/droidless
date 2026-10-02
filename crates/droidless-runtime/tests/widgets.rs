@@ -174,6 +174,67 @@ fn compiled_viewgroup_clipping_xml_ancestors_zero_padding_and_faults() {
             assert_eq!(vm.stack_depth(), 0);
         }
     }
+    let frame = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/ForegroundContract;".into(),
+                name: "begin".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "Landroid/view/View;".into(),
+            },
+            vec![activity],
+            false,
+        )
+        .unwrap()[0];
+    vm.invoke(
+        Method {
+            class: "Landroid/view/ViewGroup;".into(),
+            name: "setClipChildren".into(),
+            parameters: vec!["Z".into()],
+            returns: "V".into(),
+        },
+        vec![frame, Word::ZERO],
+        true,
+    )
+    .unwrap();
+    let child = Word::Ref(layout(&vm.heap, frame, 120.0, 90.0).unwrap().children[0].handle);
+    for axis in ["X", "Y"] {
+        vm.invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: format!("setTranslation{axis}"),
+                parameters: vec!["F".into()],
+                returns: "V".into(),
+            },
+            vec![child, Word::Bits((-20.0f32).to_bits())],
+            true,
+        )
+        .unwrap();
+    }
+    let tree = layout(&vm.heap, frame, 120.0, 90.0).unwrap();
+    assert_eq!(tree.view.padding, [9.0, 11.0, 20.0, 15.0]);
+    assert_eq!(
+        tree.children[0].paint_clip,
+        rect(3.0, 4.0, 97.0, 80.0),
+        "foreground padding must not enlarge the drawing clip"
+    );
+    vm.invoke(
+        Method {
+            class: "Landroid/view/View;".into(),
+            name: "setPadding".into(),
+            parameters: vec!["I".into(); 4],
+            returns: "V".into(),
+        },
+        vec![frame, Word::ZERO, Word::ZERO, Word::ZERO, Word::ZERO],
+        true,
+    )
+    .unwrap();
+    let tree = layout(&vm.heap, frame, 120.0, 90.0).unwrap();
+    assert_eq!(tree.view.padding, [9.0, 11.0, 13.0, 15.0]);
+    assert_eq!(
+        tree.children[0].paint_clip, viewport,
+        "zero user padding disables the padding clip even with a padded foreground"
+    );
     vm.close().unwrap();
     vm.collect();
 }

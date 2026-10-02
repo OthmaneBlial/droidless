@@ -226,6 +226,8 @@ pub struct Node {
     pub rect: Rect,
     pub paint_clip: Rect,
     pub input_clip: Rect,
+    #[serde(skip)]
+    clip_padding: [f32; 4],
     pub children: Vec<Node>,
 }
 
@@ -314,8 +316,8 @@ fn apply_clips(node: &mut Node, paint: Rect, input: Rect, clip_child: bool) {
     };
     // Android touch targeting follows ancestor bounds, independently of drawing flags/padding.
     node.input_clip = input.intersection(node.rect);
-    let [left, top, right, bottom] = node.view.padding;
-    let children_paint = if node.view.clip_to_padding && node.view.padding.iter().any(|p| *p != 0.0)
+    let [left, top, right, bottom] = node.clip_padding;
+    let children_paint = if node.view.clip_to_padding && node.clip_padding.iter().any(|p| *p != 0.0)
     {
         node.paint_clip.intersection(Rect {
             x: node.rect.x + left,
@@ -397,6 +399,8 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
     }
     view.weight = weight(heap, word)?;
     view.margins = margins(heap, word)?;
+    // Foreground padding reserves layout space but is not ViewGroup's drawing padding.
+    let clip_padding = view.padding;
     view.padding = content_padding(&view);
     let mut children = vec![];
     let available = Rect {
@@ -560,6 +564,7 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
         rect,
         paint_clip: rect,
         input_clip: rect,
+        clip_padding,
         children,
     })
 }

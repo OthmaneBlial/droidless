@@ -1051,6 +1051,9 @@ clipToPadding boolean values use the same model. Layout snapshots carry the
 intersection of ancestor drawing clips separately from ancestor input bounds.
 Padding clips apply only when padding is nonzero; disabling a descendant flag
 cannot erase an ancestor's clip. Translations retain the child's full frame.
+Drawing clips use the View's own padding; a FrameLayout foreground's extra
+padding reserves layout space without enlarging that clip or enabling a padding
+clip when the View's own padding is zero.
 
 The AppKit bridge masks native layers and foreground overlays rather than
 cropping control frames, preserving text/image layout and editor identity.
