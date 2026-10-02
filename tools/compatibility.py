@@ -405,12 +405,12 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
                 raise SystemExit(f"Notepad folder {phase} changed the saved folder or seed/copy notes")
 
         # Execute the actual saved-row left-button listener, after focusing its editor.
-        # This checkpoint must reach Dialog, rather than fail earlier in theme setup.
+        # This checkpoint must finish Dialog construction, rather than fail earlier in theme or drawer setup.
         deletion = subprocess.run([
             str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(folder_data),
             *open_folders, "--focus-at", "1", "--tap", "24", "128", str(notepad),
         ], text=True, capture_output=True, timeout=120)
-        dialog_blocker = "Landroid/app/Dialog;-><init>(Landroid/content/Context;I)V"
+        dialog_blocker = "Landroid/support/v7/a/q;->setCancelable(Z)V"
         if deletion.returncode != 1 or "unsupported method " + dialog_blocker not in deletion.stderr \
                 or "EditFolderViewHolder;->clickLeftButton" not in deletion.stderr:
             raise SystemExit("Notepad folder-delete boundary changed; inspect and update its compatibility evidence")
@@ -533,6 +533,7 @@ report["headless_folder_rename_verified"] = True
 report["headless_folder_rename_restart_back_verified"] = True
 report["folder_rename_id_and_existing_notes_retained"] = True
 report["headless_folder_delete_dialog_boundary_verified"] = True
+report["headless_folder_delete_dialog_constructor_verified"] = True
 report["headless_folder_deletion_verified"] = False
 report["folder_deletion_first_blocker"] = dialog_blocker
 report["folder_delete_failure_retains_exact_notes_and_folder"] = True
@@ -551,7 +552,7 @@ print("PASS Notepad: original editor/Done creates one visible folder; saved row 
 print("PASS Notepad: saved-row focus and unconfirmed input complete; restart discards that input and preserves exact notes/folder")
 print("PASS Notepad: host editor focus runs guest callbacks; pending input is discarded on restart with exact notes/folder retained")
 print("PASS Notepad: original rename confirmation completes; same folder ID/name survive restart and Back with both exact notes")
-print("PASS Notepad diagnostic: original folder-delete listener reaches unsupported Dialog; exact notes/folder retained")
+print("PASS Notepad diagnostic: original folder-delete listener completes Dialog construction and reaches unsupported cancellation setting; exact notes/folder retained")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.
