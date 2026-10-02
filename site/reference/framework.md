@@ -683,11 +683,47 @@ resources.arsc parsing covers package/type/key pools, simple typed values,
 reference chains and map entries, including sparse/16-bit offsets. Default
 configuration wins; otherwise the first variant is used. Qualifier matching,
 full theme resolution and compact entries are not implemented. Supported style
-bags merge explicit and implicit parents, with cycle/depth checks. Stable public
-framework IDs supply OK/Cancel strings; there is no embedded Android resource
+bags merge explicit and implicit parents, with cycle/depth checks. Context/Theme
+styled arrays select a referenced defStyleAttr from the theme, follow theme aliases,
+and use defStyleRes when no reference is found. A null reference suppresses that
+fallback. Explicit XML style overlays the selected defaults, then direct XML
+attributes win. Resources.obtainAttributes reads direct XML values only. Compiled
+checks cover precedence, missing/null defaults, layout IDs, snapshots, actual
+getTheme/GC/fault callbacks, invalid direct bridge arguments and bounded cycles.
+Framework tracing reports selected default IDs and typed attribute metadata.
+Full framework themes/qualifiers remain outside this profile.
+[API-21 style resolution reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/jni/android_util_AssetManager.cpp).
+Stable public framework IDs supply OK/Cancel strings; there is no embedded Android resource
 installation. String/color/dimension/layout resolution belongs to DROIDLESS.
 
 Binary layouts create TextView, Button, EditText, LinearLayout and FrameLayout.
+Explicit @null ImageView src/srcCompat clears image bytes and Drawable identity
+without attempting resource ID zero lookup. setImageResource(0) uses the same
+clearing semantics. A compiled XML/DEX check covers both source attributes,
+replacement, clearing and GC; ordinary Resources.getDrawable(0) still fails.
+TypedValue.getFloat reinterprets the data field's 32 bits, preserving signed zero,
+subnormals, infinity and NaN payloads. A compiled DEX check also reads a resolved
+theme float and survives GC; invalid receivers fail.
+TypedArray.getValue fills TypedValue with resolved scalar/string data and the
+last referenced resource ID, retaining complex resource references. Missing and
+explicit null values return false without changing the output. Compiled checks
+cover XML values, alias chains, theme snapshots, managed strings through GC,
+index/output faults and recovery. Asset cookies identify one virtual resource
+pool; density/configuration metadata uses the default configuration. Android
+asset-cookie and qualifier provenance and recycled-array faults remain incomplete.
+Recognized API-21 Material/Material.Light themes and their NoActionBar variants
+supply default primary/secondary/hint text colors, disabled alpha and 56dp action-bar size through
+explicit/implicit style ancestry. Application styles still override these values.
+These are flat default colors; full framework selector/theme resources remain
+incomplete. Compiled checks cover light/dark defaults, overrides, snapshots and GC.
+TypedArray float/dimension getters also resolve theme aliases against their
+retained snapshot before reading the numeric value.
+getLayoutDimension decodes dimension values instead of returning encoded IDs,
+preserves integer layout flags and uses its fallback for other resolved types.
+Resource and typed-array pixel-size getters share API-21 rounding and preserve
+nonzero subpixel sizes; compiled checks cover positive/negative sizes and flags.
+Theme.obtainStyledAttributes(styleId, attrs) shares explicit-style merging with
+Context while retaining the original theme snapshot for attribute aliases.
 TableLayout/TableRow use the basic linear model. Attributes include IDs, text,
 resource references, width/height, weight, orientation, per-side padding, margins,
 text size/color, image `src`/`srcCompat`, gravity, enabled/visibility and XML
@@ -1077,8 +1113,9 @@ Closing the runtime dismisses remaining surfaces before stopping its message que
 This is the main-thread modal profile. Dialog OnKeyListener delivery, native
 window-focus callback delivery, state save/restore, arbitrary WindowManager
 add/remove operations, nonmodal/floating-window flags and composite foreground
-painting remain unsupported. The public Notepad APK reaches its own dialog
-onCreate and AppCompat content installation, then fails at FrameLayout.setForeground;
+painting remain unsupported. The public Notepad APK completes its own AppCompat
+dialog layout inflation, then fails at NestedScrollView.setClipToPadding at
+onCreate PC 0x019d;
 its confirmation dialog and folder deletion are not yet verified. Authored DEX
 contracts and real AppKit component checks cover the implemented surface behavior;
 physical interaction with a public dialog remains unverified.

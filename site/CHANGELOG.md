@@ -2,13 +2,24 @@
 
 ## Unreleased
 
+- Typed resource resolution now honors selected default styles, XML styles and
+  explicit XML precedence. Null ImageView sources clear the drawable; TypedValue
+  floats preserve their bits. TypedArray.getValue fills real scalar/string output,
+  resolves aliases, retains complex references and preserves missing/null output.
+  Compiled DEX checks cover snapshots, GC, cycles and invalid input. Recognized
+  Material themes supply bounded flat text defaults, disabled alpha and action-bar
+  size; numeric getters resolve theme aliases. The unchanged
+  Notepad APK completes AppCompat dialog layout inflation and now stops at
+  NestedScrollView clipping setup, preserving the folder and exact notes.
+  Public confirmation and confirmed folder deletion remain unverified.
+
 - FrameLayout foregrounds now retain real Drawable identity, use weak callbacks,
   refresh supported color/state leaves and padding, and paint above native child
   controls without capturing their input. Compiled DEX and AppKit component checks
   cover clearing/replacement, alpha, visibility, GC and callback faults. FILL
   painting is supported; theme/XML, composite and Canvas foregrounds remain ahead.
-  The unchanged Notepad delete listener passes AppCompat foreground setup and
-  reaches a missing dialog layout resource, preserving the folder and exact notes.
+  The unchanged Notepad delete listener passes AppCompat foreground setup.
+  Its current dialog boundary is recorded above.
   Public confirmation and confirmed folder deletion remain unverified.
 
 - Modal Dialog surfaces now use separate native AppKit panels and guest View
@@ -18,8 +29,8 @@
   and GC retains only attached ownership. Authored DEX checks cover callback
   order, nested surfaces, bounds, focus, errors and collection; AppKit checks
   cover real panels, native controls, close routing, resize and retirement.
-  The unchanged Notepad APK enters its own dialog onCreate and stops at
-  FrameLayout foreground setup, preserving the exact folder and both notes.
+  The unchanged Notepad APK enters its own dialog onCreate; its current boundary
+  is recorded above, with the exact folder and both notes preserved.
   Public confirmation and physical dialog input remain unverified.
 
 - WeakReference now excludes its referent from strong heap traversal and clears
@@ -38,7 +49,7 @@
 - Message.obtain(Message) snapshots supported fields/targets/callbacks without
   copying queue-use state or delivery time; sendToTarget uses the real Handler.
   The unchanged Notepad folder-delete builder now passes cancellation/listener
-  setup and reaches AppCompat foreground setup inside its dialog onCreate,
+  setup inside its dialog onCreate,
   preserving the exact folder and notes.
 
 - Dialog construction now retains an independent themed context, owned Window,

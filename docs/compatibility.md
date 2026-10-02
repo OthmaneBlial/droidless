@@ -94,13 +94,13 @@ unverified. [Host-focus evidence](verification.md#current-source-native-editor-f
 The actual saved-folder delete listener now completes bundled AppCompat themed
 context/inflater setup, state-list drawer measurement and Dialog construction with
 its own context/window. Cancellation settings and listener setup also complete.
-It enters the bundled dialog onCreate and AppCompat content installation, then
-passes AppCompat foreground setup, then fails explicitly during dialog content
-inflation with `resource @0x00000000 missing or complex`. The failed
+It completes the bundled AppCompat dialog layout inflation after resolving
+default/XML styles, null images and typed floats. Its next explicit failure is
+`NestedScrollView.setClipToPadding(Z)` at dialog onCreate PC 0x019d. The failed
 attempt retains the same folder and both exact note rows. The confirmation window,
 Cancel, confirmed folder deletion and native folder input remain unverified. The
 permanent replay tracks this boundary without treating it as a completed delete
-workflow. [Dialog/window evidence](verification.md#current-source-foreground-overlays-and-dialog-layout-boundary).
+workflow. [Dialog inflation evidence](verification.md#current-source-styled-resources-and-dialog-inflation).
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree

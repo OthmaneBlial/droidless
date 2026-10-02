@@ -1,6 +1,6 @@
 # First interactive milestone evidence
 
-Latest local source gate: 137 Rust tests, warning-free Clippy, optimized builds
+Latest local source gate: 142 Rust tests, warning-free Clippy, optimized builds
 and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
 
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
@@ -2373,3 +2373,70 @@ Notepad create/edit/delete/Undo/drawer/folder/restart workflows, and certifies
 this same unchanged CLI. Its folder-delete diagnostic records the new resource
 boundary while keeping confirmed folder deletion false. The 50% checkpoint remains active; no new release or physical
 public dialog interaction is claimed.
+
+## Current-source styled resources and dialog inflation
+
+Date: 2026-10-02. Source increments: cfb5d75 (default/XML styles), c9eff8a
+(null XML images), eea2b6f (typed floats) and 3513729
+(typed-array output), plus 6c3b9bf (inherited Material defaults). All are beyond the published v0.1.0 archive.
+
+Context and Theme styled-attribute calls now select defStyleAttr when it resolves
+to a style, otherwise defStyleRes, then overlay XML style and explicit XML values
+above theme defaults. An explicit null style suppresses the fallback. Existing
+TypedArrays retain their theme snapshot through later changes. Resources.obtainAttributes
+reads explicit XML values. Compiled DEX checks cover precedence, alias/cycle
+handling, getter callbacks, GC, invalid receivers and recovery. The precedence
+was checked against [API-21 resource resolution](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/jni/android_util_AssetManager.cpp).
+
+Explicit null src/srcCompat clears ImageView bytes and Drawable identity without
+looking up resource zero. Programmatic replacement/clearing and GC pass compiled
+checks; ordinary Resources.getDrawable(0) still rejects an invalid resource.
+TypedValue.getFloat returns the data field's float bits, including signed zero,
+subnormals, infinity and NaN payloads; actual resolved theme floats and GC pass.
+TypedArray.getValue now fills supported output fields, resolves scalar/string
+aliases to their last resource ID and retains complex references. Missing/null
+values leave the output unchanged. XML types, theme snapshots, managed strings,
+invalid indices/outputs, resource cycles and recovery pass a compiled check.
+These semantics were checked against [API-21 TypedValue](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/util/TypedValue.java)
+and [TypedArray](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/res/TypedArray.java).
+One virtual resource pool/default configuration supplies cookie/density metadata;
+Android asset-cookie/qualifier provenance and recycled-array faults remain incomplete.
+
+Recognized API-21 Material/Material.Light and NoActionBar themes now supply
+flat default primary/secondary/hint text colors, disabled alpha and 56dp action-bar
+size through the shared explicit/implicit parent resolver. Application styles
+override those values. Numeric TypedArray getters resolve theme aliases against
+their retained snapshot. Compiled checks cover light/dark defaults, overrides,
+float/dimension aliases, layout flags, subpixel sizes, snapshots and GC.
+getLayoutDimension decodes resolved sizes instead of using encoded IDs; resource
+and typed-array pixel sizes share API-21 rounding. Theme explicit-style calls
+retain the same snapshot rules. Values were checked against the
+[API-21 Material theme definitions](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/res/res/values/themes_material.xml),
+[color defaults](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/res/res/values/colors_material.xml)
+and [dimensions](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/res/res/values/dimens_material.xml).
+Full framework selector/theme resources remain incomplete. The unchanged SwpieView
+APK's button styling exercises these inherited values when opening its image viewer.
+Its headless decoded image occupies 420 by 664 points below the 56-point action bar;
+the public replay also checks viewer bounds, Back and gestures.
+
+The unmodified Notepad APK now completes its actual AppCompat dialog layout
+inflation. Its original focused EditFolderViewHolder.clickLeftButton calls at
+PC 0x0057; the bundled dialog onCreate advances from PC 0x0012 to PC 0x019d.
+The next exact failure is
+`unsupported method Landroid/support/v4/widget/NestedScrollView;->setClipToPadding(Z)V`.
+The permanent public replay checks that stack location and keeps confirmed folder
+deletion false. Its disposable attempt preserves the same saved folder ID/name,
+both exact note IDs/titles/bodies and the seed. The original APK SHA-256 remains
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+Public presentation, confirmation, Cancel and physical folder interaction remain
+unverified; no APK patch or replacement confirmation is used.
+
+The complete local gate passes 142 Rust tests, warning-free Clippy, optimized
+workspace/document-replay builds, 4,096 seeded parser mutations and all four
+native font/focus/dialog/foreground component checks. GitHub Actions stay disabled.
+The full public replay certifies one unchanged optimized CLI, including calculator,
+image/grid/result, SwpieView and Notepad persistence/delete/Undo/drawer/folder
+workflows plus the dialog diagnostic. That CLI and the unsigned development
+bundle are byte-identical: SHA-256 `523d33070d626864073c5372b2c5ce83d29808647ac8c297b0591578f1797d74`.
+The 50% checkpoint remains active; no new release or physical public-dialog
+interaction is claimed.
