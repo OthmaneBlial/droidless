@@ -206,6 +206,8 @@ impl Runtime {
                     | "setGravity(I)V"
                     | "isDestroyed()Z"
                     | "destroy()V"
+                    | "setCloseOnTouchOutside(Z)V"
+                    | "setCloseOnTouchOutsideIfNotSet(Z)V"
             );
         let title = method.class == PARAMS
             && matches!(
@@ -275,6 +277,19 @@ impl Runtime {
                 }]);
             }
             match signature.as_str() {
+                "setCloseOnTouchOutside(Z)V" | "setCloseOnTouchOutsideIfNotSet(Z)V" => {
+                    let value = Word::from(i32::from(arg(1)?.int()? != 0));
+                    if method.name == "setCloseOnTouchOutside"
+                        || !self
+                            .window_word(receiver, "droidless:window:outside-set")?
+                            .truth()
+                    {
+                        let fields = &mut self.heap.get_mut(receiver)?.fields;
+                        fields.insert("droidless:window:close-outside".into(), vec![value]);
+                        fields.insert("droidless:window:outside-set".into(), vec![Word::from(1)]);
+                    }
+                    Ok(vec![])
+                }
                 "getContext()Landroid/content/Context;" => Ok(vec![
                     self.window_word(receiver, "droidless:window:context")?,
                 ]),

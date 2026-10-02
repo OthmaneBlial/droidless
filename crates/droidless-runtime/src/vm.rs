@@ -1086,6 +1086,7 @@ impl Runtime {
             return Some(parent.into());
         }
         let parent = match class {
+            "Landroid/app/Dialog$ListenersHandler;" => "Landroid/os/Handler;",
             "Landroid/view/MotionEvent;" => "Landroid/view/InputEvent;",
             "Landroid/text/TextPaint;" => "Landroid/graphics/Paint;",
             "Landroid/text/SpannableStringBuilder;" => "Landroid/text/Editable;",

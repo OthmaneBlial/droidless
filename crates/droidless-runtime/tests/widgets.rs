@@ -2,6 +2,165 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_dialog_cancellation_messages_weak_owners_payload_snapshots_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    let root = vm.root;
+    let call = |vm: &mut Runtime, name: &str, activity: bool, returns: &str| {
+        vm.invoke(
+            Method {
+                class: "Lorg/droidless/images/DialogListenerContract;".into(),
+                name: name.into(),
+                parameters: if activity {
+                    vec!["Landroid/app/Activity;".into()]
+                } else {
+                    vec![]
+                },
+                returns: returns.into(),
+            },
+            if activity {
+                vec![vm.activity.unwrap()]
+            } else {
+                vec![]
+            },
+            false,
+        )
+    };
+    let dialog = call(&mut vm, "prepare", true, "Landroid/app/Dialog;").unwrap()[0];
+    assert_eq!(vm.root, root);
+    assert_eq!(vm.poll_messages().unwrap(), 4);
+    assert_eq!(
+        call(&mut vm, "delivered", false, "I").unwrap(),
+        [Word::from(1)]
+    );
+    call(&mut vm, "orphan", true, "V").unwrap();
+    vm.collect();
+    assert_eq!(vm.poll_messages().unwrap(), 1);
+    assert_eq!(
+        call(&mut vm, "orphanDelivered", false, "I").unwrap(),
+        [Word::from(1)]
+    );
+    let fault = call(&mut vm, "fault", true, "Landroid/app/Dialog;").unwrap()[0];
+    assert!(format!("{:#}", vm.poll_messages().unwrap_err()).contains("cancel callback failed"));
+    assert_eq!(vm.stack_depth(), 0);
+    call(&mut vm, "recover", true, "V").unwrap();
+    vm.collect();
+    assert!(vm.heap.get(fault).is_err());
+    assert_eq!(vm.poll_messages().unwrap(), 1);
+    call(&mut vm, "custom", true, "V").unwrap();
+    assert_eq!(vm.poll_messages().unwrap(), 1);
+    assert_eq!(
+        call(&mut vm, "customDelivered", false, "I").unwrap(),
+        [Word::from(1)]
+    );
+    call(&mut vm, "drop", false, "V").unwrap();
+    vm.collect();
+    assert!(vm.heap.get(dialog).is_err());
+    assert_eq!(vm.poll_messages().unwrap(), 0);
+    vm.close().unwrap();
+}
+
+#[test]
+fn dialog_listener_and_message_invalid_arguments_do_not_enqueue_or_retain_roots() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    let dialog = vm.heap.instance("Landroid/app/Dialog;").unwrap();
+    vm.invoke(
+        Method {
+            class: "Landroid/app/Dialog;".into(),
+            name: "<init>".into(),
+            parameters: vec!["Landroid/content/Context;".into(), "I".into()],
+            returns: "V".into(),
+        },
+        vec![dialog, vm.activity.unwrap(), Word::from(1)],
+        false,
+    )
+    .unwrap();
+    let wrong = vm.heap.string("bad listener".into()).unwrap();
+    for (name, ty) in [
+        (
+            "setOnCancelListener",
+            "Landroid/content/DialogInterface$OnCancelListener;",
+        ),
+        (
+            "setOnDismissListener",
+            "Landroid/content/DialogInterface$OnDismissListener;",
+        ),
+        (
+            "setOnShowListener",
+            "Landroid/content/DialogInterface$OnShowListener;",
+        ),
+        (
+            "setOnKeyListener",
+            "Landroid/content/DialogInterface$OnKeyListener;",
+        ),
+        ("setCancelMessage", "Landroid/os/Message;"),
+        ("setDismissMessage", "Landroid/os/Message;"),
+        ("setCancelable", "Z"),
+        ("setCanceledOnTouchOutside", "Z"),
+    ] {
+        let method = Method {
+            class: "Landroid/app/Dialog;".into(),
+            name: name.into(),
+            parameters: vec![ty.into()],
+            returns: "V".into(),
+        };
+        for invalid in [wrong, Word::Ref(usize::MAX)] {
+            assert!(
+                vm.invoke(method.clone(), vec![dialog, invalid], true)
+                    .is_err()
+            );
+        }
+    }
+    let obtain = Method {
+        class: "Landroid/os/Message;".into(),
+        name: "obtain".into(),
+        parameters: vec!["Landroid/os/Message;".into()],
+        returns: "Landroid/os/Message;".into(),
+    };
+    for invalid in [Word::ZERO, wrong, Word::Ref(usize::MAX)] {
+        assert!(vm.invoke(obtain.clone(), vec![invalid], false).is_err());
+    }
+    let message = vm.heap.instance("Landroid/os/Message;").unwrap();
+    assert!(
+        vm.invoke(
+            Method {
+                class: "Landroid/os/Message;".into(),
+                name: "setTarget".into(),
+                parameters: vec!["Landroid/os/Handler;".into()],
+                returns: "V".into()
+            },
+            vec![message, wrong],
+            true
+        )
+        .is_err()
+    );
+    assert!(
+        vm.invoke(
+            Method {
+                class: "Landroid/os/Message;".into(),
+                name: "sendToTarget".into(),
+                parameters: vec![],
+                returns: "V".into()
+            },
+            vec![message],
+            true
+        )
+        .is_err()
+    );
+    assert_eq!(vm.poll_messages().unwrap(), 0);
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(vm.heap.get(dialog).is_err());
+    assert!(vm.heap.get(message).is_err());
+    vm.close().unwrap();
+}
+
+#[test]
 fn compiled_selector_drawable_order_state_rendering_gc_faults_and_cycles() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

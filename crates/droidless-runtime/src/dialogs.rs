@@ -8,13 +8,115 @@ use droidless_formats::dex::Method;
 
 const DIALOG: &str = "Landroid/app/Dialog;";
 const CONTEXT: &str = "Landroid/content/Context;";
+const LISTENERS: &str = "Landroid/app/Dialog$ListenersHandler;";
+const MESSAGE: &str = "Landroid/os/Message;";
 
 impl Runtime {
+    fn dialog_listeners_handler(&mut self, dialog: Word) -> Result<Word> {
+        let cached = self.window_word(dialog, "droidless:dialog:listeners")?;
+        if cached != Word::ZERO {
+            return Ok(cached);
+        }
+        let weak = self.heap.instance("Ljava/lang/ref/WeakReference;")?;
+        self.native_roots.push(weak);
+        self.invoke(
+            Method {
+                class: "Ljava/lang/ref/WeakReference;".into(),
+                name: "<init>".into(),
+                parameters: vec!["Ljava/lang/Object;".into()],
+                returns: "V".into(),
+            },
+            vec![weak, dialog],
+            false,
+        )?;
+        let handler = self.heap.instance(LISTENERS)?;
+        self.native_roots.push(handler);
+        self.invoke(
+            Method {
+                class: "Landroid/os/Handler;".into(),
+                name: "<init>".into(),
+                parameters: vec![],
+                returns: "V".into(),
+            },
+            vec![handler],
+            false,
+        )?;
+        self.heap
+            .get_mut(handler)?
+            .fields
+            .insert("droidless:dialog:weak".into(), vec![weak]);
+        self.heap
+            .get_mut(dialog)?
+            .fields
+            .insert("droidless:dialog:listeners".into(), vec![handler]);
+        Ok(handler)
+    }
     pub(crate) fn dialog_native(
         &mut self,
         method: &Method,
         args: &[Word],
     ) -> Result<Option<Vec<Word>>> {
+        if method.class == LISTENERS && method.signature() == "handleMessage(Landroid/os/Message;)V"
+        {
+            self.require_main_thread()?;
+            ensure!(
+                self.sync_depth < 32,
+                "Dialog listener callback nesting limit"
+            );
+            let handler = *args.first().context("Dialog listener handler missing")?;
+            ensure!(
+                self.heap.get(handler)?.class == LISTENERS,
+                "invalid Dialog listener handler"
+            );
+            let message = *args.get(1).context("Dialog listener message missing")?;
+            ensure!(
+                self.is_a(&self.heap.get(message)?.class, MESSAGE),
+                "Dialog listener requires Message"
+            );
+            let what = self
+                .window_word(message, &format!("{MESSAGE}->what:I"))?
+                .int()?;
+            let (interface, name) = match what {
+                0x43 => ("OnDismissListener", "onDismiss"),
+                0x44 => ("OnCancelListener", "onCancel"),
+                0x45 => ("OnShowListener", "onShow"),
+                _ => return Ok(Some(vec![])),
+            };
+            let listener = self.message_word(message, "obj")?;
+            let class = format!("Landroid/content/DialogInterface${interface};");
+            ensure!(
+                self.is_a(&self.heap.get(listener)?.class, &class),
+                "invalid Dialog listener payload"
+            );
+            let roots = self.native_roots.len();
+            self.native_roots.extend_from_slice(args);
+            let delivered = (|| -> Result<Vec<Word>> {
+                let weak = self.window_word(handler, "droidless:dialog:weak")?;
+                let dialog = self.invoke(
+                    Method {
+                        class: "Ljava/lang/ref/Reference;".into(),
+                        name: "get".into(),
+                        parameters: vec![],
+                        returns: "Ljava/lang/Object;".into(),
+                    },
+                    vec![weak],
+                    true,
+                )?[0];
+                self.native_roots.extend([listener, dialog]);
+                self.invoke(
+                    Method {
+                        class,
+                        name: name.into(),
+                        parameters: vec!["Landroid/content/DialogInterface;".into()],
+                        returns: "V".into(),
+                    },
+                    vec![listener, dialog],
+                    true,
+                )
+            })();
+            self.native_roots.truncate(roots);
+            return delivered.map(Some);
+        }
         if method.class != DIALOG {
             return Ok(None);
         }
@@ -36,6 +138,17 @@ impl Runtime {
                 | "requestWindowFeature(I)Z"
                 | "create()V"
                 | "isShowing()Z"
+                | "setCancelable(Z)V"
+                | "setCanceledOnTouchOutside(Z)V"
+                | "setOnCancelListener(Landroid/content/DialogInterface$OnCancelListener;)V"
+                | "setOnDismissListener(Landroid/content/DialogInterface$OnDismissListener;)V"
+                | "setOnShowListener(Landroid/content/DialogInterface$OnShowListener;)V"
+                | "setOnKeyListener(Landroid/content/DialogInterface$OnKeyListener;)V"
+                | "setCancelMessage(Landroid/os/Message;)V"
+                | "setDismissMessage(Landroid/os/Message;)V"
+                | "cancel()V"
+                | "dismiss()V"
+                | "onBackPressed()V"
                 | "getOwnerActivity()Landroid/app/Activity;"
                 | "setOwnerActivity(Landroid/app/Activity;)V"
                 | "onCreate(Landroid/os/Bundle;)V"
@@ -71,6 +184,10 @@ impl Runtime {
                         arg(2)?
                     };
                     theme.int()?;
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert("droidless:dialog:cancelable".into(), vec![Word::from(1)]);
                     if theme == Word::ZERO {
                         let typed = self.heap.instance("Landroid/util/TypedValue;")?;
                         self.native_roots.push(typed);
@@ -187,6 +304,155 @@ impl Runtime {
                 "isShowing()Z" => Ok(vec![
                     self.window_word(receiver, "droidless:dialog:showing")?,
                 ]),
+                "setCancelable(Z)V" | "setCanceledOnTouchOutside(Z)V" => {
+                    let value = Word::from(i32::from(arg(1)?.int()? != 0));
+                    if method.name == "setCancelable" || value.truth() {
+                        self.heap
+                            .get_mut(receiver)?
+                            .fields
+                            .insert("droidless:dialog:cancelable".into(), vec![value]);
+                    }
+                    if method.name == "setCanceledOnTouchOutside" {
+                        let window = self.window_word(receiver, "droidless:window")?;
+                        self.invoke(
+                            Method {
+                                class: WINDOW.into(),
+                                name: "setCloseOnTouchOutside".into(),
+                                parameters: vec!["Z".into()],
+                                returns: "V".into(),
+                            },
+                            vec![window, value],
+                            true,
+                        )?;
+                    }
+                    Ok(vec![])
+                }
+                "setOnCancelListener(Landroid/content/DialogInterface$OnCancelListener;)V"
+                | "setOnDismissListener(Landroid/content/DialogInterface$OnDismissListener;)V"
+                | "setOnShowListener(Landroid/content/DialogInterface$OnShowListener;)V"
+                | "setOnKeyListener(Landroid/content/DialogInterface$OnKeyListener;)V" => {
+                    let listener = arg(1)?;
+                    ensure!(
+                        listener == Word::ZERO
+                            || self.is_a(&self.heap.get(listener)?.class, &method.parameters[0]),
+                        "invalid Dialog listener"
+                    );
+                    let (kind, what) = match method.name.as_str() {
+                        "setOnCancelListener" => ("cancel", 0x44),
+                        "setOnDismissListener" => ("dismiss", 0x43),
+                        "setOnShowListener" => ("show", 0x45),
+                        _ => ("key", 0),
+                    };
+                    let message = if what == 0 || listener == Word::ZERO {
+                        listener
+                    } else {
+                        let handler = self.dialog_listeners_handler(receiver)?;
+                        self.invoke(
+                            Method {
+                                class: "Landroid/os/Handler;".into(),
+                                name: "obtainMessage".into(),
+                                parameters: vec!["I".into(), "Ljava/lang/Object;".into()],
+                                returns: MESSAGE.into(),
+                            },
+                            vec![handler, Word::from(what), listener],
+                            true,
+                        )?[0]
+                    };
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert(format!("droidless:dialog:{kind}-message"), vec![message]);
+                    Ok(vec![])
+                }
+                "setCancelMessage(Landroid/os/Message;)V"
+                | "setDismissMessage(Landroid/os/Message;)V" => {
+                    let message = arg(1)?;
+                    ensure!(
+                        message == Word::ZERO || self.is_a(&self.heap.get(message)?.class, MESSAGE),
+                        "Dialog message requires Message"
+                    );
+                    let kind = if method.name == "setCancelMessage" {
+                        "cancel"
+                    } else {
+                        "dismiss"
+                    };
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert(format!("droidless:dialog:{kind}-message"), vec![message]);
+                    Ok(vec![])
+                }
+                "onBackPressed()V" => {
+                    if self
+                        .window_word(receiver, "droidless:dialog:cancelable")?
+                        .truth()
+                    {
+                        self.invoke(
+                            Method {
+                                class: DIALOG.into(),
+                                name: "cancel".into(),
+                                parameters: vec![],
+                                returns: "V".into(),
+                            },
+                            vec![receiver],
+                            true,
+                        )?;
+                    }
+                    Ok(vec![])
+                }
+                "cancel()V" => {
+                    let message = self.window_word(receiver, "droidless:dialog:cancel-message")?;
+                    if message != Word::ZERO
+                        && !self
+                            .window_word(receiver, "droidless:dialog:canceled")?
+                            .truth()
+                    {
+                        self.heap
+                            .get_mut(receiver)?
+                            .fields
+                            .insert("droidless:dialog:canceled".into(), vec![Word::from(1)]);
+                        let copy = self.invoke(
+                            Method {
+                                class: MESSAGE.into(),
+                                name: "obtain".into(),
+                                parameters: vec![MESSAGE.into()],
+                                returns: MESSAGE.into(),
+                            },
+                            vec![message],
+                            false,
+                        )?[0];
+                        self.native_roots.push(copy);
+                        self.invoke(
+                            Method {
+                                class: MESSAGE.into(),
+                                name: "sendToTarget".into(),
+                                parameters: vec![],
+                                returns: "V".into(),
+                            },
+                            vec![copy],
+                            true,
+                        )?;
+                    }
+                    self.invoke(
+                        Method {
+                            class: DIALOG.into(),
+                            name: "dismiss".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    )
+                }
+                "dismiss()V" => {
+                    ensure!(
+                        !self
+                            .window_word(receiver, "droidless:dialog:showing")?
+                            .truth(),
+                        "visible Dialog dismissal unsupported"
+                    );
+                    Ok(vec![])
+                }
                 "onCreate(Landroid/os/Bundle;)V" | "onContentChanged()V" => Ok(vec![]),
                 "onWindowAttributesChanged(Landroid/view/WindowManager$LayoutParams;)V" => {
                     ensure!(

@@ -173,7 +173,18 @@ impl Runtime {
     fn new_message(&mut self, handler: Word, callback: Word, token: Word) -> Result<Word> {
         for word in [handler, callback, token] {
             word.reference()?;
+            if word != Word::ZERO {
+                self.heap.get(word)?;
+            }
         }
+        ensure!(
+            handler == Word::ZERO || self.is_a(&self.heap.get(handler)?.class, HANDLER),
+            "Message target requires Handler"
+        );
+        ensure!(
+            callback == Word::ZERO || self.is_a(&self.heap.get(callback)?.class, RUNNABLE),
+            "Message callback requires Runnable"
+        );
         let message = self.heap.instance(MESSAGE)?;
         let fields = &mut self.heap.get_mut(message)?.fields;
         fields.insert("target".into(), vec![handler]);
@@ -644,6 +655,63 @@ impl Runtime {
             (MESSAGE, "obtain()Landroid/os/Message;") => {
                 result.push(self.new_message(Word::ZERO, Word::ZERO, Word::ZERO)?)
             }
+            (MESSAGE, "obtain(Landroid/os/Message;)Landroid/os/Message;") => {
+                let source = arg(0)?;
+                ensure!(
+                    self.is_a(&self.heap.get(source)?.class, MESSAGE),
+                    "Message copy requires Message"
+                );
+                let copy = self.new_message(
+                    self.message_word(source, "target")?,
+                    self.message_word(source, "callback")?,
+                    self.message_word(source, "obj")?,
+                )?;
+                for name in ["what", "arg1", "arg2"] {
+                    let key = format!("{MESSAGE}->{name}:I");
+                    let value = self.window_word(source, &key)?;
+                    value.int()?;
+                    self.heap.get_mut(copy)?.fields.insert(key, vec![value]);
+                }
+                let data = self.message_word(source, "data")?;
+                if data != Word::ZERO {
+                    let Data::Bundle(values) = &self.heap.get(data)?.data else {
+                        anyhow::bail!("Message data requires initialized Bundle");
+                    };
+                    let values = values.clone();
+                    let data = self.heap.instance("Landroid/os/Bundle;")?;
+                    self.heap.get_mut(data)?.data = Data::Bundle(values);
+                    self.heap
+                        .get_mut(copy)?
+                        .fields
+                        .insert("data".into(), vec![data]);
+                }
+                result.push(copy);
+            }
+            (MESSAGE, "sendToTarget()V") => {
+                ensure!(
+                    self.is_a(&self.heap.get(receiver)?.class, MESSAGE),
+                    "sendToTarget requires Message"
+                );
+                let target = self.message_word(receiver, "target")?;
+                ensure!(
+                    self.is_a(&self.heap.get(target)?.class, HANDLER),
+                    "Message target requires Handler"
+                );
+                let roots = self.native_roots.len();
+                self.native_roots.extend([receiver, target]);
+                let sent = self.invoke(
+                    Method {
+                        class: HANDLER.into(),
+                        name: "sendMessage".into(),
+                        parameters: vec![MESSAGE.into()],
+                        returns: "Z".into(),
+                    },
+                    vec![target, receiver],
+                    true,
+                );
+                self.native_roots.truncate(roots);
+                sent?;
+            }
             (MESSAGE, "obtain(Landroid/os/Handler;ILjava/lang/Object;)Landroid/os/Message;") => {
                 arg(1)?.int()?;
                 let message = self.new_message(arg(0)?, Word::ZERO, arg(2)?)?;
@@ -670,6 +738,10 @@ impl Runtime {
             }
             (MESSAGE, "setTarget(Landroid/os/Handler;)V") => {
                 arg(1)?.reference()?;
+                ensure!(
+                    arg(1)? == Word::ZERO || self.is_a(&self.heap.get(arg(1)?)?.class, HANDLER),
+                    "Message target requires Handler"
+                );
                 self.heap
                     .get_mut(receiver)?
                     .fields

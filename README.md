@@ -63,7 +63,7 @@ name. Rename confirmation now completes using real host-font ascent/descent.
 The same folder ID/new name survive restart and Back with both exact notes.
 🪟 Dialogs now own their context, window and content; stateful drawer backgrounds
 also select and render their supported colors. The original delete listener passes
-Dialog construction and stops at the bundled cancellation setter. Its failed
+Dialog construction and cancellation/listener setup, then stops at show(). Its failed
 attempt preserves the folder and both exact notes. Folder deletion and native
 folder input remain unverified. [Dialog/window evidence](docs/verification.md#current-source-owned-dialog-windows-and-state-list-backgrounds).
 [Folder rename and font-metrics evidence](docs/verification.md#current-source-folder-rename-and-host-font-metrics).
@@ -232,7 +232,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 133 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 135 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>
