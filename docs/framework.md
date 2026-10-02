@@ -482,8 +482,9 @@ rectangles. Self conversion returns immediately, including a null Rect; a
 foreign ancestor raises IllegalArgumentException after any preceding translations.
 Chains beyond 128 steps or cycles are rejected, and worker calls retain the UI
 thread guard. Compiled checks cover nested groups, both directions, overflow,
-fault recovery and GC. Scroll setters, matrix transforms and clipping are outside
-this profile. Rect.width/height use signed wrapping subtraction; negative bounds
+fault recovery and GC. Scroll setters and matrix transforms are outside this
+coordinate-conversion profile; ViewGroup drawing clips are described below.
+Rect.width/height use signed wrapping subtraction; negative bounds
 are not normalized. The behavior follows the
 [API-21 ViewGroup reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
 
@@ -1063,6 +1064,17 @@ custom Canvas overflow remain outside this profile.
 
 [ViewGroup clipping reference](https://developer.android.com/reference/android/view/ViewGroup#setClipToPadding(boolean)),
 [API-21 drawing and touch paths](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
+
+View.canScrollVertically/canScrollHorizontally now invoke the actual virtual
+offset, range and extent methods, in that order. Default View metrics use its
+layout size and retained scroll offsets; APK overrides execute their own DEX.
+The queries retain API-21 directional boundaries, zero-direction behavior and
+Java integer wrapping. Callback GC and faults preserve receiver ownership and
+unwind temporary roots. The compiled contract covers both axes, overscroll,
+end boundaries, empty/negative ranges, integer overflow, defaults, call order,
+callback faults and recovery. This implements scrollability queries, not host
+scrolling or Android scrollbars.
+[API-21 View scroll metrics](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/View.java).
 
 ### Weak references and collector reachability
 

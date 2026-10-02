@@ -5,6 +5,49 @@ use droidless_runtime::{
 };
 
 #[test]
+fn compiled_view_scroll_queries_virtual_metrics_boundaries_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    let root = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/ScrollQueryContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "Landroid/view/View;".into(),
+            },
+            vec![vm.activity.unwrap()],
+            false,
+        )
+        .unwrap()[0];
+    let wrong = vm.heap.instance("Ljava/lang/Object;").unwrap();
+    for name in ["canScrollVertically", "canScrollHorizontally"] {
+        let method = Method {
+            class: "Landroid/view/View;".into(),
+            name: name.into(),
+            parameters: vec!["I".into()],
+            returns: "Z".into(),
+        };
+        for receiver in [Word::ZERO, Word::from(1), wrong, vm.activity.unwrap()] {
+            assert!(
+                vm.invoke(method.clone(), vec![receiver, Word::from(1)], false)
+                    .is_err()
+            );
+            assert_eq!(vm.stack_depth(), 0);
+        }
+        assert!(vm.invoke(method.clone(), vec![root, root], false).is_err());
+        assert_eq!(
+            vm.invoke(method, vec![root, Word::from(1)], true).unwrap(),
+            vec![Word::from(1)]
+        );
+    }
+    vm.close().unwrap();
+    vm.collect();
+}
+
+#[test]
 fn compiled_viewgroup_clipping_xml_ancestors_zero_padding_and_faults() {
     use droidless_runtime::ui::{Rect, layout};
     let mut vm =

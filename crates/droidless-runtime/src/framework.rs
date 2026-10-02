@@ -7064,9 +7064,17 @@ impl Runtime {
                     method.name == "offsetRectIntoDescendantCoords",
                 )?;
             }
-            ("Landroid/view/View;", "getScrollX()I") | ("Landroid/view/View;", "getScrollY()I") => {
+            (
+                "Landroid/view/View;",
+                "getScrollX()I"
+                | "getScrollY()I"
+                | "computeHorizontalScrollOffset()I"
+                | "computeVerticalScrollOffset()I",
+            ) => {
                 self.view_mut(receiver)?;
-                let axis = if method.name == "getScrollX" {
+                let axis = if method.name == "getScrollX"
+                    || method.name == "computeHorizontalScrollOffset"
+                {
                     "x"
                 } else {
                     "y"
@@ -7081,14 +7089,24 @@ impl Runtime {
                         .unwrap_or(Word::ZERO),
                 );
             }
-            ("Landroid/view/View;", "getWidth()I") | ("Landroid/view/View;", "getHeight()I") => {
+            (
+                "Landroid/view/View;",
+                "getWidth()I"
+                | "getHeight()I"
+                | "computeHorizontalScrollRange()I"
+                | "computeHorizontalScrollExtent()I"
+                | "computeVerticalScrollRange()I"
+                | "computeVerticalScrollExtent()I",
+            ) => {
                 self.view_mut(receiver)?;
-                let field = if method.name == "getWidth" {
+                let horizontal =
+                    method.name == "getWidth" || method.name.starts_with("computeHorizontal");
+                let field = if horizontal {
                     "droidless:view:right"
                 } else {
                     "droidless:view:bottom"
                 };
-                let start = if method.name == "getWidth" {
+                let start = if horizontal {
                     "droidless:view:left"
                 } else {
                     "droidless:view:top"
@@ -7112,6 +7130,45 @@ impl Runtime {
                     .unwrap_or(Word::ZERO)
                     .int()?;
                 result.push(Word::from((end - start).max(0)));
+            }
+            ("Landroid/view/View;", "canScrollHorizontally(I)Z" | "canScrollVertically(I)Z") => {
+                self.view_mut(receiver)?;
+                let direction = arg(1)?.int()?;
+                let axis = if method.name == "canScrollHorizontally" {
+                    "Horizontal"
+                } else {
+                    "Vertical"
+                };
+                let roots = self.native_roots.len();
+                self.native_roots.push(receiver);
+                let answer = (|| -> Result<bool> {
+                    let mut metrics = [0; 3];
+                    for (slot, suffix) in metrics.iter_mut().zip(["Offset", "Range", "Extent"]) {
+                        *slot = self
+                            .invoke(
+                                Method {
+                                    class: "Landroid/view/View;".into(),
+                                    name: format!("compute{axis}Scroll{suffix}"),
+                                    parameters: vec![],
+                                    returns: "I".into(),
+                                },
+                                vec![receiver],
+                                true,
+                            )?
+                            .first()
+                            .context("View scroll metric missing")?
+                            .int()?;
+                    }
+                    let range = metrics[1].wrapping_sub(metrics[2]);
+                    Ok(range != 0
+                        && if direction < 0 {
+                            metrics[0] > 0
+                        } else {
+                            metrics[0] < range.wrapping_sub(1)
+                        })
+                })();
+                self.native_roots.truncate(roots);
+                result.push(Word::from(i32::from(answer?)));
             }
             ("Landroid/view/View;", "getMeasuredWidth()I")
             | ("Landroid/view/View;", "getMeasuredHeight()I")
