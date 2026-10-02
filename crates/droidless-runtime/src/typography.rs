@@ -9,6 +9,38 @@ const TYPEFACE: &str = "Landroid/graphics/Typeface;";
 const FACE: &str = "droidless:font:face";
 const FAMILY: &str = "droidless:font:family";
 const STYLE: &str = "droidless:font:style";
+const TEXT_SIZE: &str = "droidless:paint:text-size";
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn droidless_font_metrics(family: u32, style: u32, size: f32, metrics: *mut f32) -> i32;
+}
+
+fn font_metrics(family: i32, style: i32, size: f32) -> Result<[f32; 3]> {
+    ensure!(
+        (0..=2).contains(&family) && (0..=3).contains(&style),
+        "invalid font profile"
+    );
+    ensure!(
+        size.is_finite() && (0.0..=4096.0).contains(&size),
+        "font size outside host measurement profile"
+    );
+    #[cfg(target_os = "macos")]
+    {
+        let mut values = [0.0; 3];
+        // SAFETY: validated scalar inputs, three writable floats, no retained pointers.
+        let success = unsafe {
+            droidless_font_metrics(family as u32, style as u32, size, values.as_mut_ptr())
+        };
+        ensure!(
+            success != 0 && values.iter().all(|v| v.is_finite()),
+            "host font measurement failed"
+        );
+        Ok(values)
+    }
+    #[cfg(not(target_os = "macos"))]
+    anyhow::bail!("host font measurement is currently implemented on macOS only")
+}
 
 impl Runtime {
     pub(crate) fn typeface_field(&self, field: &Field) -> bool {
@@ -76,6 +108,45 @@ impl Runtime {
                 .context("missing typography argument")
         };
         let result = match (method.class.as_str(), signature.as_str()) {
+            ("Landroid/graphics/Paint;", "setTextSize(F)V") => {
+                ensure!(args.len() == 2, "invalid Paint size arguments");
+                let size = f32::from_bits(arg(1)?.int()? as u32);
+                ensure!(size.is_finite(), "non-finite Paint text size");
+                // API-21 SkPaint ignores negative sizes; zero has zero metrics.
+                if size >= 0.0 {
+                    ensure!(size <= 4096.0, "Paint text size exceeds host profile");
+                    self.heap
+                        .get_mut(arg(0)?)?
+                        .fields
+                        .insert(TEXT_SIZE.into(), vec![arg(1)?]);
+                }
+                vec![]
+            }
+            ("Landroid/graphics/Paint;", "getTextSize()F" | "ascent()F" | "descent()F") => {
+                ensure!(args.len() == 1, "invalid Paint metric arguments");
+                let object = self.heap.get(arg(0)?)?;
+                let size = object
+                    .fields
+                    .get(TEXT_SIZE)
+                    .and_then(|v| v.first())
+                    .copied()
+                    .unwrap_or(Word::Bits(12.0f32.to_bits()));
+                if method.name == "getTextSize" {
+                    vec![size]
+                } else {
+                    let face = object
+                        .fields
+                        .get(FACE)
+                        .and_then(|v| v.first())
+                        .copied()
+                        .unwrap_or(Word::ZERO);
+                    let (family, style) = self.typeface_values(face)?;
+                    let values = font_metrics(family, style, f32::from_bits(size.int()? as u32))?;
+                    vec![Word::Bits(
+                        values[usize::from(method.name == "descent")].to_bits(),
+                    )]
+                }
+            }
             (
                 TYPEFACE,
                 "create(Ljava/lang/String;I)Landroid/graphics/Typeface;"

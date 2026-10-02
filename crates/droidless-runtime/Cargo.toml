@@ -14,3 +14,6 @@ cap-fs-ext = "4.0.3"
 regex = "1"
 quick-xml = "0.42"
 rusqlite = { version = "0.40.2", features = ["bundled", "serialize"] }
+
+[build-dependencies]
+cc = "1"

@@ -186,6 +186,7 @@ dependencies = [
  "anyhow",
  "cap-fs-ext",
  "cap-std",
+ "cc",
  "droidless-formats",
  "quick-xml",
  "regex",

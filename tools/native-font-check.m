@@ -1,6 +1,7 @@
 // xcrun clang -fobjc-arc -Wall -Wextra -Werror -framework AppKit -framework QuartzCore
 // tools/native-font-check.m -o /tmp/droidless-font-check && /tmp/droidless-font-check
 #import "../crates/droidless-cli/src/macos.m"
+#import "../crates/droidless-runtime/native/macos-text.m"
 #include <assert.h>
 static int fontCheck(void *context,uint32_t kind,size_t handle,const char *text,const NativeMotion *motion) {
     (void)context; (void)kind; (void)handle; (void)text; (void)motion; return 1;
@@ -22,9 +23,16 @@ int main(void) {
                 assert(((traits&NSItalicFontMask)!=0)==((style&2)!=0));
                 if(family==2) assert(font.isFixedPitch);
                 if(family==1) assert([font.familyName rangeOfString:@"Times"].location!=NSNotFound);
+                float metrics[3]; assert(droidless_font_metrics(family,style,20,metrics));
+                assert(fabs(metrics[0]+font.ascender)<0.001 && fabs(metrics[1]+font.descender)<0.001);
+                assert(fabs(metrics[2]-font.leading)<0.001);
             }
         }
+        float zero[3]; assert(droidless_font_metrics(0,0,0,zero));
+        assert(zero[0]==0 && zero[1]==0 && zero[2]==0);
+        assert(!droidless_font_metrics(3,0,20,zero) && !droidless_font_metrics(0,4,20,zero));
+        assert(!droidless_font_metrics(0,0,NAN,zero) && !droidless_font_metrics(0,0,-1,zero));
         dl_destroy(opaque);
-        puts("Native fonts: three families/four styles on buttons, labels and editors passed.");
+        puts("Native fonts: three families/four styles and matching metrics on buttons, labels and editors passed.");
     }
 }

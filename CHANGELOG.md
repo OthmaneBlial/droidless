@@ -2,10 +2,15 @@
 
 ## Unreleased
 
-- Optimized public replay now checks saved-folder focus, pending input and restart
-  discard while preserving exact notes and the saved Folder ID/name. Original
-  rename confirmation updates the same row, then fails at TextPaint.ascent;
-  the isolated partial-write diagnosis is checked and rename remains incomplete.
+- Paint/TextPaint now retain text size and expose ascent/descent measured from
+  the same AppKit fonts used by native controls. Compiled checks cover all
+  supported families/styles, size scaling, zero/negative sizes and GC. The
+  unchanged Notepad APK completes folder rename; restart and Back preserve the
+  folder ID/new name and both exact notes. Android font parity, folder deletion
+  and physical native folder input remain unverified.
+
+- Optimized public replay also checks saved-folder focus, pending input and
+  restart discard while preserving exact notes and the saved Folder ID/name.
 
 - Paint/TextPaint shadow configuration now retains radius, offsets and ARGB
   color, exposes layer state and clears through the virtual setter. Canvas

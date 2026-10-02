@@ -4912,6 +4912,10 @@ impl Runtime {
                     "droidless:paint:color".into(),
                     vec![Word::from(0xff00_0000u32 as i32)],
                 );
+                fields.insert(
+                    "droidless:paint:text-size".into(),
+                    vec![Word::Bits(12.0f32.to_bits())],
+                );
                 if method.class == "Landroid/text/TextPaint;" {
                     fields.insert(
                         "Landroid/text/TextPaint;->density:F".into(),

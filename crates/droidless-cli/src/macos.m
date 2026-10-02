@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#import "../../droidless-runtime/native/macos-font.h"
 
 typedef struct { uint64_t time; int32_t action; float x, y; } NativeMotion;
 typedef int (*Callback)(void *, uint32_t, size_t, const char *, const NativeMotion *);
@@ -21,18 +22,7 @@ typedef struct {
 } NativeView;
 
 static NSFont *viewFont(const NativeView *node) {
-    NSFont *font;
-    switch (node->font_family) {
-        case 1: font = [NSFont fontWithName:@"Times" size:node->text_size]; break;
-        case 2: font = [NSFont monospacedSystemFontOfSize:node->text_size weight:NSFontWeightRegular]; break;
-        default: font = [NSFont systemFontOfSize:node->text_size]; break;
-    }
-    if (!font) font = [NSFont systemFontOfSize:node->text_size];
-    NSFontTraitMask traits = 0;
-    if (node->font_style & 1) traits |= NSBoldFontMask;
-    if (node->font_style & 2) traits |= NSItalicFontMask;
-    if (traits) font = [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:traits];
-    return font;
+    return droidlessFont(node->font_family, node->font_style, node->text_size);
 }
 
 @interface FlippedView : NSView

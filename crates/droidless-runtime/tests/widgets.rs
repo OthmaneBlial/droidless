@@ -1,6 +1,26 @@
 use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
+#[cfg(target_os = "macos")]
+#[test]
+fn compiled_host_font_metrics_size_faces_gc_and_zero() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.invoke(
+        Method {
+            class: "Lorg/droidless/images/FontMetricsContract;".into(),
+            name: "run".into(),
+            parameters: vec![],
+            returns: "V".into(),
+        },
+        vec![],
+        false,
+    )
+    .unwrap();
+    assert_eq!(vm.stack_depth(), 0);
+}
+
 #[test]
 fn compiled_scalar_animation_clock_values_listeners_gc_and_faults() {
     let mut vm =

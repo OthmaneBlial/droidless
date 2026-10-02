@@ -426,6 +426,19 @@ family/style combinations on all three control types. Asset fonts, Android font
 maps, shaping and matching Android font metrics remain unsupported.
 [API-21 Typeface](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/graphics/java/android/graphics/Typeface.java).
 
+Paint/TextPaint retain the API-21 default text size of 12. setTextSize ignores
+negative sizes, accepts zero and rejects non-finite values or sizes above the
+4096-pixel host profile. ascent/descent query the same AppKit font selection
+used by native controls, with Android's negative ascent and positive descent.
+The scalar FFI validates family/style/size and writes three finite metrics;
+zero returns zero. Compiled DEX checks cover all supported families/styles,
+size scaling, nullable faces and GC. Native component checks compare results
+with the fonts on actual buttons, labels and editors. Measurement currently
+requires macOS; asset fonts, Android font parity and text shaping remain ahead.
+[API-21 SkPaint defaults](https://github.com/aosp-mirror/platform_external_skia/blob/android-5.0.0_r1/src/core/SkPaintDefaults.h),
+[NSFont ascender](https://developer.apple.com/documentation/appkit/nsfont/ascender),
+[NSFont descender](https://developer.apple.com/documentation/appkit/nsfont/descender).
+
 TextView/EditText add/removeTextChangedListener retain actual guest listeners.
 setText delivers before, on, the virtual protected hook, then after; it replaces
 an Editable buffer and detaches the old buffer from its View. Native host edits

@@ -366,6 +366,9 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             ("restart-back", open_folders + ["--back"]),
             ("focus-input", open_folders + ["--tap", "150", "136", "--input-at", "1", "Pending folder name"]),
             ("restart-discard", open_folders),
+            ("rename-confirm", open_folders + ["--tap", "150", "136", "--input-at", "1", "Confirmed folder name", "--tap", "362", "136"]),
+            ("restart-renamed", open_folders),
+            ("renamed-back", open_folders + ["--back"]),
         ]:
             process = subprocess.run([
                 str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(folder_data),
@@ -374,11 +377,13 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             tree = json.loads(process.stdout)
             nodes = list(flatten(tree))
             labels = {node["view"]["text"] for node in nodes}
-            if phase == "restart-back":
+            renamed_phase = phase in ("rename-confirm", "restart-renamed", "renamed-back")
+            saved_name = "Confirmed folder name" if renamed_phase else "Runtime folder"
+            if phase in ("restart-back", "renamed-back"):
                 if not {"Notes", revised_title, probe_titles[1]} <= labels:
                     raise SystemExit("Notepad saved-folder Back did not restore both note titles")
             else:
-                visible = [node for node, alpha in visible_nodes(tree) if node["view"]["text"] == ("Pending folder name" if phase == "focus-input" else "Runtime folder")
+                visible = [node for node, alpha in visible_nodes(tree) if node["view"]["text"] == ("Pending folder name" if phase == "focus-input" else saved_name)
                            and alpha > 0 and node["rect"]["width"] > 0 and node["rect"]["height"] > 0
                            and node["rect"]["y"] >= 0 and node["rect"]["y"] + node["rect"]["height"] <= 844]
                 if "Edit Folders" not in labels or len(visible) != 1:
@@ -388,28 +393,8 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
                 folders = connection.execute("SELECT id,name FROM Folder ORDER BY id").fetchall()
             with sqlite3.connect(database) as connection:
                 original = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
-            if retained != rows or original != rows or folders != [(1, "Runtime folder")]:
+            if retained != rows or original != rows or folders != [(1, saved_name)]:
                 raise SystemExit(f"Notepad folder {phase} changed the saved folder or seed/copy notes")
-
-        # The APK commits the new name before a later label-metric failure.
-        # Diagnose on a separate copy; do not mark the rename workflow complete.
-        with tempfile.TemporaryDirectory(prefix="droidless-notepad-folder-rename-") as rename_root:
-            rename_data = Path(rename_root) / "apps"
-            shutil.copytree(folder_data, rename_data)
-            renamed = subprocess.run([
-                str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(rename_data),
-                *open_folders, "--tap", "150", "136", "--input-at", "1", "Confirmed folder name",
-                "--tap", "362", "136", str(notepad),
-            ], text=True, capture_output=True, timeout=120)
-            if renamed.returncode == 0 or "unsupported method Landroid/text/TextPaint;->ascent()F" not in renamed.stderr:
-                raise SystemExit("Notepad rename diagnosis changed; review the workflow before updating its status")
-            if "EditFolderViewHolder;->u()V [classes.dex, PC 0x0018]" not in renamed.stderr:
-                raise SystemExit("Notepad rename did not retain its original confirmation call site")
-            with sqlite3.connect(rename_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
-                renamed_notes = connection.execute("SELECT id,title,body FROM Note ORDER BY id").fetchall()
-                renamed_folders = connection.execute("SELECT id,name FROM Folder ORDER BY id").fetchall()
-            if renamed_notes != rows or renamed_folders != [(1, "Confirmed folder name")]:
-                raise SystemExit("Notepad rename diagnosis did not retain exact notes and its committed folder ID/name")
 
     survivor = next(row for row in rows if row[0] != original_id)
     # Original Undo calls note.save(); the APK's INSERT omits its auto-increment ID.
@@ -513,11 +498,13 @@ report["headless_folder_creation_verified"] = True
 report["headless_saved_folder_display_restart_back_verified"] = True
 report["folder_creation_blocker"] = None
 report["folder_creation_existing_note_rows_retained"] = True
-report["headless_folder_editing_verified"] = False
+report["headless_folder_editing_verified"] = True
 report["headless_saved_folder_focus_input_verified"] = True
 report["headless_saved_folder_unconfirmed_input_discarded_verified"] = True
-report["folder_rename_confirmation_blocker"] = "TextPaint.ascent()F after the APK updates the folder name"
-report["headless_folder_rename_verified"] = False
+report["folder_rename_confirmation_blocker"] = None
+report["headless_folder_rename_verified"] = True
+report["headless_folder_rename_restart_back_verified"] = True
+report["folder_rename_id_and_existing_notes_retained"] = True
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
@@ -531,7 +518,7 @@ print("PASS Notepad: original drawer settles at 1000ms; Back closes it, retains 
 print("PASS Notepad: original Edit Folders binds its editor/listener; Back retains both exact note rows")
 print("PASS Notepad: original editor/Done creates one visible folder; saved row reopens after restart and Back restores both exact notes")
 print("PASS Notepad: saved-row focus and unconfirmed input complete; restart discards that input and preserves exact notes/folder")
-print("DIAGNOSIS Notepad rename: original confirmation writes the same folder ID, then fails at TextPaint.ascent; exact notes retained")
+print("PASS Notepad: original rename confirmation completes; same folder ID/name survive restart and Back with both exact notes")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.
