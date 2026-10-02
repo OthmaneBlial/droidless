@@ -4216,7 +4216,13 @@ impl Runtime {
                 "getColor(ILandroid/content/res/Resources$Theme;)I",
             )
             | ("Landroid/content/Context;", "getColor(I)I") => {
-                let value = self.apk.resources.resolve(arg(1)?.int()? as u32)?;
+                let id = arg(1)?.int()? as u32;
+                ensure!(id != 0, "resource @0x00000000 missing or complex");
+                let value = self.attribute(&Value {
+                    kind: 1,
+                    data: id,
+                    text: None,
+                })?;
                 ensure!(
                     (0x1c..=0x1f).contains(&value.kind),
                     "resource is not a color"
@@ -8615,19 +8621,35 @@ impl Runtime {
             .collect()
     }
     fn attribute(&self, value: &Value) -> Result<Value> {
-        if value.kind == 1 {
-            if value.data == 0 {
-                Ok(Value {
-                    kind: 0x1f,
-                    data: 0,
-                    text: None,
-                })
-            } else {
-                Ok(self.apk.resources.resolve(value.data)?.clone())
+        let mut current = value.clone();
+        for _ in 0..32 {
+            if current.kind != 1 {
+                return Ok(current);
             }
-        } else {
-            Ok(value.clone())
+            // Fixed API-21 flat framework colors. Other framework resources stay unsupported.
+            let color = match current.data {
+                0 | 0x0106_000d => Some(0),
+                0x0106_000b => Some(0xffff_ffff),
+                0x0106_000c => Some(0xff00_0000),
+                _ => None,
+            };
+            if let Some(color) = color {
+                return Ok(Value {
+                    kind: 0x1f,
+                    data: color,
+                    text: None,
+                });
+            }
+            current = self
+                .apk
+                .resources
+                .entries
+                .get(&current.data)
+                .and_then(|entry| entry.value.as_ref())
+                .with_context(|| format!("resource @0x{:08x} missing or complex", current.data))?
+                .clone();
         }
+        bail!("resource reference cycle at @0x{:08x}", value.data)
     }
     fn inflate(
         &mut self,

@@ -81,6 +81,25 @@ fn compiled_typed_colors_theme_dispatch_snapshot_gc_and_faults() {
         vm.invoke(method("run", "I"), vec![], false).unwrap(),
         [Word::from(1)]
     );
+    let resources = vm.heap.instance("Landroid/content/res/Resources;").unwrap();
+    for id in [0, 0x0106ffff] {
+        let error = vm
+            .invoke(
+                Method {
+                    class: "Landroid/content/res/Resources;".into(),
+                    name: "getColor".into(),
+                    parameters: vec!["I".into()],
+                    returns: "I".into(),
+                },
+                vec![resources, Word::from(id)],
+                true,
+            )
+            .unwrap_err();
+        assert!(
+            format!("{error:#}").contains("missing or complex"),
+            "{error:#}"
+        );
+    }
     let cycle = vm
         .invoke(
             method("cycle", "Landroid/content/res/TypedArray;"),

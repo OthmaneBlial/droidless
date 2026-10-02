@@ -38,6 +38,18 @@ public final class StyleColorContract {
     }
     public static int run() {
         Context context=new Context();
+        TypedArray framework=context.obtainStyledAttributes(R.style.FrameworkColors,
+            new int[]{android.R.attr.textColor,android.R.attr.textColorHighlight,android.R.attr.textColorHint});
+        int[] ids={android.R.color.white,android.R.color.black,android.R.color.transparent};
+        int[] palette={0xffffffff,0xff000000,0};
+        for(int i=0;i<3;i++) {
+            check(framework.getColor(i,17)==palette[i]);
+            check(framework.getColorStateList(i).getDefaultColor()==palette[i]);
+            check(context.getResources().getColor(ids[i])==palette[i]);
+            check(context.getResources().getColorStateList(ids[i]).getDefaultColor()==palette[i]);
+        }
+        check(context.getResources().getColor(R.color.framework_white_alias)==0xffffffff);
+        framework.recycle(); context.calls=0;
         int[] attrs={android.R.attr.textColor};
         TypedArray flat=context.obtainStyledAttributes(R.style.InlineText,attrs);
         check(context.calls==1);
