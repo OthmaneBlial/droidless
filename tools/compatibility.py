@@ -405,16 +405,26 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
                 raise SystemExit(f"Notepad folder {phase} changed the saved folder or seed/copy notes")
 
         # Execute the actual saved-row left-button listener, after focusing its editor.
-        # This checkpoint must finish the real dialog layout inflation, not fail earlier in setup.
+        # Require real guest dialog creation/attachment and both scroll-indicator queries.
         deletion = subprocess.run([
-            str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(folder_data),
+            str(args.binary), "run", "--headless", "--trace-methods", "--trace-framework", "--size", "390x844", "--data-dir", str(folder_data),
             *open_folders, "--focus-at", "1", "--tap", "24", "128", str(notepad),
         ], text=True, capture_output=True, timeout=120)
-        dialog_blocker = "unsupported method Landroid/support/v4/widget/NestedScrollView;->setClipToPadding(Z)V"
+        dialog_blocker = "unsupported method Landroid/text/Layout;->getEllipsisCount(I)I"
         if deletion.returncode != 1 or dialog_blocker not in deletion.stderr \
                 or "EditFolderViewHolder;->clickLeftButton" not in deletion.stderr \
-                or "Landroid/support/v7/a/q;->onCreate(Landroid/os/Bundle;)V [classes.dex, PC 0x019d]" not in deletion.stderr:
+                or "Landroid/support/v7/widget/DialogTitle;->onMeasure(II)V [classes.dex, PC 0x0012]" not in deletion.stderr \
+                or "Landroid/support/v7/widget/ContentFrameLayout;->onMeasure(II)V [classes.dex, PC 0x007d]" not in deletion.stderr:
             raise SystemExit("Notepad folder-delete boundary changed; inspect and update its compatibility evidence")
+        for stage in ["Landroid/view/ViewGroup;->setClipToPadding(Z)V",
+                      "Landroid/app/Dialog;->onStart()V", "Landroid/app/Dialog;->onAttachedToWindow()V"]:
+            if "framework: " + stage not in deletion.stderr:
+                raise SystemExit("Notepad dialog did not complete " + stage)
+        queries = [line for line in deletion.stderr.splitlines()
+                   if line.startswith("framework: Landroid/view/View;->canScrollVertically(I)Z ")]
+        if not all(any(line.endswith(", Bits(" + direction + ")]") for line in queries)
+                   for direction in ["4294967295", "1"]):
+            raise SystemExit("Notepad dialog did not query both original scroll-indicator directions")
         with sqlite3.connect(folder_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
             retained = connection.execute("SELECT id,title,body FROM Note ORDER BY id").fetchall()
             folders = connection.execute("SELECT id,name FROM Folder ORDER BY id").fetchall()
@@ -539,6 +549,9 @@ report["headless_folder_delete_dialog_builder_verified"] = True
 report["headless_folder_delete_dialog_oncreate_entered"] = True
 report["headless_folder_delete_appcompat_foreground_setup_verified"] = True
 report["headless_folder_delete_dialog_layout_inflation_verified"] = True
+report["headless_folder_delete_dialog_clipping_setup_verified"] = True
+report["headless_folder_delete_dialog_start_attachment_verified"] = True
+report["headless_folder_delete_dialog_scroll_queries_verified"] = True
 report["headless_folder_deletion_verified"] = False
 report["folder_deletion_first_blocker"] = dialog_blocker
 report["folder_delete_failure_retains_exact_notes_and_folder"] = True
@@ -557,7 +570,7 @@ print("PASS Notepad: original editor/Done creates one visible folder; saved row 
 print("PASS Notepad: saved-row focus and unconfirmed input complete; restart discards that input and preserves exact notes/folder")
 print("PASS Notepad: host editor focus runs guest callbacks; pending input is discarded on restart with exact notes/folder retained")
 print("PASS Notepad: original rename confirmation completes; same folder ID/name survive restart and Back with both exact notes")
-print("PASS Notepad diagnostic: original folder-delete listener completes real dialog layout inflation and reaches NestedScrollView clipping setup at onCreate PC 0x019d; exact notes/folder retained")
+print("PASS Notepad diagnostic: original dialog completes clipping/start/attachment and both scroll queries; title measurement stops at getEllipsisCount, DialogTitle PC 0x0012; exact notes/folder retained")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.
