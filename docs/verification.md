@@ -1,6 +1,6 @@
 # First interactive milestone evidence
 
-Latest local source gate: 129 Rust tests, warning-free Clippy, optimized builds
+Latest local source gate: 132 Rust tests, warning-free Clippy, optimized builds
 and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
 
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
@@ -2184,3 +2184,50 @@ The unsigned development app bundle matches the optimized CLI byte for byte:
 SHA-256 `4c045e8af412f71b4942c1ee6e75a408726bfd19d3336c4554ae0212e5e0b8ab`.
 GitHub Actions stay disabled. No new public release or physical interaction is
 claimed, and the 50% checkpoint remains active.
+
+
+## Current-source owned dialog windows and state-list backgrounds
+
+Date: 2026-10-02. Runtime source commit ebec998, beyond the published v0.1.0 archive.
+
+Dialog construction now retains its own themed context, Window, decor and content
+container. Actual virtual theme/service/inflater calls and installed factories run
+through the wrapper. Content replacement retains decor identity without replacing
+the Activity root. Window attributes retain identity and invoke real guest
+callbacks. Dialog.create runs onCreate(null) once after a successful return; a
+failed creation can retry. Compiled contracts check ownership, feature/layout/
+flag/title state, content replacement, callback GC, faults, invalid arguments,
+unregistered-object collection and bounded recursion. Native dialog presentation
+and input remain unsupported.
+
+Theme.resolveAttribute now fills TypedValue for supported values, attribute and
+resource aliases and style references. Missing/cyclic values leave output intact;
+unresolved references keep resourceId zero. Resolution is capped at 20 steps.
+View.EMPTY_STATE_SET has one inherited empty-array identity while APK-declared
+fields retain their own identity. StateListDrawable selects ordered positive,
+negative, zero-terminated and wildcard specifications, retains arrays, invokes
+actual guest/child state callbacks and measures the current child. Selected color
+leaves render through nested backgrounds. Shared pressed/enabled setters and
+normal touch down/up/cancel refresh state. Tests check rendered colors, equal-state
+identity, GC/fault recovery, malformed/oversized inputs, cycles and explicit failure
+for unsupported selected leaf painting. General composite painting and selector
+XML inflation remain unsupported.
+
+The unmodified SHA-256-pinned Notepad APK passes drawer measurement and the actual
+Dialog constructor. Focusing saved editor 1 and tapping its left button reaches
+EditFolderViewHolder.clickLeftButton at DEX PC 0x0057, then stops explicitly at
+`Landroid/support/v7/a/q;->setCancelable(Z)V` with exit status 1. The bundled builder
+reaches that call at PC 0x00d2. New SQLite connections verify that the seed and
+disposable copy retain the exact folder ID/name and both note IDs/titles/bodies.
+The permanent replay certifies construction and this new boundary while keeping
+folder deletion false. Confirmation, Cancel and physical folder input remain
+unverified.
+
+The complete local gate passes 132 Rust tests, warning-free Clippy, optimized
+workspace/document-replay builds, 4,096 seeded parser mutations and native
+font/focus component checks. The complete public replay preserves prior calculator,
+image/grid/result, SwpieView and Notepad creation/rename/restart/Back workflows and
+certifies one unchanged optimized CLI digest. The unsigned development bundle
+matches that CLI byte for byte: SHA-256 `eeeedb82092aab345f66202e1f6bfe0c4696ec340180b56be4940c9a5d182a66`.
+GitHub Actions remain disabled. No new public release or physical dialog
+interaction is claimed; the 50% checkpoint remains active.

@@ -2,10 +2,28 @@
 
 ## Unreleased
 
+- Dialog construction now retains an independent themed context, owned Window,
+  stable decor/content, actual inflater factories and real content/attribute
+  callbacks. create() invokes onCreate once after success and retries faults.
+  Theme.resolveAttribute resolves supported values and aliases into TypedValue;
+  inherited View.EMPTY_STATE_SET has one shared identity without hiding APK fields.
+
+- StateListDrawable selects ordered positive/negative/wildcard entries, retains
+  arrays, dispatches actual guest state/child callbacks and measures the current
+  child. Native backgrounds render selected color leaves. Pressed/enabled state
+  and normal touch down/up/cancel refresh through shared setters. Unsupported
+  selector leaf painting fails explicitly; composite painting remains unsupported.
+
+- The unchanged Notepad APK now passes Dialog construction and reaches the
+  unsupported cancellation setter. The full permanent replay records that new
+  boundary and retains the exact folder and both notes. Authored ownership/state,
+  rendering, GC, faults, invalid arguments, bounds and cycle checks pass. Native
+  dialog presentation, Cancel and confirmed deletion remain unverified.
+
 - Public replay now records the exact CLI digest, certifies it only after the
   complete suite passes and rejects a runtime changed during execution. The
-  original focused folder-delete listener reaches the unsupported Dialog
-  constructor; this explicit boundary check retains the exact folder and notes
+  earlier original focused folder-delete listener reached the unsupported Dialog
+  constructor; that explicit boundary check retained the exact folder and notes
   and keeps deletion marked unverified.
 
 - ContextThemeWrapper now copies the base theme into an independent cached theme,
@@ -13,8 +31,8 @@
   factories and wrapper context. Supported ContextWrapper calls delegate to the
   actual base. New themes start empty; Theme.setTo retains destination ownership.
   Compiled checks cover isolation, immutable arrays, default IDs, GC, faults,
-  invalid constructors and bounded recursive wrappers. Dialog windows and folder
-  deletion remain unsupported or unverified.
+  invalid constructors and bounded recursive wrappers. Native dialog presentation
+  and folder deletion remain unsupported or unverified.
 
 - Native editor first-responder transitions now request actual guest View focus.
   AppKit retains selection; rejected focus cancels editing and callback faults

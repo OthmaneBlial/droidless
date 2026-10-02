@@ -61,10 +61,11 @@ Saved-row attachment now runs the APK's real TextInputLayout binding callbacks.
 Headless focus and pending input complete; restarting discards an unconfirmed
 name. Rename confirmation now completes using real host-font ascent/descent.
 The same folder ID/new name survive restart and Back with both exact notes.
-The original delete listener now passes themed-context/inflater setup and reaches
-the unsupported Android Dialog constructor. Its failed attempt preserves the
-folder and both exact notes. Folder deletion and native folder input remain
-unverified. [Themed-context and dialog evidence](docs/verification.md#current-source-themed-contexts-and-folder-delete-dialog-boundary).
+🪟 Dialogs now own their context, window and content; stateful drawer backgrounds
+also select and render their supported colors. The original delete listener passes
+Dialog construction and stops at the bundled cancellation setter. Its failed
+attempt preserves the folder and both exact notes. Folder deletion and native
+folder input remain unverified. [Dialog/window evidence](docs/verification.md#current-source-owned-dialog-windows-and-state-list-backgrounds).
 [Folder rename and font-metrics evidence](docs/verification.md#current-source-folder-rename-and-host-font-metrics).
 
 ```sh
@@ -231,7 +232,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 129 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 132 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>
