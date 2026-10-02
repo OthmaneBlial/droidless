@@ -1,6 +1,100 @@
 use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
+#[test]
+fn compiled_host_editor_focus_callbacks_gc_rejection_and_failure() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    let call = |vm: &mut Runtime, name: &str, parameters: Vec<String>, returns: &str, args| {
+        vm.invoke(
+            Method {
+                class: "Lorg/droidless/images/HostFocusContract;".into(),
+                name: name.into(),
+                parameters,
+                returns: returns.into(),
+            },
+            args,
+            false,
+        )
+    };
+    let first = call(
+        &mut vm,
+        "prepare",
+        vec!["Landroid/app/Activity;".into()],
+        "Landroid/widget/EditText;",
+        vec![activity],
+    )
+    .unwrap()[0];
+    let second = call(
+        &mut vm,
+        "second",
+        vec![],
+        "Landroid/widget/EditText;",
+        vec![],
+    )
+    .unwrap()[0];
+    let state = |vm: &mut Runtime, id, gains, losses| {
+        call(
+            vm,
+            "state",
+            vec!["I".into(); 3],
+            "V",
+            vec![Word::from(id), Word::from(gains), Word::from(losses)],
+        )
+        .unwrap();
+    };
+    assert!(vm.focus(first.reference().unwrap()).unwrap());
+    assert!(vm.focus(first.reference().unwrap()).unwrap());
+    state(&mut vm, 1, 1, 0);
+    assert!(vm.focus(second.reference().unwrap()).unwrap());
+    state(&mut vm, 2, 2, 1);
+    for (name, ty, value, reset) in [
+        ("setEnabled", "Z", 0, 1),
+        ("setVisibility", "I", 4, 0),
+        ("setFocusable", "Z", 0, 1),
+    ] {
+        for (value, accepted) in [(value, false), (reset, true)] {
+            vm.invoke(
+                Method {
+                    class: "Landroid/view/View;".into(),
+                    name: name.into(),
+                    parameters: vec![ty.into()],
+                    returns: "V".into(),
+                },
+                vec![first, Word::from(value)],
+                true,
+            )
+            .unwrap();
+            if !accepted {
+                assert!(!vm.focus(first.reference().unwrap()).unwrap());
+                state(&mut vm, 2, 2, 1);
+            }
+        }
+    }
+    call(&mut vm, "fail", vec!["Z".into()], "V", vec![Word::from(1)]).unwrap();
+    let error = vm.focus(first.reference().unwrap()).unwrap_err();
+    assert!(format!("{error:#}").contains("host focus failure"));
+    assert_eq!(vm.stack_depth(), 0);
+    state(&mut vm, 1, 3, 2);
+    call(&mut vm, "fail", vec!["Z".into()], "V", vec![Word::ZERO]).unwrap();
+    assert!(vm.focus(second.reference().unwrap()).unwrap());
+    state(&mut vm, 2, 4, 3);
+    let wrong = vm.heap.instance("Ljava/lang/Object;").unwrap();
+    assert!(
+        format!("{:#}", vm.focus(wrong.reference().unwrap()).unwrap_err()).contains("not a View")
+    );
+    assert!(vm.focus(usize::MAX).is_err());
+    call(&mut vm, "release", vec![], "V", vec![]).unwrap();
+    vm.collect();
+    assert!(
+        vm.heap.get(first).is_err()
+            && vm.heap.get(second).is_err()
+            && vm.heap.get(activity).is_err()
+    );
+}
+
 #[cfg(target_os = "macos")]
 #[test]
 fn compiled_host_font_metrics_size_faces_gc_and_zero() {

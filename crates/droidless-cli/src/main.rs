@@ -10,6 +10,7 @@ enum Action {
     Tap(f32, f32),
     Key(String),
     Input(usize, String),
+    Focus(usize),
     Back,
     Advance(u64),
 }
@@ -24,7 +25,7 @@ fn run() -> Result<()> {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
     if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
         println!(
-            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --menu-item TEXT --tap X Y --key CHAR --input TEXT --back --stats\n             --advance-ms MILLISECONDS (deterministic timer replay)\n             --data-dir APPS_ROOT | --ephemeral\n             --size WIDTHxHEIGHT (128..4096; default 420x720)\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText.\n--input-at INDEX TEXT selects another editable field (zero-based). Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
+            "DROIDLESS — Run Android apps without Android.\n\nUsage: droidless <command> <app.apk>\n\nCommands: run, inspect, inspect-ui, manifest, dex, classes, methods, resources\n\nRun options: --headless --click TEXT --menu-item TEXT --tap X Y --key CHAR --input TEXT --back --stats\n             --advance-ms MILLISECONDS (deterministic timer replay)\n             --data-dir APPS_ROOT | --ephemeral\n             --size WIDTHxHEIGHT (128..4096; default 420x720)\n             --trace-bytecode --trace-methods --trace-framework --trace-lifecycle\n\n--input edits the first enabled visible EditText.\n--input-at INDEX TEXT selects another editable field (zero-based).\n--focus-at INDEX requests guest focus for an editable field. Native Back: Escape.\nStorage defaults to a per-package host application-data directory.\nExperimental runtime; unsupported features fail explicitly."
         );
         return Ok(());
     }
@@ -80,6 +81,14 @@ fn run() -> Result<()> {
                     ));
                 }
                 "--back" => actions.push(Action::Back),
+                "--focus-at" => {
+                    i += 1;
+                    actions.push(Action::Focus(
+                        args.get(i)
+                            .ok_or_else(|| anyhow::anyhow!("--focus-at requires INDEX"))?
+                            .parse()?,
+                    ));
+                }
                 "--advance-ms" => {
                     i += 1;
                     let milliseconds = args
@@ -207,6 +216,9 @@ fn run() -> Result<()> {
                     runtime.touch(1, x, y)?;
                 }
                 Action::Input(index, text) => runtime.input_at(index, &text)?,
+                Action::Focus(index) => {
+                    anyhow::ensure!(runtime.focus_at(index)?, "editor refused guest focus");
+                }
                 Action::Advance(milliseconds) => {
                     if runtime.activity.is_some() {
                         // Establish this frame's layout and animation starts before moving its clock.

@@ -74,6 +74,7 @@ static NSFont *viewFont(const NativeView *node) {
 @property void *context;
 @property Callback callback;
 @property BOOL running;
+@property BOOL drawing;
 @property size_t keyTarget;
 @property BOOL touchEnabled;
 @property BOOL touchTracking;
@@ -82,6 +83,22 @@ static NSFont *viewFont(const NativeView *node) {
 - (void)clicked:(NSControl *)sender;
 - (void)cellClicked:(DroidlessClick *)sender;
 - (void)quit:(id)sender;
+@end
+
+@interface DroidlessTextField : NSTextField
+@end
+@implementation DroidlessTextField
+- (BOOL)becomeFirstResponder {
+    DroidlessHost *host = (DroidlessHost *)self.delegate;
+    // Focus callbacks redraw the tree; never reenter Rust while applying native controls.
+    if (host.drawing) return NO;
+    if (![super becomeFirstResponder]) return NO;
+    if (!self.editable) return YES;
+    int result = host.running ? host.callback(host.context, 10, (size_t)self.tag, NULL, NULL) : 0;
+    if (!result) host.running = NO;
+    if (result != 2) { [self abortEditing]; return NO; }
+    return YES;
+}
 @end
 
 @implementation DroidlessHost
@@ -180,6 +197,7 @@ int dl_has_window_focus(void *opaque) {
 }
 void dl_begin(void *opaque, const char *title, uint32_t touchEnabled, uint32_t touchActive) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;
+    host.drawing = YES;
     host.window.title = [NSString stringWithUTF8String:title];
     host.touchEnabled = touchEnabled != 0;
     if (!host.touchEnabled || !touchActive) host.touchTracking = NO;
@@ -199,7 +217,7 @@ void dl_view(void *opaque, const NativeView *node) {
             button.buttonType = NSButtonTypeMomentaryPushIn;
             view = button;
         } else if (node->kind == 2 || node->kind == 3) {
-            NSTextField *text = [NSTextField new];
+            NSTextField *text = [DroidlessTextField new];
             text.delegate = host;
             text.bezeled = NO;
             text.drawsBackground = YES;
@@ -281,6 +299,7 @@ void dl_end(void *opaque) {
     }
     // Initial drawing happens after Rust has installed the returned host pointer.
     host.options.delegate = host;
+    host.drawing = NO;
 }
 void dl_menu_clear(void *opaque) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;

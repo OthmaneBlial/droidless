@@ -153,6 +153,9 @@ extern "C" fn event(
                 // Revalidate the guest handle against the foreground Activity's prepared menu.
                 context.runtime.select_menu_item(handle)?;
             }
+            10 => {
+                consumed = context.runtime.focus(handle)?;
+            }
             _ => anyhow::bail!("unknown native event {kind}"),
         }
         if context.runtime.activity.is_some() && (kind != 6 || dispatched > 0) {

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Native editor first-responder transitions now request actual guest View focus.
+  AppKit retains selection; rejected focus cancels editing and callback faults
+  stop the host. Drawing suppresses focus reentry. The CLI adds --focus-at INDEX
+  through the same dispatcher. Compiled callback/GC/fault checks and native
+  first-responder/key-view/selection checks pass; physical folder input remains
+  unverified.
+
 - Paint/TextPaint now retain text size and expose ascent/descent measured from
   the same AppKit fonts used by native controls. Compiled checks cover all
   supported families/styles, size scaling, zero/negative sizes and GC. The

@@ -511,6 +511,35 @@ impl Runtime {
         path.pop();
         result
     }
+    /// Request guest focus when the host begins editing or traverses to a View.
+    pub fn focus(&mut self, handle: usize) -> Result<bool> {
+        self.require_main_thread()?;
+        self.budget = 0;
+        let word = Word::Ref(handle);
+        let view = self
+            .heap
+            .get(word)?
+            .view
+            .as_ref()
+            .context("focus target is not a View")?;
+        if !view.enabled || view.visible != 0 {
+            return Ok(false);
+        }
+        let took = self.invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: "requestFocus".into(),
+                parameters: vec![],
+                returns: "Z".into(),
+            },
+            vec![word],
+            true,
+        )?;
+        let took = took.first().context("missing host focus result")?.int()? != 0;
+        self.drain_navigation()?;
+        self.collect();
+        Ok(took)
+    }
     pub fn click(&mut self, handle: usize) -> Result<bool> {
         self.budget = 0;
         let word = Word::Ref(handle);
@@ -582,6 +611,15 @@ impl Runtime {
     }
     /// Edit an enabled visible EditText by its zero-based position in the View tree.
     pub fn input_at(&mut self, index: usize, text: &str) -> Result<()> {
+        let handle = self.editable_handle_at(index)?;
+        self.edit(handle, text)
+    }
+    /// Request guest focus for an enabled visible EditText in the foreground tree.
+    pub fn focus_at(&mut self, index: usize) -> Result<bool> {
+        let handle = self.editable_handle_at(index)?;
+        self.focus(handle)
+    }
+    fn editable_handle_at(&mut self, index: usize) -> Result<usize> {
         fn find(node: &Node, index: &mut usize) -> Option<usize> {
             if node.view.visible != 0 {
                 return None;
@@ -595,9 +633,8 @@ impl Runtime {
             node.children.iter().find_map(|child| find(child, index))
         }
         let mut remaining = index;
-        let handle = find(&self.layout_snapshot()?, &mut remaining)
-            .with_context(|| format!("no editable View at index {index}"))?;
-        self.edit(handle, text)
+        find(&self.layout_snapshot()?, &mut remaining)
+            .with_context(|| format!("no editable View at index {index}"))
     }
     pub fn key(&mut self, handle: usize, action: i32, keycode: i32) -> Result<bool> {
         ensure!([0, 1].contains(&action), "invalid KeyEvent action");

@@ -302,7 +302,7 @@ the foreground Activity's window token. AppKit samples its actual key-window
 state before drawing and dispatch; headless starts false. Compiled contracts
 check host-state changes, detached Views and child Activity transitions. This
 getter is separate from the explicit View focus requests below.
-onWindowFocusChanged delivery and native editor focus synchronization remain
+onWindowFocusChanged delivery and complete native/guest focus synchronization remain
 unimplemented.
 
 View.requestFocus overloads now support explicit focus in the desktop non-touch
@@ -328,9 +328,25 @@ retain the existing UI-thread restriction.
 Compiled contracts cover transfer/order, rectangle identity, descendant policies,
 literal XML flags, twelve nested groups, callbacks with GC, removals, adapter
 replacement, faults, recovery, cycles, missing arguments and rejected worker UI
-access. Automatic keyboard focus traversal, touch-mode transitions, global focus
-observer notifications, IME and AppKit first-responder synchronization remain
-ahead. This is explicit guest focus ownership rather than full input parity.
+access. AppKit editor first-responder gains now invoke the shared host focus
+dispatcher below. Android keyboard traversal policy, touch-mode transitions,
+global focus observers and IME remain ahead. This is bounded focus ownership
+rather than full input parity.
+
+Runtime.focus validates a main-thread View handle and enabled/visible state,
+then invokes actual virtual requestFocus, drains navigation and collects.
+AppKit's editable text-field subclass reports successful first-responder gains;
+refused guest focus aborts editing and callback failures stop the host. Native
+tree updates suppress new focus requests to prevent callback reentry while Rust
+replaces controls. AppKit retains its text-selection behavior. Component checks
+cover initial focus, native key-view traversal, selection through redraw,
+draw-time refusal and failed callbacks. Compiled editor checks cover guest
+ownership/listeners, repeated focus, GC, rejection, faults and root cleanup.
+The CLI --focus-at INDEX uses the same dispatcher and the same editable-field
+lookup as --input-at. Reverse guest-to-AppKit synchronization, native focus loss
+when leaving all editors and physical folder interaction remain unverified.
+[NSResponder first-responder transition](https://developer.apple.com/documentation/appkit/nsresponder/becomefirstresponder()),
+[NSControl abortEditing](https://developer.apple.com/documentation/appkit/nscontrol/abortediting()).
 [API-21 View](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/View.java),
 [ViewGroup](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
 
@@ -339,8 +355,8 @@ focusable in touch mode and does not already own focus. A successful focus
 request suppresses that tap's click; a later tap dispatches the real click.
 EditText has the clickable default; explicit clickability still overrides it.
 Compiled checks cover focus/click order, cancellation, disabled Views, non-touch
-focusability and callback GC. This does not add automatic traversal or host
-first-responder synchronization.
+focusability and callback GC. Touch-mode transitions, complete traversal and
+bidirectional native synchronization remain outside this touch profile.
 
 Paint and TextPaint support their default/flag constructors, exact getFlags/
 setFlags state and inherited color state. API-21 constructor flags include 0x500;
@@ -886,7 +902,8 @@ and getZ retain guest state with zero translationZ; native shadow/Z-order render
 and custom child drawing-order configuration are unsupported.
 Unfocused groups return null from getFocusedChild. Explicit guest requestFocus
 and managed focus ownership are supported as described above; automatic native
-editor focus synchronization remains unimplemented.
+editor focus gains now use the shared dispatcher. Complete bidirectional focus
+synchronization remains ahead.
 
 CheckedTextView retains checked state. Drawable state uses current enabled and
 pressed flags, checked additions, virtual guest callbacks, duplicate-parent

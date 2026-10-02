@@ -366,7 +366,9 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             ("restart-back", open_folders + ["--back"]),
             ("focus-input", open_folders + ["--tap", "150", "136", "--input-at", "1", "Pending folder name"]),
             ("restart-discard", open_folders),
-            ("rename-confirm", open_folders + ["--tap", "150", "136", "--input-at", "1", "Confirmed folder name", "--tap", "362", "136"]),
+            ("host-focus-input", open_folders + ["--focus-at", "1", "--input-at", "1", "Host pending folder name"]),
+            ("restart-host-discard", open_folders),
+            ("rename-confirm", open_folders + ["--focus-at", "1", "--input-at", "1", "Confirmed folder name", "--tap", "362", "136"]),
             ("restart-renamed", open_folders),
             ("renamed-back", open_folders + ["--back"]),
         ]:
@@ -383,7 +385,8 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
                 if not {"Notes", revised_title, probe_titles[1]} <= labels:
                     raise SystemExit("Notepad saved-folder Back did not restore both note titles")
             else:
-                visible = [node for node, alpha in visible_nodes(tree) if node["view"]["text"] == ("Pending folder name" if phase == "focus-input" else saved_name)
+                visible_name = {"focus-input": "Pending folder name", "host-focus-input": "Host pending folder name"}.get(phase, saved_name)
+                visible = [node for node, alpha in visible_nodes(tree) if node["view"]["text"] == visible_name
                            and alpha > 0 and node["rect"]["width"] > 0 and node["rect"]["height"] > 0
                            and node["rect"]["y"] >= 0 and node["rect"]["y"] + node["rect"]["height"] <= 844]
                 if "Edit Folders" not in labels or len(visible) != 1:
@@ -500,6 +503,7 @@ report["folder_creation_blocker"] = None
 report["folder_creation_existing_note_rows_retained"] = True
 report["headless_folder_editing_verified"] = True
 report["headless_saved_folder_focus_input_verified"] = True
+report["headless_saved_folder_host_focus_input_verified"] = True
 report["headless_saved_folder_unconfirmed_input_discarded_verified"] = True
 report["folder_rename_confirmation_blocker"] = None
 report["headless_folder_rename_verified"] = True
@@ -518,6 +522,7 @@ print("PASS Notepad: original drawer settles at 1000ms; Back closes it, retains 
 print("PASS Notepad: original Edit Folders binds its editor/listener; Back retains both exact note rows")
 print("PASS Notepad: original editor/Done creates one visible folder; saved row reopens after restart and Back restores both exact notes")
 print("PASS Notepad: saved-row focus and unconfirmed input complete; restart discards that input and preserves exact notes/folder")
+print("PASS Notepad: host editor focus runs guest callbacks; pending input is discarded on restart with exact notes/folder retained")
 print("PASS Notepad: original rename confirmation completes; same folder ID/name survive restart and Back with both exact notes")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
