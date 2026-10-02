@@ -2096,3 +2096,54 @@ The refreshed unsigned development bundle matches the optimized CLI byte for
 byte (SHA-256 `074b87a0c697295efbf74e0af07dc340b52477cc67384f0bd100b7b4b41c5153`).
 No new public release or physical folder interaction is claimed. GitHub Actions
 remain disabled; the 50% checkpoint remains active.
+
+## Current-source native editor focus bridge
+
+Date: 2026-10-02. Source commit a3b68c0, beyond the published v0.1.0 archive.
+
+The native component baseline created an actual NSTextView field editor without
+delivering guest focus. Editable AppKit fields now report successful
+becomeFirstResponder transitions through Runtime.focus. That dispatcher checks
+the main-thread View handle and enabled/visible state, invokes virtual guest
+requestFocus, drains navigation and collects. Refused focus aborts native editing;
+callback errors stop the host. Native tree updates suppress new focus requests
+to avoid reentering Rust while controls are replaced. The existing AppKit text
+selection path is retained.
+
+HostFocusContract executes real DEX editor callbacks, including GC, repeated
+focus without another gain, transfers, disabled/hidden/non-focusable targets,
+fault state/recovery, invalid handles and released roots. The actual AppKit
+component check exercises first-responder gains, native key-view traversal,
+selection through redraw, draw-time refusal, rejected guest focus and failed
+callbacks. These are component checks; physical mouse/keyboard interaction in
+the public folder screen remains unverified. Reverse guest-to-AppKit updates,
+focus loss when leaving all editors, Android traversal/IME and complete input
+parity remain ahead.
+
+The CLI --focus-at INDEX shares the native dispatcher and reuses --input-at's
+enabled/visible editor lookup. A fresh-data optimized probe uses it to create
+and rename a folder in the unchanged SHA-256-pinned Notepad APK. Six processes
+complete creation, saved-row restart, Back, rename confirmation, renamed-row
+restart and Back with exit zero. New SQLite connections preserve the same
+folder ID/new name and both seed/copy note IDs, titles and bodies exactly at
+every phase. The permanent replay also exercises host-focused pending input,
+restart discard and host-focused original rename confirmation. No APK patch or
+replacement callback is used.
+
+The local gate passes 127 Rust tests, Clippy with warnings rejected, optimized
+workspace/document-replay builds, 4,096 seeded parser mutations and native
+font/focus component checks. The refreshed unsigned development bundle matches
+the optimized CLI byte for byte (SHA-256
+`05c92947539d76a01a99e7562f52827b1523c5c58eeea5bbb9329ce054337350`).
+The complete optimized public replay passes both calculators, image/grid/result
+fixtures, SwpieView folder/viewer/Back/gesture checks and its slideshow diagnosis,
+plus all Notepad note editing, Delete/Undo/timed feedback, drawer/folder,
+host-focus pending input/discard, rename/restart/Back and malformed-body checks.
+
+Fresh native Notepad windows were confirmed live and visible, including a
+390x600 logical viewport whose frame was {{445,149},{390,632}}. The UI controller
+still returned cgWindowNotFound for the exact bundle. Those probe processes were
+terminated with status 143 after attachment failed; this is not clean native
+closure or physical interaction proof. Folder deletion and fresh physical
+folder input remain unverified. GitHub Actions remain disabled, no new public
+release is claimed and the 50% checkpoint stays active.

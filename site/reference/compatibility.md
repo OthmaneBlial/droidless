@@ -84,6 +84,13 @@ with both exact notes. Folder deletion and physical folder input remain
 unverified; software keyboards are not implemented. Host metrics do not establish
 Android font parity.
 [Rename evidence](verification.md#current-source-folder-rename-and-host-font-metrics).
+The shared host focus dispatcher now runs actual guest requestFocus callbacks.
+--focus-at INDEX exercises it in the original folder editor: pending input is
+discarded on restart, while rename confirmation/restart/Back retain the same
+folder ID and both exact notes. Native component checks cover first-responder
+gains, key-view traversal, selection through redraw and refused/failed focus.
+Physical folder input and complete bidirectional focus synchronization remain
+unverified. [Host-focus evidence](verification.md#current-source-native-editor-focus-bridge).
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree

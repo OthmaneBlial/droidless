@@ -84,6 +84,10 @@ The following are objectives, not completed capability claims.
    folder ID/new name survive restart and Back while both notes stay exact.
    Folder deletion, software IME and native folder input remain ahead; Android
    font parity is not established.
+   Native editor first-responder gains now invoke real guest focus callbacks;
+   component checks cover key-view traversal, selection and refusal/failure.
+   The same dispatcher creates and renames folders in optimized host replay.
+   Physical folder input and complete bidirectional focus remain unverified.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer
