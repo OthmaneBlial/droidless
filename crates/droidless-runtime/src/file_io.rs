@@ -5,6 +5,8 @@ use crate::{
 use anyhow::{Context, Result, ensure};
 use droidless_formats::dex::Method;
 
+const EXTERNAL_ROOT: &str = "/storage/emulated/0";
+
 impl Runtime {
     pub(crate) fn file_io_native(
         &mut self,
@@ -19,6 +21,18 @@ impl Runtime {
                 .with_context(|| format!("{} argument missing", method.key()))
         };
         match (method.class.as_str(), signature.as_str()) {
+            ("Landroid/os/Environment;", "getExternalStorageDirectory()Ljava/io/File;") => {
+                ensure!(
+                    args.is_empty(),
+                    "invalid external storage directory arguments"
+                );
+                self.ensure_guest_directory(EXTERNAL_ROOT)?;
+                ensure!(
+                    self.file_path_kind(&["external".into()])? == Some(true),
+                    "external storage root is not a directory"
+                );
+                Ok(Some(vec![self.file_object(EXTERNAL_ROOT.into())?]))
+            }
             ("Landroid/content/Context;", "getCacheDir()Ljava/io/File;") => {
                 let path = format!("/data/data/{}/cache", self.apk.manifest.package);
                 self.ensure_guest_directory(&path)?;
@@ -466,6 +480,13 @@ impl Runtime {
             && parts[3] == *package
         {
             Some(parts[4..].to_vec())
+        } else if parts.len() >= 3 && parts[..3] == ["storage", "emulated", "0"] {
+            // This virtual external volume remains inside the current package capability.
+            Some(
+                std::iter::once("external".to_owned())
+                    .chain(parts[3..].iter().cloned())
+                    .collect(),
+            )
         } else {
             None
         }
@@ -725,6 +746,110 @@ mod tests {
             &vm.heap.get(cache).unwrap().data,
             Data::File(path) if path == &expected
         ));
+    }
+
+    #[test]
+    fn external_directory_is_virtual_persistent_and_package_isolated() {
+        let directory = std::env::temp_dir().join(format!(
+            "droidless-external-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let apk = || Apk::parse(include_bytes!("../../../fixtures/generated/intents.apk")).unwrap();
+        let method = Method {
+            class: "Landroid/os/Environment;".into(),
+            name: "getExternalStorageDirectory".into(),
+            parameters: vec![],
+            returns: "Ljava/io/File;".into(),
+        };
+        let mut vm = Runtime::with_data_dir(apk(), &directory).unwrap();
+        let package = vm.apk.manifest.package.clone();
+        let root = vm.invoke(method.clone(), vec![], false).unwrap()[0];
+        assert_eq!(vm.file_path(root).unwrap(), EXTERNAL_ROOT);
+        assert_eq!(
+            vm.guest_file_relative(EXTERNAL_ROOT),
+            Some(vec!["external".into()])
+        );
+        assert!(
+            vm.ensure_guest_directory(&format!("{EXTERNAL_ROOT}/notes/subdir"))
+                .unwrap()
+        );
+        assert!(
+            !vm.ensure_guest_directory(&format!("{EXTERNAL_ROOT}/notes/subdir"))
+                .unwrap()
+        );
+        assert!(
+            directory
+                .join(&package)
+                .join("external/notes/subdir")
+                .is_dir()
+        );
+        for path in [
+            "/storage/emulated/1/notes",
+            "/storage/emulated/0/../escape",
+            "/storage/emulated/0/../../../etc/passwd",
+            "/storage/emulated/0/notes/\0bad",
+            "/data/data/org.droidless.other_external/external",
+        ] {
+            assert!(vm.guest_file_relative(path).is_none(), "accepted {path:?}");
+        }
+        let mut reopened = Runtime::with_data_dir(apk(), &directory).unwrap();
+        reopened.invoke(method.clone(), vec![], false).unwrap();
+        assert_eq!(
+            reopened
+                .file_path_kind(&["external".into(), "notes".into(), "subdir".into()])
+                .unwrap(),
+            Some(true)
+        );
+        let mut other_apk = apk();
+        other_apk.manifest.package = "org.droidless.other_external".into();
+        let mut other = Runtime::with_data_dir(other_apk, &directory).unwrap();
+        other.invoke(method.clone(), vec![], false).unwrap();
+        assert_eq!(
+            other
+                .file_path_kind(&["external".into(), "notes".into()])
+                .unwrap(),
+            None
+        );
+        let mut ephemeral = runtime();
+        ephemeral.invoke(method.clone(), vec![], false).unwrap();
+        assert!(
+            ephemeral
+                .ensure_guest_directory(&format!("{EXTERNAL_ROOT}/memory-only"))
+                .unwrap()
+        );
+        assert!(
+            !directory
+                .join(&package)
+                .join("external/memory-only")
+                .exists()
+        );
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(
+                directory.join(&package).join("external/notes"),
+                directory.join(&package).join("external/link"),
+            )
+            .unwrap();
+            assert!(
+                reopened
+                    .ensure_guest_directory(&format!("{EXTERNAL_ROOT}/link/escape"))
+                    .is_err()
+            );
+            assert!(
+                !directory
+                    .join(&package)
+                    .join("external/notes/escape")
+                    .exists()
+            );
+        }
+        assert!(vm.invoke(method, vec![Word::ZERO], false).is_err());
+        drop((vm, reopened, other, ephemeral));
+        std::fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

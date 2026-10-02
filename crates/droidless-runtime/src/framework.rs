@@ -125,6 +125,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Lorg/xml/sax/helpers/DefaultHandler;",
             "Ljava/io/File;",
             "Ljava/io/FileInputStream;",
+            "Landroid/os/Environment;",
             "Landroid/database/sqlite/SQLiteOpenHelper;",
             "Landroid/database/sqlite/SQLiteDatabase;",
             "Landroid/database/sqlite/SQLiteStatement;",

@@ -1,8 +1,9 @@
 # Persistent preferences
 
 Current source implements bounded `SharedPreferences` and SQLite subsets. The
-v0.1.0 release archive predates these capabilities. General Java file APIs,
-filesDir, cacheDir, preference listeners and String sets remain unsupported.
+v0.1.0 release archive predates these capabilities. Private files/cache directory
+metadata is modeled; general Java file streams, preference listeners and String
+sets remain unsupported.
 
 ## Host-selected data root
 
@@ -16,6 +17,21 @@ The CLI persists preferences by default below:
 disk access and keeps values in this runtime only; the options are mutually
 exclusive. The Rust API `Runtime::new` remains ephemeral; `with_data_dir` explicitly
 grants the chosen directory capability. Manifest permissions grant no host access.
+
+## Virtual external directory
+
+Environment.getExternalStorageDirectory returns the virtual path
+`/storage/emulated/0`. Directory operations map it to
+`APPS_ROOT/<package>/external/` through the same package directory capability as
+private storage. Subdirectories persist with `--data-dir`; ephemeral runtimes
+retain directory metadata in memory only. Paths are normalized before mapping,
+and other virtual users, traversal outside the volume and symlink traversal are
+rejected. A second package sees its own external directory.
+
+This is DROIDLESS's app-isolated external-volume profile; Android's cross-app
+shared media storage and host home/Downloads access are not provided. Returning
+the directory does not make backup/restore or general Java file I/O work.
+References: [API-21 Environment](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/os/Environment.java).
 
 ## API behavior
 
