@@ -2,6 +2,131 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_scalar_animation_clock_values_listeners_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let call = |vm: &mut Runtime, name: &str, returns: &str| {
+        vm.invoke(
+            Method {
+                class: "Lorg/droidless/images/ValueAnimatorContract;".into(),
+                name: name.into(),
+                parameters: vec![],
+                returns: returns.into(),
+            },
+            vec![],
+            false,
+        )
+        .unwrap()
+    };
+    let animator = call(&mut vm, "start", "Landroid/animation/ValueAnimator;")[0];
+    vm.collect();
+    vm.advance_time(500).unwrap();
+    call(&mut vm, "halfway", "V");
+    vm.collect();
+    vm.advance_time(100).unwrap();
+    call(&mut vm, "delayed", "V");
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(animator).is_err(),
+        "animation fault retained roots"
+    );
+}
+
+#[test]
+fn compiled_text_watchers_buffers_utf16_reentrancy_host_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let call = |vm: &mut Runtime, name: &str, returns: &str| {
+        vm.invoke(
+            Method {
+                class: "Lorg/droidless/images/TextWatcherContract;".into(),
+                name: name.into(),
+                parameters: vec![],
+                returns: returns.into(),
+            },
+            vec![],
+            false,
+        )
+        .unwrap()
+    };
+    let editor = call(&mut vm, "run", "Landroid/widget/EditText;")[0];
+    vm.edit(editor.reference().unwrap(), "host").unwrap();
+    call(&mut vm, "hostCheck", "V");
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(editor).is_err(),
+        "text callbacks retained temporary roots"
+    );
+}
+
+#[test]
+fn compiled_typeface_identity_paint_view_metadata_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let text = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/TypefaceContract;".into(),
+                name: "run".into(),
+                parameters: vec![],
+                returns: "Landroid/view/View;".into(),
+            },
+            vec![],
+            false,
+        )
+        .unwrap()[0];
+    let view = vm.heap.get(text).unwrap().view.as_ref().unwrap();
+    assert_eq!((view.font_family, view.font_style), (2, 3));
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(text).is_err(),
+        "typeface calls leaked temporary roots"
+    );
+}
+
+#[test]
+fn compiled_child_overloads_dispatch_getters_factories_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let parent = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/SizedChildContract;".into(),
+                name: "overloads".into(),
+                parameters: vec![],
+                returns: "Landroid/view/View;".into(),
+            },
+            vec![],
+            false,
+        )
+        .unwrap()[0];
+    assert_eq!(
+        vm.heap
+            .get(parent)
+            .unwrap()
+            .view
+            .as_ref()
+            .unwrap()
+            .children
+            .len(),
+        4
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(parent).is_err(),
+        "child attachment leaked temporary roots"
+    );
+}
+
+#[test]
 fn compiled_sized_children_virtual_factories_attachment_gc_and_faults() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

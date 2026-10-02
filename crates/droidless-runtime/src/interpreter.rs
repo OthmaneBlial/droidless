@@ -759,6 +759,8 @@ impl Runtime {
                         vec![self.view_outline_provider_object(&field)?]
                     } else if self.text_truncate_at_field(&field) {
                         vec![self.text_truncate_at_object(&field)?]
+                    } else if self.typeface_field(&field) {
+                        vec![self.typeface_field_object(&field)?]
                     } else if let Some(unit) = self.time_unit_field(&field) {
                         vec![self.time_unit_object(unit)?]
                     } else if crate::framework::graphics_enum_names(&field.class).is_some() {
@@ -782,6 +784,7 @@ impl Runtime {
                         || self.sdk_field(&field)
                         || self.collections_empty_list_field(&field)
                         || self.view_outline_provider_field(&field)
+                        || self.typeface_field(&field)
                         || self.time_unit_field(&field).is_some()
                         || crate::framework::graphics_enum_names(&field.class).is_some()
                     {

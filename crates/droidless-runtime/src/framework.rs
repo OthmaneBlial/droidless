@@ -63,6 +63,8 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/Number;",
             "Ljava/lang/Math;",
             "Landroid/text/Layout;",
+            "Landroid/text/TextWatcher;",
+            "Landroid/graphics/Typeface;",
             "Ljava/lang/Thread;",
             "Ljava/lang/ThreadLocal;",
             "Ljava/util/Date;",
@@ -838,9 +840,22 @@ impl Runtime {
         Ok(attributes)
     }
 
-    fn sized_child_native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+    fn child_attachment_native(
+        &mut self,
+        method: &Method,
+        args: &[Word],
+    ) -> Result<Option<Vec<Word>>> {
+        let signature = method.signature();
+        let attachment = method.class == "Landroid/view/ViewGroup;"
+            && matches!(
+                signature.as_str(),
+                "addView(Landroid/view/View;)V"
+                    | "addView(Landroid/view/View;I)V"
+                    | "addView(Landroid/view/View;II)V"
+                    | "addView(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V"
+            );
         let sized = method.class == "Landroid/view/ViewGroup;"
-            && method.signature() == "addView(Landroid/view/View;II)V";
+            && signature == "addView(Landroid/view/View;II)V";
         let factory = method.name == "generateDefaultLayoutParams"
             && method.parameters.is_empty()
             && matches!(
@@ -851,20 +866,24 @@ impl Runtime {
                     | "Landroid/widget/TableLayout;"
                     | "Landroid/widget/TableRow;"
             )
-            && matches!(
-                method.returns.as_str(),
-                "Landroid/view/ViewGroup$LayoutParams;"
-                    | "Landroid/widget/LinearLayout$LayoutParams;"
-                    | "Landroid/widget/FrameLayout$LayoutParams;"
-            );
-        if !sized && !factory {
+            && (method.returns == "Landroid/view/ViewGroup$LayoutParams;"
+                || (method.returns == "Landroid/widget/LinearLayout$LayoutParams;"
+                    && matches!(
+                        method.class.as_str(),
+                        "Landroid/widget/LinearLayout;"
+                            | "Landroid/widget/TableLayout;"
+                            | "Landroid/widget/TableRow;"
+                    ))
+                || (method.returns == "Landroid/widget/FrameLayout$LayoutParams;"
+                    && method.class == "Landroid/widget/FrameLayout;"));
+        if !attachment && !factory {
             return Ok(None);
         }
         self.require_main_thread()?;
         ensure!(self.sync_depth < 32, "sized child callback nesting limit");
         ensure!(
-            args.len() == if sized { 4 } else { 1 },
-            "invalid sized child argument count"
+            args.len() == method.parameters.len() + 1,
+            "invalid child attachment argument count"
         );
         let receiver = args[0];
         self.view_mut(receiver)?;
@@ -874,6 +893,73 @@ impl Runtime {
         let roots = self.native_roots.len();
         self.native_roots.extend(args.iter().copied());
         let result = (|| -> Result<Vec<Word>> {
+            if signature == "addView(Landroid/view/View;)V" {
+                self.invoke(
+                    Method {
+                        class: "Landroid/view/ViewGroup;".into(),
+                        name: "addView".into(),
+                        parameters: vec!["Landroid/view/View;".into(), "I".into()],
+                        returns: "V".into(),
+                    },
+                    vec![receiver, args[1], Word::from(-1)],
+                    true,
+                )?;
+                return Ok(vec![]);
+            }
+            if attachment && !sized {
+                let (index, mut params) = if signature == "addView(Landroid/view/View;I)V" {
+                    (
+                        args[2].int()?,
+                        self.invoke(
+                            Method {
+                                class: "Landroid/view/View;".into(),
+                                name: "getLayoutParams".into(),
+                                parameters: vec![],
+                                returns: "Landroid/view/ViewGroup$LayoutParams;".into(),
+                            },
+                            vec![args[1]],
+                            true,
+                        )?[0],
+                    )
+                } else {
+                    (-1, args[2])
+                };
+                self.native_roots.push(params);
+                if params == Word::ZERO && signature == "addView(Landroid/view/View;I)V" {
+                    params = self.invoke(
+                        Method {
+                            class: "Landroid/view/ViewGroup;".into(),
+                            name: "generateDefaultLayoutParams".into(),
+                            parameters: vec![],
+                            returns: "Landroid/view/ViewGroup$LayoutParams;".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    )?[0];
+                    self.native_roots.push(params);
+                    if params == Word::ZERO {
+                        return Err(fault(
+                            "Ljava/lang/IllegalArgumentException;",
+                            "generateDefaultLayoutParams() cannot return null",
+                        ));
+                    }
+                }
+                self.invoke(
+                    Method {
+                        class: "Landroid/view/ViewGroup;".into(),
+                        name: "addView".into(),
+                        parameters: vec![
+                            "Landroid/view/View;".into(),
+                            "I".into(),
+                            "Landroid/view/ViewGroup$LayoutParams;".into(),
+                        ],
+                        returns: "V".into(),
+                    },
+                    vec![receiver, args[1], Word::from(index), params],
+                    true,
+                )?;
+                return Ok(vec![]);
+            }
             if sized {
                 let width = args[2].int()?;
                 let height = args[3].int()?;
@@ -1461,6 +1547,12 @@ impl Runtime {
         Ok(object)
     }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+        if let Some(result) = self.typography_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.text_native(method, args)? {
+            return Ok(Some(result));
+        }
         // Recursive UI callbacks avoid the large fallback dispatcher's debug stack frame.
         // Each small dispatcher retains the shared UI-thread guard.
         if let Some(result) = self.drawable_state_native(method, args)? {
@@ -1472,7 +1564,7 @@ impl Runtime {
         if let Some(result) = self.text_appearance_native(method, args)? {
             return Ok(Some(result));
         }
-        if let Some(result) = self.sized_child_native(method, args)? {
+        if let Some(result) = self.child_attachment_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.focus_native(method, args)? {
@@ -1518,9 +1610,6 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.path_native(method, args)? {
-            return Ok(Some(result));
-        }
-        if let Some(result) = self.text_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.text_layout_native(method, args)? {
@@ -3417,13 +3506,13 @@ impl Runtime {
                     .insert("value".into(), value);
                 result.push(object);
             }
-            ("Ljava/lang/Double;", "doubleValue()D") => {
+            ("Ljava/lang/Double;", "doubleValue()D") | ("Ljava/lang/Float;", "floatValue()F") => {
                 result = self
                     .heap
                     .get(receiver)?
                     .fields
                     .get("value")
-                    .context("uninitialized Double")?
+                    .context("uninitialized floating-point wrapper")?
                     .clone();
             }
             ("Ljava/lang/Double;", "toString()Ljava/lang/String;") => {
@@ -5694,16 +5783,6 @@ impl Runtime {
                         ),
                 )));
             }
-            ("Landroid/view/ViewGroup;", "addView(Landroid/view/View;)V") => {
-                let child = arg(1)?;
-                self.view_mut(child)?;
-                self.view_mut(receiver)?.children.push(child);
-                self.heap
-                    .get_mut(child)?
-                    .fields
-                    .insert("droidless:view:parent".into(), vec![receiver]);
-                self.hierarchy_change(receiver, child, true)?;
-            }
             (
                 "Landroid/view/ViewGroup;",
                 "setLayoutTransition(Landroid/animation/LayoutTransition;)V",
@@ -5726,13 +5805,13 @@ impl Runtime {
             }
             (
                 "Landroid/view/ViewGroup;",
-                "addView(Landroid/view/View;I)V"
-                | "addView(Landroid/view/View;ILandroid/view/ViewGroup$LayoutParams;)V",
+                "addView(Landroid/view/View;ILandroid/view/ViewGroup$LayoutParams;)V",
             ) => {
                 let child = arg(1)?;
                 let index = arg(2)?.int()?;
                 self.view_mut(child)?;
-                if args.len() == 4 {
+                ensure!(args.len() == 4, "invalid indexed child argument count");
+                {
                     let params = arg(3)?;
                     ensure!(
                         params != Word::ZERO
@@ -5764,27 +5843,6 @@ impl Runtime {
                     .get_mut(child)?
                     .fields
                     .insert("droidless:view:parent".into(), vec![receiver]);
-                self.hierarchy_change(receiver, child, true)?;
-            }
-            (
-                "Landroid/view/ViewGroup;",
-                "addView(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;)V",
-            ) => {
-                let child = arg(1)?;
-                let params = arg(2)?;
-                self.view_mut(child)?;
-                if params != Word::ZERO {
-                    self.heap.get(params)?;
-                }
-                self.heap
-                    .get_mut(child)?
-                    .fields
-                    .insert("droidless:view:parent".into(), vec![receiver]);
-                self.heap
-                    .get_mut(child)?
-                    .fields
-                    .insert("droidless:view:layout-params".into(), vec![params]);
-                self.view_mut(receiver)?.children.push(child);
                 self.hierarchy_change(receiver, child, true)?;
             }
             ("Landroid/view/ViewGroup;", "getChildCount()I") => {
@@ -5860,25 +5918,6 @@ impl Runtime {
                     .get_mut(receiver)?
                     .fields
                     .insert("droidless:motion-event-splitting".into(), vec![arg(1)?]);
-            }
-            ("Landroid/widget/TextView;", "setText(Ljava/lang/CharSequence;)V") => {
-                self.set_text_view(receiver, arg(1)?)?;
-            }
-            ("Landroid/widget/TextView;", "setText(I)V") => {
-                let text = self.resource_text(arg(1)?.int()? as u32)?;
-                self.set_view_text(receiver, text, vec![])?;
-            }
-            ("Landroid/widget/TextView;", "append(Ljava/lang/CharSequence;)V") => {
-                self.append_text_view(receiver, arg(1)?)?;
-            }
-            ("Landroid/widget/TextView;", "getText()Ljava/lang/CharSequence;")
-            | ("Landroid/widget/EditText;", "getText()Landroid/text/Editable;") => {
-                if method.class == "Landroid/widget/EditText;" {
-                    result.push(self.editable_text(receiver)?);
-                } else {
-                    let text = self.view_mut(receiver)?.text.clone();
-                    result.push(self.heap.string(text)?);
-                }
             }
             ("Landroid/widget/TextView;", "setEllipsize(Landroid/text/TextUtils$TruncateAt;)V") => {
                 let value = arg(1)?;
@@ -8052,7 +8091,7 @@ impl Runtime {
         }
         bail!("cyclic or too deep View coordinate hierarchy")
     }
-    fn view_mut(&mut self, word: Word) -> Result<&mut crate::ui::View> {
+    pub(crate) fn view_mut(&mut self, word: Word) -> Result<&mut crate::ui::View> {
         self.heap
             .get_mut(word)?
             .view

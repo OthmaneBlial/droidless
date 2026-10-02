@@ -6,6 +6,7 @@ use anyhow::{Context, Result, bail, ensure};
 use droidless_formats::dex::Method;
 
 const EDITABLE_FIELD: &str = "droidless:text:editable";
+const WATCHERS: &str = "droidless:text:watchers";
 const TEXT_LIMIT: usize = 1_048_576;
 
 fn utf16_len(text: &str) -> usize {
@@ -58,6 +59,128 @@ impl Runtime {
         method: &Method,
         args: &[Word],
     ) -> Result<Option<Vec<Word>>> {
+        let signature = method.signature();
+        if matches!(
+            method.class.as_str(),
+            "Landroid/widget/TextView;" | "Landroid/widget/EditText;"
+        ) && matches!(
+            signature.as_str(),
+            "addTextChangedListener(Landroid/text/TextWatcher;)V"
+                | "removeTextChangedListener(Landroid/text/TextWatcher;)V"
+                | "setText(Ljava/lang/CharSequence;)V"
+                | "setText(I)V"
+                | "append(Ljava/lang/CharSequence;)V"
+                | "getText()Ljava/lang/CharSequence;"
+                | "getText()Landroid/text/Editable;"
+                | "onTextChanged(Ljava/lang/CharSequence;III)V"
+        ) {
+            self.require_main_thread()?;
+            ensure!(self.sync_depth < 32, "text callback nesting limit");
+            ensure!(
+                args.len() == method.parameters.len() + 1,
+                "invalid TextView text arguments"
+            );
+            let view = args[0];
+            self.view_mut(view)?;
+            let roots = self.native_roots.len();
+            self.native_roots.extend(args.iter().copied());
+            let result = (|| -> Result<Vec<Word>> {
+                match method.name.as_str() {
+                    "addTextChangedListener" => {
+                        if args[1] != Word::ZERO {
+                            ensure!(
+                                self.is_a(
+                                    &self.heap.get(args[1])?.class,
+                                    "Landroid/text/TextWatcher;"
+                                ),
+                                "expected TextWatcher"
+                            );
+                        }
+                        let listeners = self
+                            .heap
+                            .get_mut(view)?
+                            .fields
+                            .entry(WATCHERS.into())
+                            .or_default();
+                        ensure!(listeners.len() < 1024, "TextWatcher limit reached");
+                        listeners.push(args[1]);
+                    }
+                    "removeTextChangedListener" => {
+                        let listeners = self
+                            .heap
+                            .get(view)?
+                            .fields
+                            .get(WATCHERS)
+                            .cloned()
+                            .unwrap_or_default();
+                        self.native_roots.extend(listeners.iter().copied());
+                        for (index, listener) in listeners.into_iter().enumerate() {
+                            let equal = if args[1] == Word::ZERO {
+                                listener == Word::ZERO
+                            } else {
+                                self.invoke(
+                                    Method {
+                                        class: "Ljava/lang/Object;".into(),
+                                        name: "equals".into(),
+                                        parameters: vec!["Ljava/lang/Object;".into()],
+                                        returns: "Z".into(),
+                                    },
+                                    vec![args[1], listener],
+                                    true,
+                                )?[0]
+                                    .int()?
+                                    != 0
+                            };
+                            if equal {
+                                let listeners =
+                                    self.heap
+                                        .get_mut(view)?
+                                        .fields
+                                        .get_mut(WATCHERS)
+                                        .context("watchers removed during equality callback")?;
+                                if index >= listeners.len() {
+                                    return Err(fault(
+                                        "Ljava/lang/IndexOutOfBoundsException;",
+                                        "watchers removed during equality callback",
+                                    ));
+                                }
+                                listeners.remove(index);
+                                break;
+                            }
+                        }
+                    }
+                    "setText" if method.parameters[0] == "I" => {
+                        let text = self.resource_text(args[1].int()? as u32)?;
+                        self.change_view_text(view, text, vec![], true, None)?;
+                    }
+                    "setText" => self.set_text_view(view, args[1])?,
+                    "append" => self.append_text_view(view, args[1])?,
+                    "getText" => {
+                        let editable = self
+                            .heap
+                            .get(view)?
+                            .fields
+                            .get(EDITABLE_FIELD)
+                            .and_then(|words| words.first())
+                            .copied();
+                        return Ok(vec![if signature == "getText()Landroid/text/Editable;" {
+                            self.editable_text(view)?
+                        } else if let Some(editable) = editable {
+                            editable
+                        } else {
+                            let text = self.view_mut(view)?.text.clone();
+                            self.heap.string(text)?
+                        }]);
+                    }
+                    // Android's base protected hook is empty; guest overrides execute virtually.
+                    "onTextChanged" => {}
+                    _ => unreachable!(),
+                }
+                Ok(vec![])
+            })();
+            self.native_roots.truncate(roots);
+            return result.map(Some);
+        }
         if method.class == "Landroid/text/TextUtils;"
             && method.signature() == "indexOf(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)I"
         {
@@ -185,6 +308,9 @@ impl Runtime {
         let Some(receiver) = args.first().copied() else {
             return Ok(None);
         };
+        if receiver == Word::ZERO || receiver.reference().is_err() {
+            return Ok(None);
+        }
         if !matches!(self.heap.get(receiver)?.data, Data::Spanned { .. }) {
             return Ok(None);
         }
@@ -401,7 +527,13 @@ impl Runtime {
             .and_then(|v| v.first())
             .copied()
         {
-            self.set_view_text(owner, text, spans)?;
+            self.change_view_text(
+                owner,
+                text,
+                spans,
+                false,
+                Some([offset, 0, utf16_len(&suffix)]),
+            )?;
         } else {
             self.heap.get_mut(receiver)?.data = Data::Spanned { text, spans };
         }
@@ -451,14 +583,20 @@ impl Runtime {
 
     pub(crate) fn set_text_view(&mut self, view: Word, value: Word) -> Result<()> {
         if value == Word::ZERO {
-            self.set_view_text(view, String::new(), vec![])
+            self.change_view_text(view, String::new(), vec![], true, None)
         } else {
             let (text, spans) = self.sequence_data(value)?;
-            self.set_view_text(view, text, spans)
+            self.change_view_text(view, text, spans, true, None)
         }
     }
 
     pub(crate) fn append_text_view(&mut self, view: Word, value: Word) -> Result<()> {
+        if !self.heap.get(view)?.fields.contains_key(EDITABLE_FIELD) {
+            let text = self.view_mut(view)?.text.clone();
+            let length = utf16_len(&text);
+            // API 21 converts a plain TextView to Editable before appending.
+            self.change_view_text(view, text, vec![], true, Some([0, length, length]))?;
+        }
         let (mut text, mut spans) = {
             let object = self.heap.get(view)?;
             let current = object
@@ -492,7 +630,13 @@ impl Runtime {
         }
         text.push_str(&suffix);
         spans.extend(suffix_spans);
-        self.set_view_text(view, text, spans)
+        self.change_view_text(
+            view,
+            text,
+            spans,
+            false,
+            Some([offset, 0, utf16_len(&suffix)]),
+        )
     }
 
     pub(crate) fn set_view_text(
@@ -501,6 +645,80 @@ impl Runtime {
         text: String,
         spans: Vec<TextSpan>,
     ) -> Result<()> {
+        self.change_view_text(view, text, spans, false, None)
+    }
+
+    fn notify_text_watchers(
+        &mut self,
+        view: Word,
+        text: Word,
+        change: [usize; 3],
+        stage: &str,
+    ) -> Result<()> {
+        let count = self
+            .heap
+            .get(view)?
+            .fields
+            .get(WATCHERS)
+            .map_or(0, Vec::len);
+        for index in 0..count {
+            let watcher = self
+                .heap
+                .get(view)?
+                .fields
+                .get(WATCHERS)
+                .and_then(|words| words.get(index))
+                .copied()
+                .ok_or_else(|| {
+                    fault(
+                        "Ljava/lang/IndexOutOfBoundsException;",
+                        "TextWatcher list changed during callback",
+                    )
+                })?;
+            if watcher == Word::ZERO {
+                return Err(fault(
+                    "Ljava/lang/NullPointerException;",
+                    "null TextWatcher",
+                ));
+            }
+            let parameters = if stage == "afterTextChanged" {
+                vec!["Landroid/text/Editable;".into()]
+            } else {
+                vec![
+                    "Ljava/lang/CharSequence;".into(),
+                    "I".into(),
+                    "I".into(),
+                    "I".into(),
+                ]
+            };
+            let mut args = vec![watcher, text];
+            if stage != "afterTextChanged" {
+                args.extend(change.map(|value| Word::from(value as i32)));
+            }
+            self.invoke(
+                Method {
+                    class: "Landroid/text/TextWatcher;".into(),
+                    name: stage.into(),
+                    parameters,
+                    returns: "V".into(),
+                },
+                args,
+                true,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn change_view_text(
+        &mut self,
+        view: Word,
+        text: String,
+        spans: Vec<TextSpan>,
+        fresh: bool,
+        change: Option<[usize; 3]>,
+    ) -> Result<()> {
+        self.require_main_thread()?;
+        ensure!(self.sync_depth < 32, "text callback nesting limit");
         ensure!(text.len() <= TEXT_LIMIT, "TextView text exceeds 1 MiB");
         let text_length = utf16_len(&text);
         ensure!(
@@ -511,37 +729,113 @@ impl Runtime {
         );
         let class = self.heap.get(view)?.class.clone();
         let is_edit_text = self.is_a(&class, "Landroid/widget/EditText;");
-        let editable = self
-            .heap
-            .get(view)?
-            .fields
-            .get(EDITABLE_FIELD)
-            .and_then(|words| words.first())
-            .copied();
-        self.heap
-            .get_mut(view)?
-            .view
-            .as_mut()
-            .context("not a View")?
-            .text = text.clone();
-        self.invalidate_text_layout(view)?;
-        if is_edit_text || editable.is_some() {
-            let editable = match editable {
-                Some(editable) => editable,
-                None => self
-                    .heap
-                    .instance("Landroid/text/SpannableStringBuilder;")?,
-            };
-            self.heap.get_mut(editable)?.data = Data::Spanned { text, spans };
-            self.heap
-                .get_mut(editable)?
+        let old_text = self.view_mut(view)?.text.clone();
+        let force_editable = change.is_some();
+        let change = change.unwrap_or([0, utf16_len(&old_text), text_length]);
+        let roots = self.native_roots.len();
+        self.native_roots.push(view);
+        self.native_roots
+            .extend(spans.iter().map(|span| span.object));
+        let result = (|| -> Result<()> {
+            let editable = self
+                .heap
+                .get(view)?
                 .fields
-                .insert("droidless:text:owner".into(), vec![view]);
+                .get(EDITABLE_FIELD)
+                .and_then(|words| words.first())
+                .copied();
+            let before = if let Some(editable) = editable {
+                editable
+            } else {
+                self.heap.string(old_text)?
+            };
+            self.native_roots.push(before);
+            self.notify_text_watchers(view, before, change, "beforeTextChanged")?;
             self.heap
                 .get_mut(view)?
+                .view
+                .as_mut()
+                .context("not a View")?
+                .text = text.clone();
+            self.invalidate_text_layout(view)?;
+            let listeners = self
+                .heap
+                .get(view)?
                 .fields
-                .insert(EDITABLE_FIELD.into(), vec![editable]);
-        }
-        Ok(())
+                .get(WATCHERS)
+                .is_some_and(|words| !words.is_empty());
+            let current = self
+                .heap
+                .get(view)?
+                .fields
+                .get(EDITABLE_FIELD)
+                .and_then(|words| words.first())
+                .copied();
+            let after =
+                if is_edit_text || (!fresh && current.is_some()) || listeners || force_editable {
+                    let editable = match (fresh, current) {
+                        (false, Some(editable)) => editable,
+                        (true, Some(previous)) => {
+                            self.heap
+                                .get_mut(previous)?
+                                .fields
+                                .remove("droidless:text:owner");
+                            self.heap
+                                .instance("Landroid/text/SpannableStringBuilder;")?
+                        }
+                        _ => self
+                            .heap
+                            .instance("Landroid/text/SpannableStringBuilder;")?,
+                    };
+                    self.heap.get_mut(editable)?.data = Data::Spanned { text, spans };
+                    self.heap
+                        .get_mut(editable)?
+                        .fields
+                        .insert("droidless:text:owner".into(), vec![view]);
+                    self.heap
+                        .get_mut(view)?
+                        .fields
+                        .insert(EDITABLE_FIELD.into(), vec![editable]);
+                    editable
+                } else {
+                    if let Some(previous) = current {
+                        self.heap
+                            .get_mut(previous)?
+                            .fields
+                            .remove("droidless:text:owner");
+                        self.heap.get_mut(view)?.fields.remove(EDITABLE_FIELD);
+                    }
+                    self.heap.string(text)?
+                };
+            self.native_roots.push(after);
+            self.notify_text_watchers(view, after, change, "onTextChanged")?;
+            self.invoke(
+                Method {
+                    class: "Landroid/widget/TextView;".into(),
+                    name: "onTextChanged".into(),
+                    parameters: vec![
+                        "Ljava/lang/CharSequence;".into(),
+                        "I".into(),
+                        "I".into(),
+                        "I".into(),
+                    ],
+                    returns: "V".into(),
+                },
+                vec![
+                    view,
+                    after,
+                    Word::from(change[0] as i32),
+                    Word::from(change[1] as i32),
+                    Word::from(change[2] as i32),
+                ],
+                true,
+            )?;
+            if listeners || !fresh {
+                self.notify_text_watchers(view, after, change, "afterTextChanged")?;
+            }
+            Ok(())
+        })();
+        self.native_roots.truncate(roots);
+        result
     }
 }

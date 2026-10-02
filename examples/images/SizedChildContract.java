@@ -12,7 +12,7 @@ import android.widget.TableRow;
 public final class SizedChildContract {
     static class Parent extends LinearLayout {
         ViewGroup.LayoutParams made, seen;
-        int factories, additions, index;
+        int factories, additions, index, indexedCalls;
         boolean absent, fail;
         Parent(Activity context) { super(context); }
         protected LinearLayout.LayoutParams generateDefaultLayoutParams() {
@@ -25,6 +25,9 @@ public final class SizedChildContract {
             additions++; index=at; seen=params; System.gc();
             if (fail) throw new IllegalStateException("attachment callback failed");
             super.addView(child,at,params);
+        }
+        public void addView(View child,int at) {
+            indexedCalls++; System.gc(); super.addView(child,at);
         }
         ViewGroup.LayoutParams defaults() { return super.generateDefaultLayoutParams(); }
     }
@@ -42,6 +45,36 @@ public final class SizedChildContract {
     }
     static void check(boolean value) {
         if (!value) throw new IllegalStateException("sized child contract");
+    }
+    static class Child extends View {
+        int getters;
+        Child(Activity context) { super(context); }
+        public ViewGroup.LayoutParams getLayoutParams() {
+            getters++; System.gc(); return super.getLayoutParams();
+        }
+    }
+    public static View overloads() {
+        Activity context=new Activity(); Parent parent=new Parent(context);
+        Child first=new Child(context); parent.addView(first);
+        check(parent.indexedCalls==1 && parent.additions==1 && parent.factories==1 && first.getters==1);
+        check(first.getLayoutParams()==parent.made && parent.seen==parent.made);
+        Child second=new Child(context); LinearLayout.LayoutParams kept=new LinearLayout.LayoutParams(23,-2);
+        second.setLayoutParams(kept); parent.addView(second,0);
+        check(parent.indexedCalls==2 && parent.additions==2 && parent.factories==1 && second.getters==1);
+        check(parent.getChildAt(0)==second && parent.seen==kept && second.getLayoutParams()==kept);
+        View third=new View(context); LinearLayout.LayoutParams supplied=new LinearLayout.LayoutParams(11,12);
+        parent.addView(third,supplied);
+        check(parent.indexedCalls==2 && parent.additions==3 && parent.index==-1 && parent.seen==supplied);
+        check(parent.getChildCount()==3 && third.getParent()==parent && third.getLayoutParams()==supplied);
+        parent.absent=true;
+        try { parent.addView(new View(context)); throw new IllegalStateException("null factory accepted"); }
+        catch (IllegalArgumentException expected) { check(parent.additions==3 && parent.getChildCount()==3); }
+        parent.absent=false; parent.fail=true;
+        try { parent.addView(new View(context),supplied); throw new IllegalStateException("attachment fault ignored"); }
+        catch (IllegalStateException expected) { check("attachment callback failed".equals(expected.getMessage())); }
+        parent.fail=false; parent.addView(new View(context),supplied); System.gc();
+        check(parent.getChildCount()==4 && parent.additions==5 && parent.factories==2 && parent.indexedCalls==3);
+        return parent;
     }
     public static View run() {
         Activity context=new Activity(); Parent parent=new Parent(context);

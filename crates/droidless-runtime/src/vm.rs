@@ -771,6 +771,8 @@ impl Runtime {
             Some("Landroid/view/ViewOutlineProvider;")
         } else if self.text_truncate_at_field(field) {
             Some("Landroid/text/TextUtils$TruncateAt;")
+        } else if self.typeface_field(field) {
+            Some("Landroid/graphics/Typeface;")
         } else if self.time_unit_field(field).is_some() {
             Some("Ljava/util/concurrent/TimeUnit;")
         } else {

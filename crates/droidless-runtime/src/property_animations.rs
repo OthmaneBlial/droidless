@@ -1,6 +1,6 @@
 //! View property frames use the host's existing clock; listeners run in guest DEX.
 use crate::{
-    heap::{Word, bits64, fault, wide},
+    heap::{Data, Word, bits64, fault, wide},
     vm::Runtime,
 };
 use anyhow::{Context, Result, ensure};
@@ -11,6 +11,7 @@ const VALUE: &str = "Landroid/animation/ValueAnimator;";
 const VIEW: &str = "Landroid/view/View;";
 const OWNER: &str = "droidless:property:owner";
 const TARGET: &str = "droidless:property:view";
+const SCALAR: &str = "droidless:value:scalar";
 const PROPERTIES: [&str; 3] = ["alpha", "translationX", "translationY"];
 const LIMIT: usize = 16_384;
 
@@ -87,6 +88,23 @@ impl Runtime {
     ) -> Result<Option<Vec<Word>>> {
         let signature = method.signature();
         let receiver = args.first().copied().unwrap_or(Word::ZERO);
+        if matches!(
+            method.class.as_str(),
+            VALUE | "Landroid/animation/Animator;"
+        ) && receiver != Word::ZERO
+            && (signature == "<init>()V" || self.property_word(receiver, SCALAR)?.truth())
+        {
+            self.require_main_thread()?;
+            ensure!(
+                self.sync_depth < 32,
+                "value animation callback nesting limit"
+            );
+            let roots = self.native_roots.len();
+            self.native_roots.extend(args.iter().copied());
+            let result = self.scalar_animation_native(method, args);
+            self.native_roots.truncate(roots);
+            return result;
+        }
         if method.class == VIEW && signature == "animate()Landroid/view/ViewPropertyAnimator;" {
             self.require_main_thread()?;
             self.heap
@@ -335,6 +353,71 @@ impl Runtime {
 
     fn property_event(&mut self, owner: Word, animator: Word, name: &str) -> Result<()> {
         let update = name == "onAnimationUpdate";
+        if self.property_word(owner, SCALAR)?.truth() {
+            let key = if update { "updates" } else { "listeners" };
+            let listeners = self
+                .heap
+                .get(owner)?
+                .fields
+                .get(key)
+                .cloned()
+                .unwrap_or_default();
+            let roots = self.native_roots.len();
+            if !update {
+                self.native_roots.extend(listeners.iter().copied());
+            }
+            let result = (|| -> Result<()> {
+                for (index, snapshot) in listeners.into_iter().enumerate() {
+                    let listener = if update {
+                        self.heap
+                            .get(owner)?
+                            .fields
+                            .get(key)
+                            .and_then(|v| v.get(index))
+                            .copied()
+                            .ok_or_else(|| {
+                                fault(
+                                    "Ljava/lang/IndexOutOfBoundsException;",
+                                    "animation listeners changed during update",
+                                )
+                            })?
+                    } else {
+                        snapshot
+                    };
+                    if listener == Word::ZERO {
+                        return Err(fault(
+                            "Ljava/lang/NullPointerException;",
+                            "null animation listener",
+                        ));
+                    }
+                    self.invoke(
+                        Method {
+                            class: if update {
+                                "Landroid/animation/ValueAnimator$AnimatorUpdateListener;"
+                            } else {
+                                "Landroid/animation/Animator$AnimatorListener;"
+                            }
+                            .into(),
+                            name: name.into(),
+                            parameters: vec![
+                                if update {
+                                    VALUE
+                                } else {
+                                    "Landroid/animation/Animator;"
+                                }
+                                .into(),
+                            ],
+                            returns: "V".into(),
+                        },
+                        vec![listener, animator],
+                        true,
+                    )?;
+                }
+                Ok(())
+            })();
+            self.native_roots.truncate(roots);
+            return result;
+        }
         let listener = self.property_word(owner, if update { "update" } else { "listener" })?;
         if listener == Word::ZERO {
             return Ok(());
@@ -536,6 +619,9 @@ impl Runtime {
                 .fields
                 .insert("fraction".into(), vec![Word::Bits(progress.to_bits())]);
             let target = self.property_word(current.owner, TARGET)?;
+            if self.property_word(current.owner, SCALAR)?.truth() {
+                self.scalar_animation_value(animator, progress)?;
+            }
             for (property, from, to) in current.properties {
                 let value = (f64::from(from)
                     + (f64::from(to) - f64::from(from)) * f64::from(progress))
@@ -579,6 +665,9 @@ impl Runtime {
         };
         let animation = self.property_animations.running.remove(index);
         let target = self.property_word(animation.owner, TARGET)?;
+        if self.property_word(animation.owner, SCALAR)?.truth() {
+            return Ok(Some(animation));
+        }
         self.property_view_call(
             target,
             "setHasTransientState",
@@ -673,6 +762,274 @@ impl Runtime {
                     .remove(&format!("pending:{property}"));
             }
         }
+        Ok(())
+    }
+
+    fn scalar_animation_native(
+        &mut self,
+        method: &Method,
+        args: &[Word],
+    ) -> Result<Option<Vec<Word>>> {
+        let animator = args[0];
+        let arg = |index| {
+            args.get(index)
+                .copied()
+                .context("missing ValueAnimator argument")
+        };
+        let result = match method.signature().as_str() {
+            "<init>()V" => {
+                let interpolator = self
+                    .heap
+                    .instance("Landroid/view/animation/AccelerateDecelerateInterpolator;")?;
+                let fields = &mut self.heap.get_mut(animator)?.fields;
+                fields.insert(SCALAR.into(), vec![Word::from(1)]);
+                fields.insert("duration".into(), wide(300));
+                fields.insert("delay".into(), wide(0));
+                fields.insert("interpolator".into(), vec![interpolator]);
+                vec![]
+            }
+            "setFloatValues([F)V" | "setIntValues([I)V" => {
+                let array = arg(1)?;
+                if array != Word::ZERO {
+                    let Data::Array { element, values } = &self.heap.get(array)?.data else {
+                        anyhow::bail!("animation values require array");
+                    };
+                    ensure!(
+                        element
+                            == if method.name == "setIntValues" {
+                                "I"
+                            } else {
+                                "F"
+                            },
+                        "incorrect animation array type"
+                    );
+                    let values = values
+                        .iter()
+                        .map(|value| {
+                            ensure!(value.len() == 1, "scalar keyframe requires one word");
+                            Ok(value[0])
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    ensure!(values.len() <= 4096, "animation keyframe limit");
+                    if !values.is_empty() {
+                        let fields = &mut self.heap.get_mut(animator)?.fields;
+                        fields.insert(
+                            "integer".into(),
+                            vec![Word::from(i32::from(method.name == "setIntValues"))],
+                        );
+                        fields.insert(
+                            "values".into(),
+                            if values.len() == 1 {
+                                vec![Word::ZERO, values[0]]
+                            } else {
+                                values
+                            },
+                        );
+                    }
+                }
+                vec![]
+            }
+            "setDuration(J)Landroid/animation/ValueAnimator;" | "setStartDelay(J)V" => {
+                let value = bits64(args.get(1..3).context("missing animation time")?)?;
+                if value > i64::MAX as u64 {
+                    return Err(fault(
+                        "Ljava/lang/IllegalArgumentException;",
+                        "animation time cannot be negative",
+                    ));
+                }
+                self.heap.get_mut(animator)?.fields.insert(
+                    if method.name == "setDuration" {
+                        "duration"
+                    } else {
+                        "delay"
+                    }
+                    .into(),
+                    wide(value),
+                );
+                if method.name == "setDuration" {
+                    vec![animator]
+                } else {
+                    vec![]
+                }
+            }
+            "setInterpolator(Landroid/animation/TimeInterpolator;)V" => {
+                let value = arg(1)?;
+                if value != Word::ZERO {
+                    ensure!(
+                        self.is_a(
+                            &self.heap.get(value)?.class,
+                            "Landroid/animation/TimeInterpolator;"
+                        ),
+                        "invalid animation interpolator"
+                    );
+                }
+                self.heap
+                    .get_mut(animator)?
+                    .fields
+                    .insert("interpolator".into(), vec![value]);
+                vec![]
+            }
+            "addUpdateListener(Landroid/animation/ValueAnimator$AnimatorUpdateListener;)V"
+            | "addListener(Landroid/animation/Animator$AnimatorListener;)V" => {
+                let listener = arg(1)?;
+                if listener != Word::ZERO {
+                    ensure!(
+                        self.is_a(&self.heap.get(listener)?.class, &method.parameters[0]),
+                        "invalid animation listener"
+                    );
+                }
+                let list = self
+                    .heap
+                    .get_mut(animator)?
+                    .fields
+                    .entry(
+                        if method.name == "addListener" {
+                            "listeners"
+                        } else {
+                            "updates"
+                        }
+                        .into(),
+                    )
+                    .or_default();
+                ensure!(list.len() < 1024, "animation listener limit");
+                list.push(listener);
+                vec![]
+            }
+            "getDuration()J" => wide(self.property_time(animator, "duration")?),
+            "getStartDelay()J" => wide(self.property_time(animator, "delay")?),
+            "getInterpolator()Landroid/animation/TimeInterpolator;" => {
+                vec![self.property_word(animator, "interpolator")?]
+            }
+            "getAnimatedFraction()F" => vec![self.property_word(animator, "fraction")?],
+            "getAnimatedValue()Ljava/lang/Object;" => vec![self.property_word(animator, "value")?],
+            "isStarted()Z" => vec![Word::from(i32::from(
+                self.property_animations
+                    .running
+                    .iter()
+                    .any(|a| a.animator == animator),
+            ))],
+            "isRunning()Z" => vec![Word::from(i32::from(
+                self.property_animations
+                    .running
+                    .iter()
+                    .any(|a| a.animator == animator && a.started && self.uptime_ms() >= a.deadline),
+            ))],
+            "start()V" => {
+                self.start_scalar_animation(animator)?;
+                vec![]
+            }
+            "cancel()V" => {
+                self.finish_property_animation(animator, true)?;
+                vec![]
+            }
+            "end()V" => {
+                if !self
+                    .property_animations
+                    .running
+                    .iter()
+                    .any(|a| a.animator == animator)
+                {
+                    self.start_scalar_animation(animator)?;
+                }
+                if let Some(a) = self
+                    .property_animations
+                    .running
+                    .iter_mut()
+                    .find(|a| a.animator == animator)
+                {
+                    a.deadline = 0;
+                    a.duration = 0;
+                }
+                self.update_property_animation(animator)?;
+                vec![]
+            }
+            _ => return Ok(None),
+        };
+        Ok(Some(result))
+    }
+
+    fn start_scalar_animation(&mut self, animator: Word) -> Result<()> {
+        ensure!(!self.queue.closed, "animation after runtime shutdown");
+        ensure!(
+            self.property_animations.running.len() < LIMIT,
+            "animation capacity reached"
+        );
+        self.discard_property_animation(animator)?;
+        let duration = self.property_time(animator, "duration")?;
+        let delay = self.property_time(animator, "delay")?;
+        let deadline = self
+            .uptime_ms()
+            .checked_add(delay)
+            .filter(|time| *time <= i64::MAX as u64)
+            .context("animation deadline overflow")?;
+        let interpolator = self.property_word(animator, "interpolator")?;
+        self.property_animations.running.push(Animation {
+            owner: animator,
+            animator,
+            deadline,
+            duration,
+            interpolator,
+            started: false,
+            finishing: false,
+            properties: vec![],
+        });
+        if delay == 0 {
+            // API 21 delivers the initial value update before the start listener.
+            let result = (|| -> Result<()> {
+                self.scalar_animation_value(animator, 0.0)?;
+                self.property_event(animator, animator, "onAnimationUpdate")?;
+                self.start_property_listener(animator)
+            })();
+            if let Err(error) = result {
+                self.discard_property_animation(animator)?;
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    fn scalar_animation_value(&mut self, animator: Word, progress: f32) -> Result<()> {
+        // ponytail: scalar float/int keyframes reuse the existing clock; object evaluators and repeats remain explicit gaps.
+        let values = self
+            .heap
+            .get(animator)?
+            .fields
+            .get("values")
+            .context("ValueAnimator has no keyframes")?;
+        ensure!(
+            values.len() >= 2 && progress.is_finite(),
+            "invalid animation values"
+        );
+        let integer = self.property_word(animator, "integer")?.truth();
+        let position = progress * (values.len() - 1) as f32;
+        let index = (position.floor().max(0.0) as usize).min(values.len() - 2);
+        let fraction = position - index as f32;
+        let number = |word: Word| -> Result<f64> {
+            Ok(if integer {
+                f64::from(word.int()?)
+            } else {
+                f64::from(f32::from_bits(word.int()? as u32))
+            })
+        };
+        let from = number(values[index])?;
+        let to = number(values[index + 1])?;
+        let value = if integer {
+            Word::from((from + (to - from) * f64::from(fraction)) as i32)
+        } else {
+            Word::Bits(((from + (to - from) * f64::from(fraction)) as f32).to_bits())
+        };
+        let boxed = self.heap.instance(if integer {
+            "Ljava/lang/Integer;"
+        } else {
+            "Ljava/lang/Float;"
+        })?;
+        self.heap
+            .get_mut(boxed)?
+            .fields
+            .insert("value".into(), vec![value]);
+        let fields = &mut self.heap.get_mut(animator)?.fields;
+        fields.insert("fraction".into(), vec![Word::Bits(progress.to_bits())]);
+        fields.insert("value".into(), vec![boxed]);
         Ok(())
     }
 }

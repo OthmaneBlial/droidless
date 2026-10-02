@@ -38,6 +38,7 @@ mod throwables;
 mod time_units;
 mod timers;
 mod touch;
+mod typography;
 pub mod ui;
 mod vm;
 mod workers;

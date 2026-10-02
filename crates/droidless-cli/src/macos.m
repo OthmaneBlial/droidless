@@ -11,6 +11,7 @@ typedef struct {
     size_t handle;
     uint32_t kind, enabled, editable, visible, foreground, background, has_background, gravity, key_listener;
     int32_t image_scale;
+    uint32_t font_family, font_style;
     float x, y, width, height, text_size, alpha, padding[4];
     const char *text;
     const char *description;
@@ -18,6 +19,21 @@ typedef struct {
     const uint8_t *image;
     size_t image_len;
 } NativeView;
+
+static NSFont *viewFont(const NativeView *node) {
+    NSFont *font;
+    switch (node->font_family) {
+        case 1: font = [NSFont fontWithName:@"Times" size:node->text_size]; break;
+        case 2: font = [NSFont monospacedSystemFontOfSize:node->text_size weight:NSFontWeightRegular]; break;
+        default: font = [NSFont systemFontOfSize:node->text_size]; break;
+    }
+    if (!font) font = [NSFont systemFontOfSize:node->text_size];
+    NSFontTraitMask traits = 0;
+    if (node->font_style & 1) traits |= NSBoldFontMask;
+    if (node->font_style & 2) traits |= NSItalicFontMask;
+    if (traits) font = [[NSFontManager sharedFontManager] convertFont:font toHaveTrait:traits];
+    return font;
+}
 
 @interface FlippedView : NSView
 @end
@@ -221,7 +237,7 @@ void dl_view(void *opaque, const NativeView *node) {
         NSButton *button = (NSButton *)view;
         button.tag = (NSInteger)(node->click_target ?: node->handle);
         button.enabled = node->enabled != 0;
-        button.font = [NSFont systemFontOfSize:node->text_size];
+        button.font = viewFont(node);
         button.title = text;
         button.image = image;
         button.imagePosition = text.length ? NSImageLeading : NSImageOnly;
@@ -235,7 +251,7 @@ void dl_view(void *opaque, const NativeView *node) {
         field.enabled = node->enabled != 0;
         field.editable = node->editable != 0;
         field.selectable = node->editable != 0;
-        field.font = [NSFont systemFontOfSize:node->text_size];
+        field.font = viewFont(node);
         field.textColor = color(node->foreground);
         field.backgroundColor = node->has_background ? color(node->background) : NSColor.clearColor;
         field.alignment = (node->gravity&7)==5 ? NSTextAlignmentRight : ((node->gravity&7)==1 ? NSTextAlignmentCenter : NSTextAlignmentLeft);

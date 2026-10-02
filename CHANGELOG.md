@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- ViewGroup convenience overloads now dispatch the APK's real indexed binding
+  callbacks during inflation. Cached Typeface state reaches native AppKit fonts.
+  TextWatcher delivery uses real guest callbacks, UTF-16 deltas, retained buffers
+  and fault cleanup; standalone scalar ValueAnimator callbacks use the existing
+  runtime clock. The unchanged Notepad folder row now runs its actual
+  TextInputLayout binding path. Asset fonts, general animation APIs and physical
+  folder input remain unverified or unsupported.
+
 - Typed colors now resolve through actual guest Context/Theme callbacks and copied
   theme snapshots. TextView appearance applies color and pixel size; unresolved
   theme values raise the catchable API-21 RuntimeException. Framework white, black
