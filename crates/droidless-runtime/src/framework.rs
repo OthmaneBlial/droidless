@@ -2925,8 +2925,29 @@ impl Runtime {
                     *value = vec![Word::Bits(component.to_bits())];
                 }
             }
-            ("Landroid/graphics/Color;", "alpha(I)I") => {
-                result.push(Word::from(((arg(0)?.int()? as u32) >> 24) as i32));
+            ("Landroid/graphics/Color;", "alpha(I)I" | "red(I)I" | "green(I)I" | "blue(I)I") => {
+                let shift = match method.name.as_str() {
+                    "alpha" => 24,
+                    "red" => 16,
+                    "green" => 8,
+                    _ => 0,
+                };
+                result.push(Word::from(
+                    (((arg(0)?.int()? as u32) >> shift) & 255) as i32,
+                ));
+            }
+            ("Landroid/graphics/Color;", "rgb(III)I" | "argb(IIII)I") => {
+                let (alpha, offset) = if method.name == "argb" {
+                    (arg(0)?.int()? as u32, 1)
+                } else {
+                    (255, 0)
+                };
+                // API 21 shifts raw Java ints; it does not clamp or mask input components.
+                let color = (alpha << 24)
+                    | ((arg(offset)?.int()? as u32) << 16)
+                    | ((arg(offset + 1)?.int()? as u32) << 8)
+                    | (arg(offset + 2)?.int()? as u32);
+                result.push(Word::Bits(color));
             }
             (
                 "Landroid/content/res/ColorStateList;",
@@ -9223,6 +9244,62 @@ fn java_double(v: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::rgb_to_hsv;
+
+    #[test]
+    fn color_channels_and_packing_follow_java_argb_bits() {
+        use crate::{Runtime, heap::Word};
+        use droidless_formats::{apk::Apk, dex::Method};
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap(),
+        )
+        .unwrap();
+        let mut call = |name: &str, args: Vec<Word>| {
+            vm.invoke(
+                Method {
+                    class: "Landroid/graphics/Color;".into(),
+                    name: name.into(),
+                    parameters: vec!["I".into(); args.len()],
+                    returns: "I".into(),
+                },
+                args,
+                false,
+            )
+            .unwrap()[0]
+        };
+        for (name, expected) in [("alpha", 128), ("red", 18), ("green", 52), ("blue", 86)] {
+            assert_eq!(
+                call(name, vec![Word::Bits(0x80123456)]),
+                Word::from(expected)
+            );
+            assert_eq!(call(name, vec![Word::from(-1)]), Word::from(255));
+            assert_eq!(call(name, vec![Word::ZERO]), Word::ZERO);
+        }
+        assert_eq!(
+            call(
+                "argb",
+                vec![128, 18, 52, 86].into_iter().map(Word::from).collect()
+            ),
+            Word::Bits(0x80123456)
+        );
+        assert_eq!(
+            call(
+                "rgb",
+                vec![18, 52, 86].into_iter().map(Word::from).collect()
+            ),
+            Word::Bits(0xff123456)
+        );
+        assert_eq!(
+            call("rgb", vec![0, 0, 256].into_iter().map(Word::from).collect()),
+            Word::Bits(0xff000100)
+        );
+        assert_eq!(
+            call(
+                "argb",
+                vec![0, 0, 0, -1].into_iter().map(Word::from).collect()
+            ),
+            Word::from(-1)
+        );
+    }
 
     #[test]
     fn rgb_to_hsv_handles_primary_and_gray_colors() {

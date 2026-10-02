@@ -377,6 +377,11 @@ the API-21 RuntimeException that callers can catch. Selector alpha/theme items,
 dynamic native state colors and full recycle parity remain unsupported.
 [API-21 TypedArray](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/res/TypedArray.java).
 
+Color.alpha/red/green/blue extract the four unsigned ARGB bytes. rgb/argb retain
+API-21 raw Java shift/OR behavior without clamping input components. The bridge
+check covers signed colors, transparent/opaque values and out-of-range bit spill.
+[API-21 Color](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/graphics/java/android/graphics/Color.java).
+
 TextView.setTextAppearance uses the supplied Context (or the View Context for the
 one-argument alias), invokes virtual styled-array and setTextColor callbacks, then
 applies pixel size with text-layout invalidation only when changed. Color callbacks

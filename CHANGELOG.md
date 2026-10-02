@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Color channel extraction and RGB/ARGB packing now follow API-21 Java int bits,
+  including signed colors. Saved-folder focus reaches the original collapsed
+  label color calculation. Compiled bridge checks cover channel bytes and packing.
+
 - ViewGroup convenience overloads now dispatch the APK's real indexed binding
   callbacks during inflation. Cached Typeface state reaches native AppKit fonts.
   TextWatcher delivery uses real guest callbacks, UTF-16 deltas, retained buffers
