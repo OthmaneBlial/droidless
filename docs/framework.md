@@ -704,6 +704,13 @@ replacement, clearing and GC; ordinary Resources.getDrawable(0) still fails.
 TypedValue.getFloat reinterprets the data field's 32 bits, preserving signed zero,
 subnormals, infinity and NaN payloads. A compiled DEX check also reads a resolved
 theme float and survives GC; invalid receivers fail.
+TypedArray.getValue fills TypedValue with resolved scalar/string data and the
+last referenced resource ID, retaining complex resource references. Missing and
+explicit null values return false without changing the output. Compiled checks
+cover XML values, alias chains, theme snapshots, managed strings through GC,
+index/output faults and recovery. Asset cookies identify one virtual resource
+pool; density/configuration metadata uses the default configuration. Android
+asset-cookie and qualifier provenance and recycled-array faults remain incomplete.
 TableLayout/TableRow use the basic linear model. Attributes include IDs, text,
 resource references, width/height, weight, orientation, per-side padding, margins,
 text size/color, image `src`/`srcCompat`, gravity, enabled/visibility and XML
@@ -1093,8 +1100,9 @@ Closing the runtime dismisses remaining surfaces before stopping its message que
 This is the main-thread modal profile. Dialog OnKeyListener delivery, native
 window-focus callback delivery, state save/restore, arbitrary WindowManager
 add/remove operations, nonmodal/floating-window flags and composite foreground
-painting remain unsupported. The public Notepad APK reaches its own dialog
-onCreate and AppCompat content installation, then fails at FrameLayout.setForeground;
+painting remain unsupported. The public Notepad APK completes its own AppCompat
+dialog layout inflation, then fails at NestedScrollView.setClipToPadding at
+onCreate PC 0x019d;
 its confirmation dialog and folder deletion are not yet verified. Authored DEX
 contracts and real AppKit component checks cover the implemented surface behavior;
 physical interaction with a public dialog remains unverified.

@@ -1,5 +1,8 @@
-use droidless_formats::{apk::Apk, dex::Method};
-use droidless_runtime::{Runtime, heap::Word};
+use droidless_formats::{apk::Apk, dex::Method, xml::Value};
+use droidless_runtime::{
+    Runtime,
+    heap::{Data, Word},
+};
 
 fn dialog_surface_call(
     vm: &mut Runtime,
@@ -18,6 +21,94 @@ fn dialog_surface_call(
         args,
         false,
     )
+}
+
+#[test]
+fn compiled_typed_array_value_output_aliases_snapshots_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    let dangling = vm.heap.instance("Landroid/util/TypedValue;").unwrap();
+    let array = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/TypedValueContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "Landroid/content/res/TypedArray;".into(),
+            },
+            vec![vm.activity.unwrap()],
+            false,
+        )
+        .unwrap()[0];
+    let method = Method {
+        class: "Landroid/content/res/TypedArray;".into(),
+        name: "getValue".into(),
+        parameters: vec!["I".into(), "Landroid/util/TypedValue;".into()],
+        returns: "Z".into(),
+    };
+    let wrong = vm.heap.instance("Ljava/lang/Object;").unwrap();
+    for output in [Word::ZERO, Word::from(1), dangling, wrong] {
+        assert!(
+            vm.invoke(method.clone(), vec![array, Word::ZERO, output], false)
+                .is_err()
+        );
+        assert_eq!(vm.stack_depth(), 0);
+    }
+    let output = vm.heap.instance("Landroid/util/TypedValue;").unwrap();
+    for index in [-1, 9, i32::MAX] {
+        assert!(
+            vm.invoke(method.clone(), vec![array, Word::from(index), output], true)
+                .is_err()
+        );
+        assert!(vm.heap.get(output).unwrap().fields.is_empty());
+    }
+    assert!(
+        vm.invoke(
+            method.clone(),
+            vec![vm.activity.unwrap(), Word::ZERO, output],
+            false
+        )
+        .is_err()
+    );
+    let alias = vm
+        .apk
+        .resources
+        .entries
+        .values()
+        .find(|r| r.name == "drawable/sample_alias")
+        .unwrap()
+        .id;
+    let saved = vm.apk.resources.entries[&alias].value.clone();
+    let reference = Value {
+        kind: 1,
+        data: alias,
+        text: None,
+    };
+    vm.apk.resources.entries.get_mut(&alias).unwrap().value = Some(reference.clone());
+    let original = vm.heap.get(array).unwrap().data.clone();
+    vm.heap.get_mut(array).unwrap().data = Data::TypedArray(vec![Some(reference)]);
+    let error = vm
+        .invoke(method.clone(), vec![array, Word::ZERO, output], true)
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("typed value resource reference cycle or depth limit"));
+    assert!(vm.heap.get(output).unwrap().fields.is_empty());
+    vm.apk.resources.entries.get_mut(&alias).unwrap().value = saved;
+    vm.heap.get_mut(array).unwrap().data = original;
+    assert_eq!(
+        vm.invoke(method, vec![array, Word::ZERO, output], true)
+            .unwrap(),
+        [Word::from(1)]
+    );
+    assert_eq!(
+        vm.heap.get(output).unwrap().fields["Landroid/util/TypedValue;->data:I"],
+        [Word::Bits(0.75f32.to_bits())]
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.close().unwrap();
+    vm.collect();
+    assert!(vm.heap.get(array).is_err() && vm.heap.get(output).is_err());
 }
 
 #[test]

@@ -4950,7 +4950,72 @@ impl Runtime {
                     }
                     "getTextArray(I)[Ljava/lang/CharSequence;" => result.push(Word::ZERO),
                     "getValue(ILandroid/util/TypedValue;)Z" => {
-                        result.push(Word::from(i32::from(value.is_some())))
+                        let output = arg(2)?;
+                        ensure!(
+                            index.is_some_and(|index| index < length),
+                            fault(
+                                "Ljava/lang/ArrayIndexOutOfBoundsException;",
+                                "typed value index"
+                            )
+                        );
+                        let mut value = value
+                            .map(|value| self.themed_attribute(receiver, &value))
+                            .transpose()?;
+                        let mut resource_id = 0;
+                        let mut seen = std::collections::BTreeSet::new();
+                        while let Some(current) =
+                            value.as_ref().filter(|v| v.kind == 1 && v.data != 0)
+                        {
+                            ensure!(
+                                seen.len() < 32 && seen.insert(current.data),
+                                "typed value resource reference cycle or depth limit"
+                            );
+                            resource_id = current.data;
+                            value = Some(
+                                if let Some(entry) = self.apk.resources.entries.get(&resource_id) {
+                                    if let Some(next) = &entry.value {
+                                        self.themed_attribute(receiver, next)?
+                                    } else {
+                                        break; // Complex resources remain references, as in the API-21 resource model.
+                                    }
+                                } else {
+                                    self.attribute(current)?
+                                },
+                            );
+                        }
+                        if let Some(value) =
+                            value.filter(|v| v.kind != 0 && !(v.kind == 1 && v.data == 0))
+                        {
+                            let class = "Landroid/util/TypedValue;";
+                            ensure!(
+                                self.is_a(&self.heap.get(output)?.class, class),
+                                "getValue expects TypedValue output"
+                            );
+                            let string = if value.kind == 3 {
+                                self.heap.string(value.display())?
+                            } else {
+                                Word::ZERO
+                            };
+                            let fields = &mut self.heap.get_mut(output)?.fields;
+                            // ponytail: one virtual resource pool/default configuration; qualifier provenance requires parser metadata.
+                            for (name, data) in [
+                                ("type", i32::from(value.kind)),
+                                ("data", value.data as i32),
+                                ("resourceId", resource_id as i32),
+                                ("assetCookie", 1),
+                                ("changingConfigurations", 0),
+                                ("density", 0),
+                            ] {
+                                fields.insert(format!("{class}->{name}:I"), vec![Word::from(data)]);
+                            }
+                            fields.insert(
+                                format!("{class}->string:Ljava/lang/CharSequence;"),
+                                vec![string],
+                            );
+                            result.push(Word::from(1));
+                        } else {
+                            result.push(Word::ZERO);
+                        }
                     }
                     "hasValue(I)Z" => result.push(Word::from(i32::from(value.is_some()))),
                     "length()I" | "getIndexCount()I" => result.push(Word::from(length as i32)),

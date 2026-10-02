@@ -1,0 +1,5 @@
+<probe xmlns:android="http://schemas.android.com/apk/res/android"
+    android:label="Typed output" android:alpha="0.75" android:width="24dp"
+    android:enabled="false" android:textColor="#ff203040"
+    android:src="@drawable/sample_alias" android:hint="@null"
+    android:theme="@style/DefaultsTheme" />
