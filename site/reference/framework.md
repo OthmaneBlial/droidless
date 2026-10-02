@@ -363,6 +363,37 @@ recomputed; Android state caching and complete selection/window states remain
 outside this profile.
 [API-21 ViewGroup](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
 
+Context/Theme styled-array calls retain actual guest theme dispatch and copy style
+IDs into each array. Later applyStyle calls do not alter an existing array's color
+resolution. getColor/getColorStateList handle inline colors, resource aliases,
+flat ordered selectors, theme aliases, missing/default and null values.
+Framework white/black/transparent references and APK aliases to them resolve
+through the shared bounded resource lookup; other framework color profiles remain
+unsupported.
+[API-21 framework colors](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/res/res/values/colors.xml),
+[public resource IDs](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/res/res/values/public.xml).
+Invalid indices raise guest ArrayIndexOutOfBoundsException; unresolved theme aliases raise
+the API-21 RuntimeException that callers can catch. Selector alpha/theme items,
+dynamic native state colors and full recycle parity remain unsupported.
+[API-21 TypedArray](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/res/TypedArray.java).
+
+TextView.setTextAppearance uses the supplied Context (or the View Context for the
+one-argument alias), invokes virtual styled-array and setTextColor callbacks, then
+applies pixel size with text-layout invalidation only when changed. Color callbacks
+precede size changes; guest faults preserve that ordering. getTextSize reports the
+retained pixels. Hint/link/shadow appearance, fonts and complete styling remain
+outside this color/size profile. Callback objects stay rooted across GC and faults.
+[API-21 TextView](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/TextView.java).
+
+ViewGroup.addView(child,width,height) invokes the virtual default layout factory,
+sets canonical width/height fields and calls virtual indexed addView with index -1.
+Parameter identity survives guest callbacks and GC. A null factory raises the
+API-21 NullPointerException; callback faults propagate with temporary roots cleared.
+Default factories cover ViewGroup, FrameLayout, LinearLayout's orientations,
+TableLayout and TableRow, including their parameter types and default public fields.
+This reuses existing indexed attachment rather than adding a separate hierarchy.
+[API-21 ViewGroup](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
+
 Context's cached input_method service exposes a hardware-keyboard profile.
 showSoftInput(View, flags) and hideSoftInputFromWindow(token, flags) return false
 because no software input method is served. Nullable targets are accepted;

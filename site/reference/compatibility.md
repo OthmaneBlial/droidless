@@ -69,11 +69,13 @@ callback order, AttributeSet identity, ViewStubs, GC, faults and bounded chains.
 Folder input now uses generic touch focus and the cached hardware-keyboard
 service, whose software show/hide requests return false. Tapping the original
 editor opens its Done action; that listener writes exactly one named Folder row.
-New-row construction now passes TextPaint and child drawable-state aggregation.
-TextInputLayout.setErrorEnabled then rejects unsupported error-label text
-appearance color/theme values. Both exact seed/copy note rows remain unchanged.
-Complete folder creation/editing and physical folder input remain unverified; software keyboards
-are not implemented.
+New-row construction passes TextPaint, child drawable-state aggregation, themed
+text appearance and sized child attachment. The APK catches the API-21 unresolved
+theme RuntimeException and applies its own fallback appearance. Headless creation
+now displays exactly one named folder, reopens it after a fresh process and returns
+to Notes through Back. Both exact seed/copy note rows remain unchanged.
+Folder editing/deletion and physical folder input remain unverified; software
+keyboards are not implemented.
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree

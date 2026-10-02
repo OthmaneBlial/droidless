@@ -2,11 +2,19 @@
 
 ## Unreleased
 
+- Typed colors now resolve through actual guest Context/Theme callbacks and copied
+  theme snapshots. TextView appearance applies color and pixel size; unresolved
+  theme values raise the catchable API-21 RuntimeException. Framework white, black
+  and transparent colors resolve through APK aliases. Sized child attachment
+  invokes virtual default factories and indexed addView with GC/fault cleanup.
+  The unchanged Notepad APK creates a visible folder, reopens it after restart and
+  returns to both exact notes through Back. Editing/deletion and native folder
+  input remain unverified.
 - TextPaint now shares native Paint inheritance, constructor flags/color state
   and canonical public fields. Child drawable-state aggregation invokes actual
   guest callbacks, retains arrays through GC, propagates faults and rejects
   cycles/deep trees. Recursive state calls use the small UI dispatcher. The
-  unchanged Notepad saved-folder row now reaches error-label text appearance.
+  unchanged Notepad saved-folder row now passes error-label text appearance.
 - Descendant Rect conversion now follows managed layout/scroll state in both
   directions, with signed Java overflow, ancestry faults and bounded chains.
   Rect dimensions and resource backgrounds use real Context/Resources/View
@@ -16,8 +24,8 @@
   fault cleanup. The cached input_method service reports software show/hide as
   unavailable in the hardware-keyboard profile. Generic editor touch focus
   invokes the original Notepad focus/Done callbacks and persists one named folder.
-  New-row layout needs error-label color/theme appearance support; both exact notes remain unchanged. Complete
-  creation/editing and native folder input remain unverified.
+  New-row layout now completes and both exact notes remain unchanged. Folder
+  editing/deletion and native folder input remain unverified.
 
 - Native Notepad now selects an existing row with the mouse, accepts keyboard
   title/body edits, saves through Back and reopens both exact fields after a

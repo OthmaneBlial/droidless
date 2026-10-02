@@ -1952,3 +1952,56 @@ preservation. The rebuilt unsigned development bundle matches the optimized CLI
 byte for byte (SHA-256 `73da902041deb1674cdf422590e93b162cd4f62f2c73c6ba2cccee63e07b9e86`). No new native folder interaction or
 public-release update is claimed. GitHub Actions remain disabled, and the 50%
 checkpoint remains active.
+
+## Current-source themed folder creation and restart
+
+Date: 2026-10-02. Current source, beyond the published v0.1.0 archive.
+
+Typed color calls now invoke the guest Context's theme getter and copy the style
+snapshot into each TypedArray. Compiled checks cover inline colors, ordered
+selectors, resource/theme aliases, null/default values, theme changes after array
+creation, invalid indices, callback GC and fault cleanup. TextView appearance
+uses the supplied Context, invokes the actual color setter and changes pixel size
+with layout invalidation only when needed. The original API-21 unresolved theme
+value raises RuntimeException, so Notepad executes its own caught fallback style.
+Hint/link/shadow appearance, fonts, dynamic native state colors and full styled
+array recycle parity remain outside this profile.
+
+The first complete public replay exposed a SwpieView vector setup dependency on
+framework color/white. The shared bounded lookup now resolves the fixed API-21
+white, black and transparent values, including APK aliases. The compiled color
+contract checks typed colors/lists and Resources getters against those exact
+ARGB values. Zero getColor IDs and unknown framework colors remain explicit
+failures. The unchanged SwpieView document replay again decodes three images.
+
+Sized ViewGroup attachment invokes the virtual default factory, retains the same
+layout-parameter object, sets canonical width/height fields and invokes virtual
+indexed addView with index -1. Compiled checks cover default FrameLayout,
+LinearLayout and table parameter types/values, orientation, guest overrides,
+callback GC, null factories, thrown callbacks, recovery and root cleanup. The
+baseline failed at the missing LinearLayout default factory; the completed
+contract and existing touch/inflater/widget checks pass.
+
+The pinned unchanged Notepad APK (SHA-256
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`)
+now completes its original folder editor/Done callbacks and renders exactly one
+visible row, ID 1/Runtime folder. A separate fresh-data optimized probe creates
+the folder, opens its saved row in a fresh process, then opens it and returns
+through Back in another fresh process. All three exit zero. New SQLite
+connections confirm exactly one Folder and preserve both immutable/copied note
+IDs, titles and bodies after each phase. The permanent public replay also checks
+the saved row's visibility and viewport bounds, restart, Back and exact rows.
+No APK patch or class alias is used. Folder editing/deletion and fresh physical
+folder input remain unverified; creation and saved-row restart/Back are now true
+in the catalog. This does not establish Android-wide styling or UI parity.
+
+The final local gate passes 119 Rust tests, Clippy with warnings rejected,
+optimized workspace/document-replay builds and 4,096 seeded parser mutations.
+The complete optimized public replay covers both calculators, image/grid/result
+fixtures, SwpieView folder/viewer/Back/gestures and its slideshow diagnosis, plus
+Notepad save/restart, existing-note editing, Delete, timed feedback, Undo, drawer
+settlement/Back, empty-folder opening/Back, saved-folder creation/restart/Back and
+malformed-body preservation. The refreshed unsigned development bundle matches
+the optimized CLI byte for byte (SHA-256 `9aacb1099a41e08ec5246341d6ffd477438b612040d8f0e36c5bf4f57cd51ec4`).
+No new physical folder interaction or public release is claimed. GitHub Actions
+remain disabled, and the 50% checkpoint remains active.

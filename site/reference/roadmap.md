@@ -73,9 +73,11 @@ The following are objectives, not completed capability claims.
    creation now passes descendant coordinates, signed Rect dimensions and resource
    backgrounds. Generic touch focus opens the original editor/Done action and
    its callback persists one named folder. TextPaint and bounded child drawable
-   states now pass. New-row layout needs error-label text appearance color/theme
-   support through TextInputLayout.setErrorEnabled. Both exact note rows remain unchanged. Complete folder
-   creation/editing, software IME and native input remain ahead.
+   states now pass. Themed text appearance preserves the APK's error-label fallback;
+   sized child attachment invokes its virtual factory and indexed addView. Headless
+   creation displays the saved folder, reopens it after restart and returns to both
+   exact notes through Back. Folder editing/deletion, software IME and native input
+   remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

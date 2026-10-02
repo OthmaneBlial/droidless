@@ -54,11 +54,11 @@ to the list. A fresh native process reopens the exact revised title and body.
 🗂️ Current source also opens the original Edit Folders screen in headless replay.
 Installed AppCompat inflater callbacks construct its own widgets and bind its
 editor/listener. Tapping the editor now runs its focus callback, and the original
-Done action persists one named folder in SQLite. Rendering that new row stops at
-unsupported error-label color/theme appearance; both exact note rows remain
-unchanged. Complete folder creation/editing and native folder input remain
-unverified.
-[Paint, child-state and folder evidence](docs/verification.md#current-source-textpaint-and-child-drawable-states).
+Done action creates one visible named folder in SQLite. A fresh process reopens
+the saved row, and Back restores both unchanged notes. The APK's own error-label
+fallback now runs through themed text appearance and sized child attachment.
+Folder editing/deletion and native folder input remain unverified.
+[Folder creation and restart evidence](docs/verification.md#current-source-themed-folder-creation-and-restart).
 
 ```sh
 sh tools/fetch-notepad.sh
