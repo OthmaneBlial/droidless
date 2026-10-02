@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- ContextThemeWrapper now copies the base theme into an independent cached theme,
+  invokes actual guest theme callbacks and clones the base inflater with its
+  factories and wrapper context. Supported ContextWrapper calls delegate to the
+  actual base. New themes start empty; Theme.setTo retains destination ownership.
+  Compiled checks cover isolation, immutable arrays, default IDs, GC, faults,
+  invalid constructors and bounded recursive wrappers. Dialog windows and folder
+  deletion remain unsupported or unverified.
+
 - Native editor first-responder transitions now request actual guest View focus.
   AppKit retains selection; rejected focus cancels editing and callback faults
   stop the host. Drawing suppresses focus reentry. The CLI adds --focus-at INDEX

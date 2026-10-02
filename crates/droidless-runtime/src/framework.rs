@@ -184,6 +184,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/content/res/Resources$Theme;",
             "Landroid/content/res/Configuration;",
             "Landroid/content/ContextWrapper;",
+            "Landroid/view/ContextThemeWrapper;",
             "Landroid/content/res/TypedArray;",
             "Landroid/util/TypedValue;",
             "Landroid/util/StateSet;",
@@ -1547,6 +1548,9 @@ impl Runtime {
         Ok(object)
     }
     pub(crate) fn native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+        if let Some(result) = self.context_native(method, args)? {
+            return Ok(Some(result));
+        }
         if let Some(result) = self.typography_native(method, args)? {
             return Ok(Some(result));
         }
@@ -4160,15 +4164,11 @@ impl Runtime {
                         .get_mut(theme)?
                         .fields
                         .insert("droidless:theme:context".into(), vec![context]);
-                    let styles = self.theme_styles(context)?;
-                    self.heap.get_mut(theme)?.fields.insert(
-                        "droidless:theme:styles".into(),
-                        styles
-                            .into_iter()
-                            .map(|style| Word::from(style as i32))
-                            .collect(),
-                    );
                 }
+                self.heap
+                    .get_mut(theme)?
+                    .fields
+                    .insert("droidless:theme:styles".into(), vec![]);
                 result.push(theme);
             }
             (
@@ -4526,7 +4526,32 @@ impl Runtime {
                 "Landroid/content/res/Resources$Theme;",
                 "setTo(Landroid/content/res/Resources$Theme;)V",
             ) => {
-                self.heap.get_mut(receiver)?.fields = self.heap.get(arg(1)?)?.fields.clone();
+                let source = arg(1)?;
+                ensure!(
+                    self.is_a(
+                        &self.heap.get(receiver)?.class,
+                        "Landroid/content/res/Resources$Theme;"
+                    ),
+                    "Theme.setTo expects Theme receiver"
+                );
+                ensure!(
+                    self.is_a(
+                        &self.heap.get(source)?.class,
+                        "Landroid/content/res/Resources$Theme;"
+                    ),
+                    "Theme.setTo expects Theme"
+                );
+                let styles = self
+                    .heap
+                    .get(source)?
+                    .fields
+                    .get("droidless:theme:styles")
+                    .cloned()
+                    .unwrap_or_default();
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:theme:styles".into(), styles);
             }
             (
                 "Landroid/content/res/Resources$Theme;",
@@ -5191,7 +5216,32 @@ impl Runtime {
                 "attachBaseContext(Landroid/content/Context;)V",
             ) => {
                 let context = arg(1)?;
-                self.heap.get(context)?;
+                ensure!(
+                    self.is_a(
+                        &self.heap.get(receiver)?.class,
+                        "Landroid/content/ContextWrapper;"
+                    ),
+                    "ContextWrapper expects wrapper receiver"
+                );
+                ensure!(
+                    context == Word::ZERO
+                        || self.is_a(&self.heap.get(context)?.class, "Landroid/content/Context;"),
+                    "ContextWrapper expects Context"
+                );
+                if method.name == "attachBaseContext" {
+                    ensure!(
+                        self.heap
+                            .get(receiver)?
+                            .fields
+                            .get("droidless:context:base")
+                            .and_then(|words| words.first())
+                            .is_none_or(|base| *base == Word::ZERO),
+                        fault(
+                            "Ljava/lang/IllegalStateException;",
+                            "Base context already set"
+                        )
+                    );
+                }
                 self.heap
                     .get_mut(receiver)?
                     .fields

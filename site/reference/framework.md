@@ -710,9 +710,26 @@ that inflater's context when replacing itself. Guest callbacks and constructors
 retain temporary roots through GC and release them on faults. Compiled checks
 cover callback order, attributes, clones, substitution, parent arguments,
 ViewStub replacement, the merge bound, recovery and rejected worker UI access.
-Private factories, filters, theme wrapping and full custom-inflater subclass
+Private factories, filters, automatic XML theme wrapping and full custom-inflater subclass
 behavior remain unsupported.
 [API-21 reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/LayoutInflater.java).
+
+ContextThemeWrapper supports explicit/default constructors, late base attachment,
+cached delegated Resources, a separate lazily copied Theme, setTheme and virtual
+onApplyThemeResource callbacks. API-21 default theme IDs follow the actual base
+ApplicationInfo target SDK. Resources.newTheme starts empty; Theme.setTo copies
+style state while retaining the destination's resource context. Existing typed
+arrays retain their independent theme snapshots after either context changes.
+The wrapper clones the base's virtual inflater service into itself, retaining
+installed factories and cached identity. Other supported ContextWrapper services,
+resources and package/storage calls delegate virtually to the attached base.
+Null bases, repeated attachment, wrong argument types, callback faults and
+wrapper chains are checked; native delegation is bounded to 32 synchronous calls.
+Temporary roots retain callbacks through GC and unwind on errors. Themed-wrapper
+operations use the main-thread profile. Configuration overrides, complete system
+theme resources, automatic XML theme wrapping and Dialog windows remain unsupported.
+[ContextThemeWrapper reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/ContextThemeWrapper.java)
+and [Resources/Theme reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/res/Resources.java).
 
 `Resources.getXml` opens packaged binary XML as an `XmlResourceParser` cursor.
 The current subset covers document/tag/text events, namespaces, depth and line

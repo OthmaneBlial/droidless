@@ -2,6 +2,120 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_themed_context_snapshots_factories_callbacks_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let wrapper = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/ThemedContextContract;".into(),
+                name: "run".into(),
+                parameters: vec![],
+                returns: "Landroid/view/ContextThemeWrapper;".into(),
+            },
+            vec![],
+            false,
+        )
+        .unwrap()[0];
+    let method = Method {
+        class: "Landroid/content/Context;".into(),
+        name: "getResources".into(),
+        parameters: vec![],
+        returns: "Landroid/content/res/Resources;".into(),
+    };
+    let cycle = vm
+        .heap
+        .instance("Landroid/content/ContextWrapper;")
+        .unwrap();
+    vm.heap
+        .get_mut(cycle)
+        .unwrap()
+        .fields
+        .insert("droidless:context:base".into(), vec![cycle]);
+    let error = vm.invoke(method.clone(), vec![cycle], true).unwrap_err();
+    assert!(
+        format!("{error:#}").contains("Context wrapper nesting limit"),
+        "{error:#}"
+    );
+    vm.invoke(method, vec![wrapper], true).unwrap();
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(wrapper).is_err(),
+        "Context wrapper leaked temporary roots"
+    );
+    assert!(
+        vm.heap.get(cycle).is_err(),
+        "Recursive wrapper leaked temporary roots"
+    );
+}
+
+#[test]
+fn themed_context_default_ids_and_invalid_constructor_arguments() {
+    let constructor = Method {
+        class: "Landroid/view/ContextThemeWrapper;".into(),
+        name: "<init>".into(),
+        parameters: vec!["Landroid/content/Context;".into(), "I".into()],
+        returns: "V".into(),
+    };
+    for (target, expected) in [
+        (10, 16973829),
+        (13, 16973931),
+        (28, 16974120),
+        (10000, 16974143),
+    ] {
+        let mut apk = Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap();
+        apk.manifest.target_sdk = Some(target);
+        let mut vm = Runtime::new(apk).unwrap();
+        let base = vm.heap.instance("Landroid/app/Activity;").unwrap();
+        let wrapper = vm.heap.instance(&constructor.class).unwrap();
+        let invalid = vm.heap.instance("Ljava/lang/Object;").unwrap();
+        for args in [
+            vec![wrapper, invalid, Word::ZERO],
+            vec![invalid, base, Word::ZERO],
+            vec![wrapper, base, invalid],
+        ] {
+            assert!(vm.invoke(constructor.clone(), args, false).is_err());
+            assert_eq!(vm.stack_depth(), 0);
+        }
+        vm.invoke(constructor.clone(), vec![wrapper, base, Word::ZERO], false)
+            .unwrap();
+        let id = Method {
+            class: constructor.class.clone(),
+            name: "getThemeResId".into(),
+            parameters: vec![],
+            returns: "I".into(),
+        };
+        assert_eq!(
+            vm.invoke(id.clone(), vec![wrapper], true).unwrap(),
+            [Word::ZERO]
+        );
+        vm.invoke(
+            Method {
+                class: constructor.class.clone(),
+                name: "getTheme".into(),
+                parameters: vec![],
+                returns: "Landroid/content/res/Resources$Theme;".into(),
+            },
+            vec![wrapper],
+            true,
+        )
+        .unwrap();
+        assert_eq!(
+            vm.invoke(id, vec![wrapper], true).unwrap(),
+            [Word::from(expected)]
+        );
+        assert_eq!(vm.stack_depth(), 0);
+        vm.collect();
+        assert!(
+            vm.heap.get(wrapper).is_err(),
+            "Failed constructor leaked roots"
+        );
+    }
+}
+
+#[test]
 fn compiled_host_editor_focus_callbacks_gc_rejection_and_failure() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

@@ -1163,6 +1163,7 @@ impl Runtime {
             "Landroid/app/Activity;" | "Landroid/app/Application;" => {
                 "Landroid/content/ContextWrapper;"
             }
+            "Landroid/view/ContextThemeWrapper;" => "Landroid/content/ContextWrapper;",
             "Landroid/content/ContextWrapper;" => "Landroid/content/Context;",
             _ if class.starts_with('[') => "Ljava/lang/Object;",
             _ if class != "Ljava/lang/Object;" && !class.starts_with('[') => "Ljava/lang/Object;",
