@@ -404,34 +404,66 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             if retained != rows or original != rows or folders != [(1, saved_name)]:
                 raise SystemExit(f"Notepad folder {phase} changed the saved folder or seed/copy notes")
 
-        # Execute the actual saved-row left-button listener, after focusing its editor.
-        # Require real guest dialog creation/attachment and both scroll-indicator queries.
-        deletion = subprocess.run([
-            str(args.binary), "run", "--headless", "--trace-methods", "--trace-framework", "--size", "390x844", "--data-dir", str(folder_data),
-            *open_folders, "--focus-at", "1", "--tap", "24", "128", str(notepad),
-        ], text=True, capture_output=True, timeout=120)
-        dialog_blocker = "unsupported method Landroid/text/Layout;->getEllipsisCount(I)I"
-        if deletion.returncode != 1 or dialog_blocker not in deletion.stderr \
-                or "EditFolderViewHolder;->clickLeftButton" not in deletion.stderr \
-                or "Landroid/support/v7/widget/DialogTitle;->onMeasure(II)V [classes.dex, PC 0x0012]" not in deletion.stderr \
-                or "Landroid/support/v7/widget/ContentFrameLayout;->onMeasure(II)V [classes.dex, PC 0x007d]" not in deletion.stderr:
-            raise SystemExit("Notepad folder-delete boundary changed; inspect and update its compatibility evidence")
-        for stage in ["Landroid/view/ViewGroup;->setClipToPadding(Z)V",
-                      "Landroid/app/Dialog;->onStart()V", "Landroid/app/Dialog;->onAttachedToWindow()V"]:
-            if "framework: " + stage not in deletion.stderr:
-                raise SystemExit("Notepad dialog did not complete " + stage)
-        queries = [line for line in deletion.stderr.splitlines()
-                   if line.startswith("framework: Landroid/view/View;->canScrollVertically(I)Z ")]
-        if not all(any(line.endswith(", Bits(" + direction + ")]") for line in queries)
-                   for direction in ["4294967295", "1"]):
-            raise SystemExit("Notepad dialog did not query both original scroll-indicator directions")
-        with sqlite3.connect(folder_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
-            retained = connection.execute("SELECT id,title,body FROM Note ORDER BY id").fetchall()
-            folders = connection.execute("SELECT id,name FROM Folder ORDER BY id").fetchall()
-        with sqlite3.connect(database) as connection:
-            original = connection.execute("SELECT id,title,body FROM Note ORDER BY id").fetchall()
-        if retained != rows or original != rows or folders != [(1, "Confirmed folder name")]:
-            raise SystemExit("Notepad unsupported folder-delete dialog changed a saved folder or note")
+        # Replay the original modal buttons and persist the result, using only this copy.
+        show_delete = open_folders + ["--focus-at", "1", "--tap", "24", "128"]
+        for phase, actions, deleted in [
+            ("shown", show_delete, False),
+            ("cancel", show_delete + ["--click", "Cancel", "--advance-ms", "250"], False),
+            ("cancel-restart", open_folders, False),
+            ("cancel-back", open_folders + ["--back"], False),
+            ("confirmed", show_delete + ["--click", "Delete Folder", "--advance-ms", "250"], True),
+            ("delete-restart", open_folders, True),
+            ("delete-back", open_folders + ["--back"], True),
+        ]:
+            tracing = ["--trace-methods", "--trace-framework"] if phase in ("shown", "confirmed") else []
+            process = subprocess.run([
+                str(args.binary), "run", "--headless", *tracing, "--size", "390x844", "--data-dir", str(folder_data),
+                *actions, str(notepad),
+            ], text=True, capture_output=True, check=True, timeout=120)
+            tree = json.loads(process.stdout)
+            visible = [node for node, alpha in visible_nodes(tree)
+                       if alpha > 0 and node["rect"]["width"] > 0 and node["rect"]["height"] > 0]
+            labels = [node["view"]["text"] for node in visible]
+            if phase == "shown":
+                title = "Delete folder?"
+                message = "Folder 'Confirmed folder name' will be deleted however notes in this folder will remain safe"
+                if not {title, message, "Cancel", "Delete Folder"} <= set(labels):
+                    raise SystemExit("Notepad did not display its original complete folder-delete dialog")
+                for label in ["Cancel", "Delete Folder"]:
+                    buttons = [node for node in visible if node["view"]["text"] == label
+                               and node["view"]["kind"] == "Button" and node["view"]["listener"] is not None]
+                    if len(buttons) != 1:
+                        raise SystemExit("Notepad dialog did not bind its original " + label + " button")
+                if "EditFolderViewHolder;->clickLeftButton" not in process.stderr:
+                    raise SystemExit("Notepad did not execute its original saved-folder delete listener")
+                for stage in ["Landroid/view/ViewGroup;->setClipToPadding(Z)V",
+                              "Landroid/app/Dialog;->onStart()V", "Landroid/app/Dialog;->onAttachedToWindow()V",
+                              "Landroid/text/Layout;->getEllipsisCount(I)I"]:
+                    if "framework: " + stage not in process.stderr:
+                        raise SystemExit("Notepad dialog did not complete " + stage)
+                queries = [line for line in process.stderr.splitlines()
+                           if line.startswith("framework: Landroid/view/View;->canScrollVertically(I)Z ")]
+                if not all(any(line.endswith(", Bits(" + direction + ")]") for line in queries)
+                           for direction in ["4294967295", "1"]):
+                    raise SystemExit("Notepad dialog did not query both original scroll-indicator directions")
+            elif phase.endswith("back"):
+                if not {"Notes", revised_title, probe_titles[1]} <= set(labels):
+                    raise SystemExit("Notepad folder-delete Back did not restore both note titles")
+            elif "Edit Folders" not in labels or labels.count("Confirmed folder name") != (0 if deleted else 1):
+                raise SystemExit("Notepad folder-delete " + phase + " displayed an incorrect saved-folder list")
+            if phase != "shown" and {"Delete folder?", "Cancel", "Delete Folder"} & set(labels):
+                raise SystemExit("Notepad folder-delete modal remained after " + phase)
+            if phase == "confirmed" and "framework: Landroid/app/Dialog;->dismiss()V" not in process.stderr:
+                raise SystemExit("Notepad confirmation did not dismiss its original Dialog")
+            with sqlite3.connect(folder_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
+                retained = connection.execute("SELECT id,title,body FROM Note ORDER BY id").fetchall()
+                folders = connection.execute("SELECT id,name FROM Folder ORDER BY id").fetchall()
+            with sqlite3.connect(database) as connection:
+                original = connection.execute("SELECT id,title,body FROM Note ORDER BY id").fetchall()
+            expected_folders = [] if deleted else [(1, "Confirmed folder name")]
+            if retained != rows or original != rows or folders != expected_folders:
+                raise SystemExit("Notepad folder-delete " + phase + " changed exact notes, the seed or the wrong folder state")
+        dialog_blocker = None
 
     survivor = next(row for row in rows if row[0] != original_id)
     # Original Undo calls note.save(); the APK's INSERT omits its auto-increment ID.
@@ -552,9 +584,14 @@ report["headless_folder_delete_dialog_layout_inflation_verified"] = True
 report["headless_folder_delete_dialog_clipping_setup_verified"] = True
 report["headless_folder_delete_dialog_start_attachment_verified"] = True
 report["headless_folder_delete_dialog_scroll_queries_verified"] = True
-report["headless_folder_deletion_verified"] = False
+report["headless_folder_delete_dialog_title_measurement_verified"] = True
+report["headless_folder_delete_dialog_presentation_verified"] = True
+report["headless_folder_delete_cancel_restart_back_verified"] = True
+report["headless_folder_deletion_verified"] = True
+report["headless_folder_delete_restart_back_verified"] = True
+report["folder_delete_retains_exact_notes"] = True
+report["native_folder_delete_dialog_input_verified"] = False
 report["folder_deletion_first_blocker"] = dialog_blocker
-report["folder_delete_failure_retains_exact_notes_and_folder"] = True
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
@@ -570,7 +607,7 @@ print("PASS Notepad: original editor/Done creates one visible folder; saved row 
 print("PASS Notepad: saved-row focus and unconfirmed input complete; restart discards that input and preserves exact notes/folder")
 print("PASS Notepad: host editor focus runs guest callbacks; pending input is discarded on restart with exact notes/folder retained")
 print("PASS Notepad: original rename confirmation completes; same folder ID/name survive restart and Back with both exact notes")
-print("PASS Notepad diagnostic: original dialog completes clipping/start/attachment and both scroll queries; title measurement stops at getEllipsisCount, DialogTitle PC 0x0012; exact notes/folder retained")
+print("PASS Notepad: original folder-delete modal displays title/message/buttons; Cancel retains folder, confirmation deletes it, restart/Back preserve both exact notes")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.
