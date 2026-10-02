@@ -28,6 +28,7 @@
     <attr name="defaultWidgetStyle" format="reference" />
     <attr name="defaultWidgetAlias" format="reference" />
     <style name="DefaultsTheme">
+        <item name="android:disabledAlpha">0.75</item>
         <item name="defaultWidgetStyle">@style/DefaultsSelected</item>
         <item name="defaultWidgetAlias">?attr/defaultWidgetStyle</item>
         <item name="android:label">Theme value</item>

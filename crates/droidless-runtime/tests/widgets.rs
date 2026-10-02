@@ -21,6 +21,74 @@ fn dialog_surface_call(
 }
 
 #[test]
+fn compiled_typed_value_float_bits_theme_gc_and_invalid_receivers() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    for bits in [
+        0,
+        0x8000_0000,
+        0x3f40_0000,
+        1,
+        0x7f80_0000,
+        0xff80_0000,
+        0x7fc0_0042,
+    ] {
+        let result = vm
+            .invoke(
+                Method {
+                    class: "Lorg/droidless/images/DialogWindowContract;".into(),
+                    name: "readFloat".into(),
+                    parameters: vec!["I".into()],
+                    returns: "F".into(),
+                },
+                vec![Word::Bits(bits)],
+                false,
+            )
+            .unwrap();
+        assert_eq!(result, [Word::Bits(bits)]);
+    }
+    vm.launch().unwrap();
+    let result = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/DialogWindowContract;".into(),
+                name: "readThemeFloat".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "F".into(),
+            },
+            vec![vm.activity.unwrap()],
+            false,
+        )
+        .unwrap();
+    assert_eq!(result, [Word::Bits(0.75f32.to_bits())]);
+    let method = Method {
+        class: "Landroid/util/TypedValue;".into(),
+        name: "getFloat".into(),
+        parameters: vec![],
+        returns: "F".into(),
+    };
+    let wrong = vm.heap.instance("Ljava/lang/Object;").unwrap();
+    let dangling = vm.heap.instance("Landroid/util/TypedValue;").unwrap();
+    vm.collect();
+    for receiver in [
+        Word::ZERO,
+        Word::from(1),
+        wrong,
+        dangling,
+        vm.activity.unwrap(),
+    ] {
+        assert!(vm.invoke(method.clone(), vec![receiver], false).is_err());
+        assert_eq!(vm.stack_depth(), 0);
+    }
+    let value = vm.heap.instance("Landroid/util/TypedValue;").unwrap();
+    assert_eq!(vm.invoke(method, vec![value], true).unwrap(), [Word::ZERO]);
+    vm.close().unwrap();
+    vm.collect();
+    assert!(vm.heap.get(value).is_err());
+}
+
+#[test]
 fn compiled_xml_null_images_and_resource_replacement_clearing() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

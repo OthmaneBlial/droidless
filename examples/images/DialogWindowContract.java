@@ -76,6 +76,18 @@ public final class DialogWindowContract {
         int color=a.getColor(0,0); a.recycle(); return color;
     }
     public static void recursive(Dialog dialog,boolean enabled) { ((Probe)dialog).recurse=enabled; }
+    public static float readFloat(int bits) {
+        TypedValue value=new TypedValue(); value.data=bits;
+        System.gc(); return value.getFloat();
+    }
+    public static float readThemeFloat(Activity activity) {
+        Resources.Theme theme=activity.getResources().newTheme();
+        theme.applyStyle(R.style.DefaultsTheme,true);
+        TypedValue value=new TypedValue();
+        check(theme.resolveAttribute(android.R.attr.disabledAlpha,value,true)
+            && value.type==TypedValue.TYPE_FLOAT,"theme float value");
+        System.gc(); return value.getFloat();
+    }
     public static Dialog run(Activity activity) {
         int[] empty=EmptyText.states(); System.gc();
         check(empty.length==0 && empty==EmptyFrame.states() && Shadow.states().length==1

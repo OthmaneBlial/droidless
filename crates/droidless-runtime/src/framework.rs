@@ -5681,6 +5681,20 @@ impl Runtime {
             ("Landroid/util/TypedValue;", "<init>()V") => {
                 self.heap.get(receiver)?;
             }
+            ("Landroid/util/TypedValue;", "getFloat()F") => {
+                let value = self.heap.get(receiver)?;
+                ensure!(
+                    self.is_a(&value.class, "Landroid/util/TypedValue;"),
+                    "getFloat expects TypedValue"
+                );
+                let data = value
+                    .fields
+                    .get("Landroid/util/TypedValue;->data:I")
+                    .and_then(|words| words.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO);
+                result.push(Word::Bits(data.int()? as u32));
+            }
             ("Landroid/view/View$AccessibilityDelegate;", "<init>()V") => {
                 self.heap.get(receiver)?;
             }

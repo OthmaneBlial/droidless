@@ -701,6 +701,9 @@ Explicit @null ImageView src/srcCompat clears image bytes and Drawable identity
 without attempting resource ID zero lookup. setImageResource(0) uses the same
 clearing semantics. A compiled XML/DEX check covers both source attributes,
 replacement, clearing and GC; ordinary Resources.getDrawable(0) still fails.
+TypedValue.getFloat reinterprets the data field's 32 bits, preserving signed zero,
+subnormals, infinity and NaN payloads. A compiled DEX check also reads a resolved
+theme float and survives GC; invalid receivers fail.
 TableLayout/TableRow use the basic linear model. Attributes include IDs, text,
 resource references, width/height, weight, orientation, per-side padding, margins,
 text size/color, image `src`/`srcCompat`, gravity, enabled/visibility and XML
