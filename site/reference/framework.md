@@ -377,6 +377,11 @@ the API-21 RuntimeException that callers can catch. Selector alpha/theme items,
 dynamic native state colors and full recycle parity remain unsupported.
 [API-21 TypedArray](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/res/TypedArray.java).
 
+Color.alpha/red/green/blue extract the four unsigned ARGB bytes. rgb/argb retain
+API-21 raw Java shift/OR behavior without clamping input components. The bridge
+check covers signed colors, transparent/opaque values and out-of-range bit spill.
+[API-21 Color](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/graphics/java/android/graphics/Color.java).
+
 TextView.setTextAppearance uses the supplied Context (or the View Context for the
 one-argument alias), invokes virtual styled-array and setTextColor callbacks, then
 applies pixel size with text-layout invalidation only when changed. Color callbacks
@@ -393,6 +398,43 @@ Default factories cover ViewGroup, FrameLayout, LinearLayout's orientations,
 TableLayout and TableRow, including their parameter types and default public fields.
 This reuses existing indexed attachment rather than adding a separate hierarchy.
 [API-21 ViewGroup](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/ViewGroup.java).
+
+Child-only and child/index attachment also preserve API-21 virtual delegation:
+addView(child) calls addView(child,-1); the indexed overload queries the guest
+child's getLayoutParams, creates defaults only when missing and then invokes
+indexed addView(child,index,params). Supplied parameters retain identity. A null
+default for this overload raises IllegalArgumentException. XML inflation therefore
+runs the APK's own TextInputLayout child-binding override rather than attaching
+around it. Compiled checks cover intermediate overrides, factories, getters,
+existing/supplied parameters, child order, callback GC and fault recovery.
+
+Paint/TextPaint retain finite shadow radius, offsets and ARGB color. Positive
+radius reports an attached shadow; zero/negative radius removes it. clearShadowLayer
+invokes virtual setShadowLayer with four zero values. The bridge check covers
+retained parameters and clearing. Canvas shadow rasterization and native shadow
+visual parity remain unsupported; this state profile is used by the public
+TextInputLayout collapsing-label calculation.
+[API-21 Paint](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/graphics/java/android/graphics/Paint.java).
+
+Typeface exposes cached sans/serif/monospace identities and four style bits.
+create preserves matching identities and clamps invalid styles to NORMAL;
+defaultFromStyle rejects invalid indices. Paint retains nullable faces and its
+setter returns the assigned face. TextView retains the face, invalidates layout
+only on identity change, and transfers family/style to actual AppKit button,
+label and editor fonts. The local native component check exercises all twelve
+family/style combinations on all three control types. Asset fonts, Android font
+maps, shaping and matching Android font metrics remain unsupported.
+[API-21 Typeface](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/graphics/java/android/graphics/Typeface.java).
+
+TextView/EditText add/removeTextChangedListener retain actual guest listeners.
+setText delivers before, on, the virtual protected hook, then after; it replaces
+an Editable buffer and detaches the old buffer from its View. Native host edits
+and owned Editable append retain the current buffer and use the same callback
+path. Counts/offsets use UTF-16. Each notification stage uses the live listener
+list; callback failures preserve the change stage and clear temporary roots.
+Checks cover reentrant after edits, old-buffer detachment, native host delivery,
+GC and before/on/after failures. BufferType overloads, InputFilters, arbitrary
+Editable replacement and full Android span-watcher behavior remain ahead.
 
 Context's cached input_method service exposes a hardware-keyboard profile.
 showSoftInput(View, flags) and hideSoftInputFromWindow(token, flags) return false
@@ -730,6 +772,17 @@ frame-phase parity remain unsupported. Native ticks use the existing host event
 loop; no native animation interaction or Android differential result is claimed
 by the compiled check. The API shape follows the [ViewPropertyAnimator contract](https://developer.android.com/reference/android/view/ViewPropertyAnimator)
 and [API-21 implementation](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/core/java/android/view/ViewPropertyAnimator.java).
+
+Standalone ValueAnimator construction now supports bounded float/int keyframes,
+duration, start delay, guest/null interpolators, update/lifecycle listeners,
+running/started state, animated fraction/value, start/cancel/end. It reuses the
+same host clock, active-animation roots and callback cleanup. With no delay the
+initial update precedes the start listener, as in API 21. Compiled DEX checks
+intermediate/final values, delayed starts, cancellation, negative-duration faults,
+GC and throwing update recovery. Factory APIs, object evaluators, repeats/reverse,
+seeking and complete Choreographer phases remain unsupported. This is headless
+callback evidence; native animation interaction has not been verified.
+[API-21 ValueAnimator](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/animation/ValueAnimator.java).
 
 NSButton actions invoke the app's View.OnClickListener bytecode; XML onClick
 invokes an Activity method. NSTextField changes update EditText, which callbacks

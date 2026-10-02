@@ -76,8 +76,12 @@ The following are objectives, not completed capability claims.
    states now pass. Themed text appearance preserves the APK's error-label fallback;
    sized child attachment invokes its virtual factory and indexed addView. Headless
    creation displays the saved folder, reopens it after restart and returns to both
-   exact notes through Back. Folder editing/deletion, software IME and native input
-   remain ahead.
+   exact notes through Back. Real indexed binding now places the saved editor
+   within its parent and accepts headless focus/pending input; restart discards
+   an unconfirmed name. Typeface state reaches native fonts, TextWatcher callbacks
+   execute real DEX, and scalar animation/color/shadow state passes checks. Rename
+   confirmation persists the name but fails at TextPaint.ascent; usable rename,
+   folder deletion, software IME and native input remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Optimized public replay now checks saved-folder focus, pending input and restart
+  discard while preserving exact notes and the saved Folder ID/name. Original
+  rename confirmation updates the same row, then fails at TextPaint.ascent;
+  the isolated partial-write diagnosis is checked and rename remains incomplete.
+
 - Paint/TextPaint shadow configuration now retains radius, offsets and ARGB
   color, exposes layer state and clears through the virtual setter. Canvas
   shadow rasterization and native shadow visual parity remain unsupported.

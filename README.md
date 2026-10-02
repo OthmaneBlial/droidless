@@ -57,8 +57,11 @@ editor/listener. Tapping the editor now runs its focus callback, and the origina
 Done action creates one visible named folder in SQLite. A fresh process reopens
 the saved row, and Back restores both unchanged notes. The APK's own error-label
 fallback now runs through themed text appearance and sized child attachment.
-Folder editing/deletion and native folder input remain unverified.
-[Folder creation and restart evidence](docs/verification.md#current-source-themed-folder-creation-and-restart).
+Saved-row attachment now runs the APK's real TextInputLayout binding callbacks.
+Headless focus and pending input complete; restarting discards an unconfirmed
+name. Rename confirmation writes the name, then reaches missing text metrics, so
+rename/deletion and native folder input remain unverified.
+[Saved-folder binding and focus evidence](docs/verification.md#current-source-saved-folder-binding-and-focus).
 
 ```sh
 sh tools/fetch-notepad.sh

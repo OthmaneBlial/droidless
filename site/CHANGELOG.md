@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Optimized public replay now checks saved-folder focus, pending input and restart
+  discard while preserving exact notes and the saved Folder ID/name. Original
+  rename confirmation updates the same row, then fails at TextPaint.ascent;
+  the isolated partial-write diagnosis is checked and rename remains incomplete.
+
+- Paint/TextPaint shadow configuration now retains radius, offsets and ARGB
+  color, exposes layer state and clears through the virtual setter. Canvas
+  shadow rasterization and native shadow visual parity remain unsupported.
+
+- Color channel extraction and RGB/ARGB packing now follow API-21 Java int bits,
+  including signed colors. Saved-folder focus reaches the original collapsed
+  label color calculation. Compiled bridge checks cover channel bytes and packing.
+
+- ViewGroup convenience overloads now dispatch the APK's real indexed binding
+  callbacks during inflation. Cached Typeface state reaches native AppKit fonts.
+  TextWatcher delivery uses real guest callbacks, UTF-16 deltas, retained buffers
+  and fault cleanup; standalone scalar ValueAnimator callbacks use the existing
+  runtime clock. The unchanged Notepad folder row now runs its actual
+  TextInputLayout binding path. Asset fonts, general animation APIs and physical
+  folder input remain unverified or unsupported.
+
 - Typed colors now resolve through actual guest Context/Theme callbacks and copied
   theme snapshots. TextView appearance applies color and pixel size; unresolved
   theme values raise the catchable API-21 RuntimeException. Framework white, black

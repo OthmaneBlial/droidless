@@ -60,8 +60,8 @@ polling. Advancing to 1000 ms now completes the original settlement callback and
 its View.requestFocus call. Back closes the drawer while retaining Notes and both
 exact rows. Native drawer input remains unverified. Selecting Create or edit
 folders now opens Edit Folders and binds the original editor and button listener.
-Back returns to Notes with both exact rows retained. This opening/Back proof
-uses an empty Folder table; the nonempty list has the row-layout limit below.
+Back returns to Notes with both exact rows retained. The empty and one-row Folder
+table paths now pass opening/restart/Back checks.
 Shared binary XML inflation invokes the APK's installed AppCompat Factory2, so
 its ImageButton becomes the actual guest AppCompatImageButton without patching the
 APK or aliasing the class. The compiled inflater contract checks cloning, merged
@@ -74,8 +74,14 @@ text appearance and sized child attachment. The APK catches the API-21 unresolve
 theme RuntimeException and applies its own fallback appearance. Headless creation
 now displays exactly one named folder, reopens it after a fresh process and returns
 to Notes through Back. Both exact seed/copy note rows remain unchanged.
-Folder editing/deletion and physical folder input remain unverified; software
-keyboards are not implemented.
+Convenience attachment now runs the actual TextInputLayout indexed binding
+callback. Its saved editor stays within the parent bounds, accepts headless focus
+and pending input, and a fresh process discards the unconfirmed name. Both exact
+note rows and the saved Folder row remain intact. Rename confirmation changes
+the same Folder name, then fails at TextPaint.ascent()F in collapsed-label layout;
+the isolated diagnosis checks that partial write and exact notes. Rename/deletion
+and physical folder input remain unverified; software keyboards are not implemented.
+[Saved-row evidence](verification.md#current-source-saved-folder-binding-and-focus).
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree

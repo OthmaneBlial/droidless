@@ -2005,3 +2005,53 @@ malformed-body preservation. The refreshed unsigned development bundle matches
 the optimized CLI byte for byte (SHA-256 `9aacb1099a41e08ec5246341d6ffd477438b612040d8f0e36c5bf4f57cd51ec4`).
 No new physical folder interaction or public release is claimed. GitHub Actions
 remain disabled, and the 50% checkpoint remains active.
+
+## Current-source saved-folder binding and focus
+
+Date: 2026-10-02. Current source, beyond the published v0.1.0 archive.
+
+The old convenience attachment path bypassed the APK's indexed addView override.
+It made the saved row appear while leaving its editor below the parent bounds.
+Child-only and child/index overloads now invoke the actual guest getter, default
+factory and indexed attachment callbacks. TextInputLayout binds its own EditText;
+the observed editor now occupies y=116..156 within its y=100..156 parent.
+Compiled checks cover parameter identity/order, virtual callbacks, null defaults,
+GC, thrown callbacks and root cleanup.
+
+Typeface state retains cached sans/serif/monospace identities and four styles.
+Paint and TextView retain nullable faces; View family/style reaches the native
+button, label and editor fonts. The local AppKit component check validates all
+36 control/family/style combinations. TextWatcher delivery uses real guest
+before/on/protected/after callbacks, UTF-16 deltas, fresh setText buffers and
+retained native-input/append buffers. Compiled DEX checks include reentrant after
+edits, detached old buffers, host input, GC and callback faults. Scalar
+ValueAnimator float/int keyframes reuse the existing host clock and callback
+roots; initial updates, delayed starts, cancellation/end, values and failure
+recovery pass the compiled contract. ARGB channels/packing and retained Paint
+shadow state now support the actual collapsing-label callbacks. Asset fonts,
+Android font metrics, Canvas shadow rasterization and complete animation APIs
+remain unsupported or unverified.
+
+The unchanged SHA-256-pinned Notepad APK still creates one visible folder and
+reopens it after restart/Back. A root tap now focuses its saved-row editor and
+host input displays a pending name with exit zero. Both note IDs/titles/bodies
+and the saved Folder ID/name remain exact. A fresh process discards that
+unconfirmed input and displays the original saved name. This is headless input
+proof; physical native folder input remains unverified.
+
+The original right-button rename confirmation updates the same Folder ID/name
+in SQLite, then fails in EditFolderViewHolder.u at DEX PC 0x0018 because the
+collapsing label calls unsupported TextPaint.ascent()F. A separate data copy
+preserves both exact note rows. The optimized public replay checks this precise
+partial-write diagnosis; rename and folder deletion are not marked complete.
+No APK patch, class alias or replacement callback is used.
+
+The final local gate passes 125 Rust tests, Clippy with warnings rejected,
+optimized workspace/document-replay builds, 4,096 parser mutations and the native
+font component check. The expanded optimized public replay preserves the
+calculator/image/grid/result and SwpieView workflows, all existing Notepad note,
+Delete/Undo/drawer/folder checks, and adds saved-row focus/input, restart discard
+and the isolated rename diagnosis. The unsigned development bundle matches the
+optimized CLI byte for byte (SHA-256 `8f7003d36e3c415cd1fc3b991fb1ce454cb673665c1e83a527ea50da0d10ffb2`). No new public release or
+physical folder interaction is claimed. GitHub Actions remain disabled; the
+50% checkpoint stays active.
