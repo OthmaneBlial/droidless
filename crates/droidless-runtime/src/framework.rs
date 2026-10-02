@@ -9207,6 +9207,14 @@ impl Runtime {
                 }
                 "src" | "srcCompat" if raw.kind == 1 => {
                     let id = raw.data;
+                    if id == 0 {
+                        view.image = None;
+                        self.heap
+                            .get_mut(word)?
+                            .fields
+                            .insert("droidless:image:drawable".into(), vec![Word::ZERO]);
+                        continue;
+                    }
                     let image = self.image_resource(id)?;
                     let drawable = self.heap.instance("Landroid/graphics/drawable/Drawable;")?;
                     self.heap

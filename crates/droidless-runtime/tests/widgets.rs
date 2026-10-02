@@ -21,6 +21,53 @@ fn dialog_surface_call(
 }
 
 #[test]
+fn compiled_xml_null_images_and_resource_replacement_clearing() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    let activity = vm.activity.unwrap();
+    let root = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/ImageNullContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "Landroid/view/View;".into(),
+            },
+            vec![activity],
+            false,
+        )
+        .unwrap()[0];
+    let tree = vm.layout_snapshot().unwrap();
+    assert_eq!(tree.children.len(), 2);
+    assert!(
+        tree.children
+            .iter()
+            .all(|node| node.view.kind == "ImageView" && node.view.image.is_none())
+    );
+    // Null ImageView sources are clearing operations; resource lookup itself still rejects ID zero.
+    let resources = vm.heap.instance("Landroid/content/res/Resources;").unwrap();
+    let error = vm
+        .invoke(
+            Method {
+                class: "Landroid/content/res/Resources;".into(),
+                name: "getDrawable".into(),
+                parameters: vec!["I".into()],
+                returns: "Landroid/graphics/drawable/Drawable;".into(),
+            },
+            vec![resources, Word::ZERO],
+            true,
+        )
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("resource @0x00000000 missing or complex"));
+    assert_eq!(vm.stack_depth(), 0);
+    vm.close().unwrap();
+    vm.collect();
+    assert!(vm.heap.get(root).is_err() && vm.heap.get(resources).is_err());
+}
+
+#[test]
 fn compiled_styled_defaults_xml_precedence_snapshots_gc_and_faults() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

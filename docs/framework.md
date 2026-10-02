@@ -697,6 +697,10 @@ Stable public framework IDs supply OK/Cancel strings; there is no embedded Andro
 installation. String/color/dimension/layout resolution belongs to DROIDLESS.
 
 Binary layouts create TextView, Button, EditText, LinearLayout and FrameLayout.
+Explicit @null ImageView src/srcCompat clears image bytes and Drawable identity
+without attempting resource ID zero lookup. setImageResource(0) uses the same
+clearing semantics. A compiled XML/DEX check covers both source attributes,
+replacement, clearing and GC; ordinary Resources.getDrawable(0) still fails.
 TableLayout/TableRow use the basic linear model. Attributes include IDs, text,
 resource references, width/height, weight, orientation, per-side padding, margins,
 text size/color, image `src`/`srcCompat`, gravity, enabled/visibility and XML

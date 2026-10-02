@@ -56,4 +56,5 @@
         <item name="android:textColor">#ff404040</item>
         <item name="android:layout">@layout/factory_include</item>
     </style>
+    <attr name="srcCompat" format="reference" />
 </resources>
