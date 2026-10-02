@@ -866,6 +866,52 @@ impl Runtime {
     fn styled_attributes(&self, styles: &[u32]) -> Result<std::collections::BTreeMap<u32, Value>> {
         let mut attributes = std::collections::BTreeMap::new();
         for style in styles.iter().copied().filter(|style| *style != 0) {
+            let mut ancestor = style;
+            for _ in 0..32 {
+                let light = match ancestor {
+                    0x0103_0237 | 0x0103_0241 => Some(true), // Material.Light[/NoActionBar], API 21.
+                    0x0103_0224 | 0x0103_022e => Some(false), // Material[/NoActionBar], API 21.
+                    _ => None,
+                };
+                if let Some(light) = light {
+                    // ponytail: default text colors are flat; full framework selector/theme resources remain ahead.
+                    for (id, data) in [
+                        (0x0101_0036, if light { 0xde00_0000 } else { 0xffff_ffff }),
+                        (0x0101_0038, if light { 0x8a00_0000 } else { 0xb3ff_ffff }),
+                        (0x0101_009a, if light { 0x8000_0000 } else { 0x80ff_ffff }),
+                    ] {
+                        attributes.insert(
+                            id,
+                            Value {
+                                kind: 0x1c,
+                                data,
+                                text: None,
+                            },
+                        );
+                    }
+                    attributes.insert(
+                        0x0101_0033,
+                        Value {
+                            kind: 4,
+                            data: if light { 0.26f32 } else { 0.30f32 }.to_bits(),
+                            text: None,
+                        },
+                    );
+                    attributes.insert(
+                        0x0101_02eb,
+                        Value {
+                            kind: 5,
+                            data: (56 << 8) | 1,
+                            text: None,
+                        },
+                    );
+                    break;
+                }
+                let Some(parent) = self.apk.resources.style_parent(ancestor) else {
+                    break;
+                };
+                ancestor = parent;
+            }
             if style >> 24 == 1 && !self.apk.resources.entries.contains_key(&style) {
                 continue;
             }
@@ -1469,6 +1515,7 @@ impl Runtime {
                 | (
                     "Landroid/content/res/Resources$Theme;",
                     "obtainStyledAttributes([I)Landroid/content/res/TypedArray;"
+                    | "obtainStyledAttributes(I[I)Landroid/content/res/TypedArray;"
                     | "obtainStyledAttributes(Landroid/util/AttributeSet;[III)Landroid/content/res/TypedArray;",
                 ) => {
                     let attrs = arg(if method.parameters.len() == 1 { 1 } else { 2 })?;
@@ -1477,7 +1524,11 @@ impl Runtime {
                     } else {
                         vec![]
                     };
-                    let attributes = if method.class == "Landroid/content/res/Resources$Theme;" {
+                    let attributes = if method.parameters.first().is_some_and(|p| p == "I") {
+                        let mut styles = snapshot.clone();
+                        styles.push(arg(1)?.int()? as u32);
+                        self.styled_attributes(&styles)?
+                    } else if method.class == "Landroid/content/res/Resources$Theme;" {
                         self.styled_set_attributes(
                             &snapshot,
                             if method.parameters.len() == 4 {
@@ -4631,13 +4682,9 @@ impl Runtime {
                 result.push(Word::Bits(dimension(value)?.to_bits()));
             }
             ("Landroid/content/res/Resources;", "getDimensionPixelSize(I)I") => {
-                let value = dimension(self.apk.resources.resolve(arg(1)?.int()? as u32)?)?;
-                let rounded = value.round() as i32;
-                result.push(Word::from(if rounded == 0 && value != 0.0 {
-                    if value.is_sign_positive() { 1 } else { -1 }
-                } else {
-                    rounded
-                }));
+                result.push(Word::from(dimension_pixel_size(
+                    self.apk.resources.resolve(arg(1)?.int()? as u32)?,
+                )?));
             }
             ("Landroid/content/res/Resources;", "getValue(ILandroid/util/TypedValue;Z)V") => {
                 let id = arg(1)?.int()? as u32;
@@ -4866,10 +4913,25 @@ impl Runtime {
                             .map_or(arg(2)?.int()?, |value| i32::from(value.data != 0))
                             .into(),
                     ),
-                    "getInt(II)I" | "getInteger(II)I" | "getLayoutDimension(II)I" => {
+                    "getInt(II)I" | "getInteger(II)I" => {
                         result.push(Word::from(
                             value.map_or(arg(2)?.int()?, |value| value.data as i32),
                         ));
+                    }
+                    "getLayoutDimension(II)I" => {
+                        let fallback = arg(2)?.int()?;
+                        let pixels = if let Some(value) = value {
+                            let value =
+                                self.attribute(&self.themed_attribute(receiver, &value)?)?;
+                            match value.kind {
+                                0x10..=0x1f => value.data as i32,
+                                5 => dimension_pixel_size(&value)?,
+                                _ => fallback,
+                            }
+                        } else {
+                            fallback
+                        };
+                        result.push(Word::from(pixels));
                     }
                     "getResourceId(II)I" => {
                         result.push(Word::from(
@@ -4880,7 +4942,8 @@ impl Runtime {
                     }
                     "getDimension(IF)F" | "getFloat(IF)F" => {
                         let number = if let Some(value) = value {
-                            let value = self.attribute(&value)?;
+                            let value =
+                                self.attribute(&self.themed_attribute(receiver, &value)?)?;
                             if sig.starts_with("getDimension") {
                                 dimension(&value)?
                             } else {
@@ -4902,11 +4965,12 @@ impl Runtime {
                     }
                     "getDimensionPixelOffset(II)I" | "getDimensionPixelSize(II)I" => {
                         let pixels = if let Some(value) = value {
-                            let pixels = dimension(&self.attribute(&value)?)?;
+                            let value =
+                                self.attribute(&self.themed_attribute(receiver, &value)?)?;
                             if sig.starts_with("getDimensionPixelSize") {
-                                pixels.round() as i32
+                                dimension_pixel_size(&value)?
                             } else {
-                                pixels.trunc() as i32
+                                dimension(&value)?.trunc() as i32
                             }
                         } else {
                             arg(2)?.int()?
@@ -9479,6 +9543,15 @@ fn resource_bundle_object(runtime: &mut Runtime, bundle: Word, key: Word) -> Res
         }
     }
     Ok(None)
+}
+fn dimension_pixel_size(value: &Value) -> Result<i32> {
+    let pixels = dimension(value)?;
+    let rounded = (pixels + 0.5).trunc() as i32;
+    Ok(if rounded == 0 && pixels != 0.0 {
+        if pixels.is_sign_positive() { 1 } else { -1 }
+    } else {
+        rounded
+    })
 }
 fn dimension(v: &Value) -> Result<f32> {
     let n = match v.kind {

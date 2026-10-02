@@ -711,6 +711,19 @@ cover XML values, alias chains, theme snapshots, managed strings through GC,
 index/output faults and recovery. Asset cookies identify one virtual resource
 pool; density/configuration metadata uses the default configuration. Android
 asset-cookie and qualifier provenance and recycled-array faults remain incomplete.
+Recognized API-21 Material/Material.Light themes and their NoActionBar variants
+supply default primary/secondary/hint text colors, disabled alpha and 56dp action-bar size through
+explicit/implicit style ancestry. Application styles still override these values.
+These are flat default colors; full framework selector/theme resources remain
+incomplete. Compiled checks cover light/dark defaults, overrides, snapshots and GC.
+TypedArray float/dimension getters also resolve theme aliases against their
+retained snapshot before reading the numeric value.
+getLayoutDimension decodes dimension values instead of returning encoded IDs,
+preserves integer layout flags and uses its fallback for other resolved types.
+Resource and typed-array pixel-size getters share API-21 rounding and preserve
+nonzero subpixel sizes; compiled checks cover positive/negative sizes and flags.
+Theme.obtainStyledAttributes(styleId, attrs) shares explicit-style merging with
+Context while retaining the original theme snapshot for attribute aliases.
 TableLayout/TableRow use the basic linear model. Attributes include IDs, text,
 resource references, width/height, weight, orientation, per-side padding, margins,
 text size/color, image `src`/`srcCompat`, gravity, enabled/visibility and XML

@@ -7,6 +7,34 @@ import org.xmlpull.v1.XmlPullParser;
 
 /** Compiled default-style/explicit-style precedence, real theme dispatch and snapshot checks. */
 public final class StyledDefaultsContract {
+    public static void frameworkColors(Activity activity) {
+        android.content.res.Resources.Theme theme=activity.getResources().newTheme();
+        int[] attrs={android.R.attr.textColorPrimary,android.R.attr.textColorSecondary,android.R.attr.textColorHint,android.R.attr.disabledAlpha,android.R.attr.actionBarSize};
+        theme.applyStyle(R.style.FrameworkMaterialLight_Child,true);
+        TypedArray light=theme.obtainStyledAttributes(attrs);
+        check(light.getColor(0,0)==0xde000000 && light.getColor(1,0)==0x8a000000
+            && light.getColor(2,0)==0x80000000 && light.getFloat(3,0)==0.26f
+            && light.getDimensionPixelSize(4,0)==56,"light Material defaults");
+        theme.applyStyle(R.style.FrameworkMaterialDark,true); System.gc();
+        TypedArray dark=theme.obtainStyledAttributes(attrs);
+        check(dark.getColor(0,0)==0xffffffff && dark.getColor(1,0)==0xb3ffffff
+            && dark.getFloat(3,0)==0.30f && light.getColor(1,0)==0x8a000000,"dark defaults and snapshot");
+        theme.applyStyle(R.style.FrameworkMaterialOverride,true);
+        check(theme.obtainStyledAttributes(attrs).getColor(1,0)==0xff123456,"application color override");
+        theme.applyStyle(R.style.FrameworkMaterialAlias,true);
+        TypedArray aliases=theme.obtainStyledAttributes(new int[]{android.R.attr.disabledAlpha,android.R.attr.minWidth});
+        check(aliases.getFloat(0,0)==0.4f && aliases.getDimension(1,0)==31
+            && aliases.getDimensionPixelSize(1,0)==31 && aliases.getDimensionPixelOffset(1,0)==31
+            && aliases.getLayoutDimension(1,0)==31 && aliases.getLayoutDimension(0,17)==17
+            && light.getFloat(3,0)==0.26f,"numeric theme aliases and snapshot");
+        TypedArray sizes=theme.obtainStyledAttributes(R.style.FrameworkMaterialSizes,new int[]{android.R.attr.minWidth,android.R.attr.minHeight,android.R.attr.layout_width,android.R.attr.layout_height});
+        check(sizes.getDimensionPixelSize(0,0)==1 && sizes.getDimensionPixelOffset(0,0)==0
+            && sizes.getLayoutDimension(0,0)==1 && sizes.getDimensionPixelSize(1,0)==-1
+            && sizes.getLayoutDimension(2,0)==-1 && sizes.getLayoutDimension(3,0)==-2,"pixel sizes and layout flags");
+        sizes.recycle();
+        aliases.recycle();
+        light.recycle(); dark.recycle();
+    }
     static final int[] ATTRS = {android.R.attr.label, android.R.attr.textSize, android.R.attr.textColor, android.R.attr.layout};
     static class Owner extends Activity {
         Resources.Theme theme;

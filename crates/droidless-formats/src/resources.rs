@@ -175,17 +175,7 @@ impl Resources {
                 }
                 anyhow::bail!("style @0x{id:08x} missing");
             };
-            let implicit_parent = || {
-                let (_, name) = resource.name.split_once('/')?;
-                let (parent, _) = name.rsplit_once('.')?;
-                let parent_name = format!("style/{parent}");
-                resources
-                    .entries
-                    .values()
-                    .find(|candidate| candidate.name == parent_name)
-                    .map(|candidate| candidate.id)
-            };
-            if let Some(parent) = resource.parent.or_else(implicit_parent) {
+            if let Some(parent) = resources.style_parent(id) {
                 collect(resources, parent, seen, attributes)?;
             }
             attributes.extend(resource.bag.clone());
@@ -200,6 +190,18 @@ impl Resources {
             &mut attributes,
         )?;
         Ok(attributes)
+    }
+    pub fn style_parent(&self, id: u32) -> Option<u32> {
+        let resource = self.entries.get(&id)?;
+        resource.parent.or_else(|| {
+            let (_, name) = resource.name.split_once('/')?;
+            let (parent, _) = name.rsplit_once('.')?;
+            let parent_name = format!("style/{parent}");
+            self.entries
+                .values()
+                .find(|candidate| candidate.name == parent_name)
+                .map(|candidate| candidate.id)
+        })
     }
 }
 fn value(b: Bytes<'_>, at: usize, strings: &[String]) -> Result<Value> {

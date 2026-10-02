@@ -58,4 +58,24 @@
         <item name="android:layout">@layout/factory_include</item>
     </style>
     <attr name="srcCompat" format="reference" />
+    <style name="FrameworkMaterialLight" parent="android:style/Theme.Material.Light.NoActionBar" />
+    <style name="FrameworkMaterialLight.Child" />
+    <style name="FrameworkMaterialDark" parent="android:style/Theme.Material.NoActionBar" />
+    <style name="FrameworkMaterialOverride" parent="FrameworkMaterialLight">
+        <item name="android:textColorSecondary">#ff123456</item>
+    </style>
+    <attr name="materialAlpha" format="float" />
+    <attr name="materialDimension" format="dimension" />
+    <style name="FrameworkMaterialAlias" parent="FrameworkMaterialLight">
+        <item name="materialAlpha">0.4</item>
+        <item name="android:disabledAlpha">?attr/materialAlpha</item>
+        <item name="materialDimension">31dp</item>
+        <item name="android:minWidth">?attr/materialDimension</item>
+    </style>
+    <style name="FrameworkMaterialSizes">
+        <item name="android:minWidth">0.4dp</item>
+        <item name="android:minHeight">-1.6dp</item>
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+    </style>
 </resources>

@@ -24,6 +24,28 @@ fn dialog_surface_call(
 }
 
 #[test]
+fn compiled_framework_material_text_defaults_inheritance_overrides_and_gc() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    vm.invoke(
+        Method {
+            class: "Lorg/droidless/images/StyledDefaultsContract;".into(),
+            name: "frameworkColors".into(),
+            parameters: vec!["Landroid/app/Activity;".into()],
+            returns: "V".into(),
+        },
+        vec![vm.activity.unwrap()],
+        false,
+    )
+    .unwrap();
+    assert_eq!(vm.stack_depth(), 0);
+    vm.close().unwrap();
+    vm.collect();
+}
+
+#[test]
 fn compiled_typed_array_value_output_aliases_snapshots_gc_and_faults() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
