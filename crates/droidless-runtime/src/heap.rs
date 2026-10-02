@@ -81,6 +81,7 @@ pub enum Word {
     Bits(u32),
     Ref(usize),
 }
+pub(crate) const WEAK_REFERENT: &str = "droidless:reference:weak-referent";
 impl Word {
     pub const ZERO: Self = Self::Bits(0);
     pub fn int(self) -> Result<i32> {
@@ -366,9 +367,6 @@ impl Heap {
             let Word::Ref(h) = word else {
                 continue;
             };
-            if !marked.insert(h) {
-                continue;
-            }
             let Some(object) = h
                 .checked_sub(1)
                 .and_then(|i| self.objects.get(i))
@@ -376,7 +374,17 @@ impl Heap {
             else {
                 continue;
             };
-            work.extend(object.fields.values().flatten().copied());
+            if !marked.insert(h) {
+                continue;
+            }
+            work.extend(
+                object
+                    .fields
+                    .iter()
+                    .filter(|(key, _)| key.as_str() != WEAK_REFERENT)
+                    .flat_map(|(_, values)| values)
+                    .copied(),
+            );
             if let Data::Array { values, .. } = &object.data {
                 work.extend(values.iter().flatten().copied());
             }
@@ -423,6 +431,15 @@ impl Heap {
         }
         let mut reclaimed = 0;
         for (i, object) in self.objects.iter_mut().enumerate() {
+            if let Some(object) = object
+                && let Some(values) = object.fields.get_mut(WEAK_REFERENT)
+            {
+                for value in values {
+                    if matches!(value, Word::Ref(handle) if !marked.contains(handle)) {
+                        *value = Word::ZERO;
+                    }
+                }
+            }
             if object.is_some() && !marked.contains(&(i + 1)) {
                 *object = None;
                 reclaimed += 1;

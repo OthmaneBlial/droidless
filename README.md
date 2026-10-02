@@ -232,7 +232,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 132 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 133 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

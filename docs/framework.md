@@ -904,7 +904,7 @@ resource, replaces itself at the same index and keeps the original parameters
 and inflated ID. Visibility is forwarded to the replacement. Indexed child removal retains parent links, guest hierarchy callbacks and index
 faults. Transient state is reference-counted and group queries include descendants;
 parent transient-state notification callbacks remain incomplete. Programmatic
-stub configuration and weak-reference collection parity remain unsupported.
+stub configuration remains unsupported.
 
 The compiled CustomLayout contract checks those callbacks and root touch,
 collection/failure recovery, per-side padding, measure specs/state bits, suggested
@@ -982,3 +982,16 @@ remain future work. View.EMPTY_STATE_SET resolves as one shared inherited empty
 int array; APK-declared fields with the same name retain their own identity.
 
 [API-21 StateListDrawable reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/graphics/java/android/graphics/drawable/StateListDrawable.java)
+
+
+### Weak references and collector reachability
+
+WeakReference retains a weak managed heap edge, including APK subclasses and
+calls through Reference. Collection excludes only that referent edge, clears
+unreachable targets and preserves the reference object's other strong fields.
+Strong roots retain targets; unreachable referent cycles are reclaimed. clear()
+removes the referent without removing independent strong roots. Handles remain
+stable and collected handles are never reused. Constructors validate receivers
+and target handles. Null reference queues are accepted; ReferenceQueue registration
+and enqueue/finalization APIs remain unsupported. WeakHashMap retains its existing
+strong-key profile and does not claim weak-key collection.

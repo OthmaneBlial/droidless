@@ -31,6 +31,65 @@ fn call_class(vm: &mut Runtime, class: &str, name: &str, returns: &str) -> Vec<W
 }
 
 #[test]
+fn compiled_weak_references_clear_cycles_keep_strong_fields_and_reject_invalid_handles() {
+    let mut vm = runtime();
+    let call = |vm: &mut Runtime, name: &str, returns: &str| {
+        call_class(vm, "WeakReferenceContract", name, returns)
+    };
+    let target = call(&mut vm, "prepare", "Ljava/lang/Object;")[0];
+    let anchor = call(&mut vm, "anchored", "Ljava/lang/Object;")[0];
+    vm.collect();
+    assert_eq!(call(&mut vm, "retained", "I"), [Word::from(1)]);
+    call(&mut vm, "release", "V");
+    vm.collect();
+    assert!(vm.heap.get(target).is_err());
+    assert!(vm.heap.get(anchor).is_ok());
+    assert_eq!(call(&mut vm, "collected", "I"), [Word::from(1)]);
+    let fresh = call(&mut vm, "reset", "Ljava/lang/Object;")[0];
+    assert_ne!(fresh, target);
+    call(&mut vm, "clear", "V");
+    vm.collect();
+    assert_eq!(call(&mut vm, "cleared", "I"), [Word::from(1)]);
+    assert!(vm.heap.get(fresh).is_ok());
+    let weak = vm.heap.instance("Ljava/lang/ref/WeakReference;").unwrap();
+    let init = Method {
+        class: "Ljava/lang/ref/WeakReference;".into(),
+        name: "<init>".into(),
+        parameters: vec!["Ljava/lang/Object;".into()],
+        returns: "V".into(),
+    };
+    for referent in [Word::from(7), Word::Ref(usize::MAX)] {
+        assert!(
+            vm.invoke(init.clone(), vec![weak, referent], false)
+                .is_err()
+        );
+    }
+    assert!(vm.invoke(init, vec![fresh, Word::ZERO], false).is_err());
+    let queue = vm.heap.instance("Ljava/lang/Object;").unwrap();
+    let error = vm
+        .invoke(
+            Method {
+                class: "Ljava/lang/ref/WeakReference;".into(),
+                name: "<init>".into(),
+                parameters: vec![
+                    "Ljava/lang/Object;".into(),
+                    "Ljava/lang/ref/ReferenceQueue;".into(),
+                ],
+                returns: "V".into(),
+            },
+            vec![weak, Word::ZERO, queue],
+            false,
+        )
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("ReferenceQueue registration unsupported"));
+    call(&mut vm, "drop", "V");
+    vm.collect();
+    assert!(vm.heap.get(fresh).is_err());
+    assert!(vm.heap.get(weak).is_err());
+    assert_eq!(vm.stack_depth(), 0);
+}
+
+#[test]
 fn compiled_hashtable_core_nulls_synchronized_equality_gc_and_fault_cleanup() {
     let mut vm = runtime();
     assert_eq!(

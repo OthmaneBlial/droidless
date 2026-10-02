@@ -1570,6 +1570,18 @@ impl Runtime {
             && field.name == "SDK_INT"
             && self.class_location(&field.class).is_none()
     }
+    fn reference_key(&self, receiver: Word) -> Result<&'static str> {
+        let class = &self.heap.get(receiver)?.class;
+        ensure!(
+            self.is_a(class, "Ljava/lang/ref/Reference;"),
+            "Reference receiver required"
+        );
+        Ok(if self.is_a(class, "Ljava/lang/ref/WeakReference;") {
+            crate::heap::WEAK_REFERENT
+        } else {
+            "droidless:reference:referent"
+        })
+    }
     pub(crate) fn view_empty_state_field(&self, field: &Field) -> bool {
         field.class == "Landroid/view/View;"
             && field.name == "EMPTY_STATE_SET"
@@ -2233,31 +2245,44 @@ impl Runtime {
                 "Ljava/lang/ref/Reference;" | "Ljava/lang/ref/WeakReference;",
                 "<init>(Ljava/lang/Object;Ljava/lang/ref/ReferenceQueue;)V",
             ) => {
-                // ponytail: references stay strong until the guest heap models garbage collection.
+                let key = self.reference_key(receiver)?;
+                let referent = arg(1)?;
+                if referent != Word::ZERO {
+                    self.heap.get(referent)?;
+                }
+                ensure!(
+                    method.parameters.len() == 1 || arg(2)? == Word::ZERO,
+                    "ReferenceQueue registration unsupported"
+                );
+
                 self.heap
                     .get_mut(receiver)?
                     .fields
-                    .insert("droidless:reference:referent".into(), vec![arg(1)?]);
+                    .insert(key.into(), vec![referent]);
             }
             (
                 "Ljava/lang/ref/Reference;" | "Ljava/lang/ref/WeakReference;",
                 "get()Ljava/lang/Object;",
             ) => {
+                let key = self.reference_key(receiver)?;
+
                 result.push(
                     self.heap
                         .get(receiver)?
                         .fields
-                        .get("droidless:reference:referent")
+                        .get(key)
                         .and_then(|values| values.first())
                         .copied()
                         .unwrap_or(Word::ZERO),
                 );
             }
             ("Ljava/lang/ref/Reference;" | "Ljava/lang/ref/WeakReference;", "clear()V") => {
+                let key = self.reference_key(receiver)?;
+
                 self.heap
                     .get_mut(receiver)?
                     .fields
-                    .insert("droidless:reference:referent".into(), vec![Word::ZERO]);
+                    .insert(key.into(), vec![Word::ZERO]);
             }
             ("Ljava/lang/String;", "valueOf(Ljava/lang/Object;)Ljava/lang/String;") => {
                 if arg(0)? == Word::ZERO {
