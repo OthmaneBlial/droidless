@@ -28,11 +28,24 @@ int main(void) {
                 assert(fabs(metrics[2]-font.leading)<0.001);
             }
         }
+        node.text="abcd\u2026"; node.description="abcdefghij";
+        for(uint32_t kind=1;kind<=2;kind++) {
+            node.handle=kind; node.kind=kind; node.editable=0;
+            dl_view(opaque,&node);
+            NSControl *control=(NSControl *)host.views[@(kind)];
+            NSString *painted=kind==1 ? [(NSButton *)control title] : [(NSTextField *)control stringValue];
+            assert([painted isEqualToString:@"abcd\u2026"]);
+            assert([control.accessibilityLabel isEqualToString:@"abcdefghij"]);
+            node.text="full replacement"; node.description=NULL;
+            dl_view(opaque,&node);
+            assert([control.accessibilityLabel isEqualToString:@"full replacement"]);
+            node.text="abcd\u2026"; node.description="abcdefghij";
+        }
         float zero[3]; assert(droidless_font_metrics(0,0,0,zero));
         assert(zero[0]==0 && zero[1]==0 && zero[2]==0);
         assert(!droidless_font_metrics(3,0,20,zero) && !droidless_font_metrics(0,4,20,zero));
         assert(!droidless_font_metrics(0,0,NAN,zero) && !droidless_font_metrics(0,0,-1,zero));
         dl_destroy(opaque);
-        puts("Native fonts: three families/four styles and matching metrics on buttons, labels and editors passed.");
+        puts("Native fonts: three families/four styles, matching metrics and shortened text with full accessibility labels passed.");
     }
 }
