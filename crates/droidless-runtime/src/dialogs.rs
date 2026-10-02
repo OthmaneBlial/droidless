@@ -11,7 +11,172 @@ const CONTEXT: &str = "Landroid/content/Context;";
 const LISTENERS: &str = "Landroid/app/Dialog$ListenersHandler;";
 const MESSAGE: &str = "Landroid/os/Message;";
 
+/// One managed Dialog surface. The Activity's root is never replaced by this tree.
+pub struct DialogWindow {
+    pub handle: usize,
+    pub title: String,
+    pub width: f32,
+    pub height: f32,
+    pub tree: crate::ui::Node,
+}
+
 impl Runtime {
+    pub(crate) fn active_dialog(&self) -> Result<Option<Word>> {
+        for dialog in self.dialogs.iter().rev() {
+            if !self
+                .window_word(*dialog, "droidless:dialog:hidden")?
+                .truth()
+            {
+                return Ok(Some(*dialog));
+            }
+        }
+        Ok(None)
+    }
+    pub(crate) fn dialog_geometry(&self, dialog: Word) -> Result<(Word, f32, f32)> {
+        let window = self.window_word(dialog, "droidless:window")?;
+        let root = self.window_word(window, "droidless:window:decor")?;
+        let attributes = self.window_word(window, "droidless:window:attributes")?;
+        let dimension = |name: &str, horizontal: bool, maximum: f32| -> Result<f32> {
+            let size = self
+                .window_word(
+                    attributes,
+                    &format!("Landroid/view/ViewGroup$LayoutParams;->{name}:I"),
+                )?
+                .int()?;
+            ensure!(
+                maximum.is_finite() && maximum > 0.0 && maximum <= 16384.0,
+                "invalid Dialog viewport"
+            );
+            let value = match size {
+                -1 => maximum,
+                -2 => {
+                    crate::ui::intrinsic_dimension(&self.heap, root, horizontal, maximum)?.max(1.0)
+                }
+                1..=16384 => size as f32,
+                _ => anyhow::bail!("unsupported Dialog {name} {size}"),
+            };
+            Ok(value.min(maximum))
+        };
+        Ok((
+            root,
+            dimension("width", true, self.width)?,
+            dimension("height", false, self.height)?,
+        ))
+    }
+    pub(crate) fn input_surface(&self) -> Result<(Word, Word, f32, f32)> {
+        if let Some(dialog) = self.active_dialog()? {
+            let (root, width, height) = self.dialog_geometry(dialog)?;
+            return Ok((dialog, root, width, height));
+        }
+        Ok((
+            self.activity.unwrap_or(Word::ZERO),
+            self.root.context("no content View")?,
+            self.width,
+            self.height,
+        ))
+    }
+    pub(crate) fn input_view_allowed(&self, view: Word) -> Result<bool> {
+        if let Some(dialog) = self.active_dialog()? {
+            let (root, _, _) = self.dialog_geometry(dialog)?;
+            return Ok(self.focus_root(view)? == root);
+        }
+        Ok(true)
+    }
+    pub fn dialog_layout_snapshots(&mut self) -> Result<Vec<DialogWindow>> {
+        let mut surfaces = vec![];
+        for dialog in self.dialogs.clone() {
+            if !self.dialogs.contains(&dialog) {
+                continue;
+            }
+            if self.window_word(dialog, "droidless:dialog:hidden")?.truth() {
+                continue;
+            }
+            let (root, width, height) = self.dialog_geometry(dialog)?;
+            let tree = self.layout_root(root, width, height)?;
+            // Layout callbacks can dismiss their own Dialog. Do not recreate its native window.
+            if !self.dialogs.contains(&dialog) {
+                continue;
+            }
+            let window = self.window_word(dialog, "droidless:window")?;
+            let attributes = self.window_word(window, "droidless:window:attributes")?;
+            let title = self.window_word(attributes, "droidless:window:title")?;
+            surfaces.push(DialogWindow {
+                handle: dialog.reference()?,
+                title: if title == Word::ZERO {
+                    self.title.clone()
+                } else {
+                    self.heap.text(title)?.into()
+                },
+                width,
+                height,
+                tree,
+            });
+        }
+        Ok(surfaces)
+    }
+    /// Closing a native panel is Back; outside clicks use the Window's separate policy.
+    pub fn cancel_dialog_window(&mut self, handle: usize, outside: bool) -> Result<()> {
+        if self.active_dialog()? != Some(Word::Ref(handle)) {
+            return Ok(());
+        }
+        if outside {
+            let dialog = Word::Ref(handle);
+            let window = self.window_word(dialog, "droidless:window")?;
+            if !self
+                .window_word(window, "droidless:window:close-outside")?
+                .truth()
+            {
+                return Ok(());
+            }
+        }
+        self.back()
+    }
+    pub(crate) fn close_dialogs(&mut self) -> Result<()> {
+        let mut count = 0;
+        while let Some(dialog) = self.dialogs.last().copied() {
+            ensure!(count < 32, "Dialog dismissal loop during close");
+            count += 1;
+            self.invoke(
+                Method {
+                    class: DIALOG.into(),
+                    name: "dismiss".into(),
+                    parameters: vec![],
+                    returns: "V".into(),
+                },
+                vec![dialog],
+                false,
+            )?;
+        }
+        Ok(())
+    }
+    fn dialog_message(&mut self, dialog: Word, kind: &str) -> Result<()> {
+        let message = self.window_word(dialog, &format!("droidless:dialog:{kind}-message"))?;
+        if message == Word::ZERO {
+            return Ok(());
+        }
+        let copy = self.invoke(
+            Method {
+                class: MESSAGE.into(),
+                name: "obtain".into(),
+                parameters: vec![MESSAGE.into()],
+                returns: MESSAGE.into(),
+            },
+            vec![message],
+            false,
+        )?[0];
+        self.native_roots.push(copy);
+        self.invoke(
+            Method {
+                class: MESSAGE.into(),
+                name: "sendToTarget".into(),
+                parameters: vec![],
+                returns: "V".into(),
+            },
+            vec![copy],
+            true,
+        )?;
+        Ok(())
+    }
     fn dialog_listeners_handler(&mut self, dialog: Word) -> Result<Word> {
         let cached = self.window_word(dialog, "droidless:dialog:listeners")?;
         if cached != Word::ZERO {
@@ -138,6 +303,13 @@ impl Runtime {
                 | "requestWindowFeature(I)Z"
                 | "create()V"
                 | "isShowing()Z"
+                | "show()V"
+                | "hide()V"
+                | "onStart()V"
+                | "onStop()V"
+                | "onAttachedToWindow()V"
+                | "onDetachedFromWindow()V"
+                | "onWindowFocusChanged(Z)V"
                 | "setCancelable(Z)V"
                 | "setCanceledOnTouchOutside(Z)V"
                 | "setOnCancelListener(Landroid/content/DialogInterface$OnCancelListener;)V"
@@ -244,6 +416,13 @@ impl Runtime {
                         .get_mut(receiver)?
                         .fields
                         .insert("droidless:window".into(), vec![window]);
+                    let attributes = self.window_word(window, "droidless:window:attributes")?;
+                    for name in ["width", "height"] {
+                        self.heap.get_mut(attributes)?.fields.insert(
+                            format!("Landroid/view/ViewGroup$LayoutParams;->{name}:I"),
+                            vec![Word::from(-2)],
+                        );
+                    }
                     self.invoke(
                         Method {
                             class: WINDOW.into(),
@@ -304,6 +483,98 @@ impl Runtime {
                 "isShowing()Z" => Ok(vec![
                     self.window_word(receiver, "droidless:dialog:showing")?,
                 ]),
+                "show()V" => {
+                    if self
+                        .window_word(receiver, "droidless:dialog:showing")?
+                        .truth()
+                    {
+                        self.heap
+                            .get_mut(receiver)?
+                            .fields
+                            .insert("droidless:dialog:hidden".into(), vec![Word::ZERO]);
+                        return Ok(vec![]);
+                    }
+                    ensure!(
+                        !self
+                            .window_word(receiver, "droidless:dialog:transition")?
+                            .truth(),
+                        "recursive Dialog show"
+                    );
+                    ensure!(self.dialogs.len() < 32, "Dialog window limit (32)");
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert("droidless:dialog:transition".into(), vec![Word::from(1)]);
+                    let started = (|| -> Result<()> {
+                        self.heap
+                            .get_mut(receiver)?
+                            .fields
+                            .insert("droidless:dialog:canceled".into(), vec![Word::ZERO]);
+                        self.invoke(
+                            Method {
+                                class: DIALOG.into(),
+                                name: "create".into(),
+                                parameters: vec![],
+                                returns: "V".into(),
+                            },
+                            vec![receiver],
+                            false,
+                        )?;
+                        self.invoke(
+                            Method {
+                                class: DIALOG.into(),
+                                name: "onStart".into(),
+                                parameters: vec![],
+                                returns: "V".into(),
+                            },
+                            vec![receiver],
+                            true,
+                        )?;
+                        let window = self.window_word(receiver, "droidless:window")?;
+                        ensure!(
+                            !self
+                                .window_word(window, "droidless:window:destroyed")?
+                                .truth(),
+                            "cannot show destroyed Dialog Window"
+                        );
+                        self.window_root(window, true)?;
+                        self.dialog_geometry(receiver)?;
+                        let token = self.heap.instance("Landroid/os/Binder;")?;
+                        let fields = &mut self.heap.get_mut(receiver)?.fields;
+                        fields.insert("droidless:dialog:token".into(), vec![token]);
+                        fields.insert("droidless:dialog:showing".into(), vec![Word::from(1)]);
+                        fields.insert("droidless:dialog:hidden".into(), vec![Word::ZERO]);
+                        self.dialogs.push(receiver);
+                        self.touch = None;
+                        self.host_window_focused = false;
+                        self.invoke(
+                            Method {
+                                class: DIALOG.into(),
+                                name: "onAttachedToWindow".into(),
+                                parameters: vec![],
+                                returns: "V".into(),
+                            },
+                            vec![receiver],
+                            true,
+                        )?;
+                        self.dialog_message(receiver, "show")
+                    })();
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert("droidless:dialog:transition".into(), vec![Word::ZERO]);
+                    started?;
+                    Ok(vec![])
+                }
+                "hide()V" => {
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert("droidless:dialog:hidden".into(), vec![Word::from(1)]);
+                    self.touch = None;
+                    self.host_window_focused = false;
+                    Ok(vec![])
+                }
                 "setCancelable(Z)V" | "setCanceledOnTouchOutside(Z)V" => {
                     let value = Word::from(i32::from(arg(1)?.int()? != 0));
                     if method.name == "setCancelable" || value.truth() {
@@ -411,27 +682,7 @@ impl Runtime {
                             .get_mut(receiver)?
                             .fields
                             .insert("droidless:dialog:canceled".into(), vec![Word::from(1)]);
-                        let copy = self.invoke(
-                            Method {
-                                class: MESSAGE.into(),
-                                name: "obtain".into(),
-                                parameters: vec![MESSAGE.into()],
-                                returns: MESSAGE.into(),
-                            },
-                            vec![message],
-                            false,
-                        )?[0];
-                        self.native_roots.push(copy);
-                        self.invoke(
-                            Method {
-                                class: MESSAGE.into(),
-                                name: "sendToTarget".into(),
-                                parameters: vec![],
-                                returns: "V".into(),
-                            },
-                            vec![copy],
-                            true,
-                        )?;
+                        self.dialog_message(receiver, "cancel")?;
                     }
                     self.invoke(
                         Method {
@@ -445,15 +696,64 @@ impl Runtime {
                     )
                 }
                 "dismiss()V" => {
+                    if !self
+                        .window_word(receiver, "droidless:dialog:showing")?
+                        .truth()
+                    {
+                        return Ok(vec![]);
+                    }
                     ensure!(
                         !self
-                            .window_word(receiver, "droidless:dialog:showing")?
+                            .window_word(receiver, "droidless:dialog:transition")?
                             .truth(),
-                        "visible Dialog dismissal unsupported"
+                        "recursive Dialog dismissal"
                     );
+                    self.heap
+                        .get_mut(receiver)?
+                        .fields
+                        .insert("droidless:dialog:transition".into(), vec![Word::from(1)]);
+                    let detached = self.invoke(
+                        Method {
+                            class: DIALOG.into(),
+                            name: "onDetachedFromWindow".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    );
+                    let stopped = self.invoke(
+                        Method {
+                            class: DIALOG.into(),
+                            name: "onStop".into(),
+                            parameters: vec![],
+                            returns: "V".into(),
+                        },
+                        vec![receiver],
+                        true,
+                    );
+                    self.dialogs.retain(|dialog| *dialog != receiver);
+                    self.touch = None;
+                    self.host_window_focused = false;
+                    let fields = &mut self.heap.get_mut(receiver)?.fields;
+                    fields.insert("droidless:dialog:showing".into(), vec![Word::ZERO]);
+                    fields.insert("droidless:dialog:token".into(), vec![Word::ZERO]);
+                    fields.insert("droidless:dialog:transition".into(), vec![Word::ZERO]);
+                    detached?;
+                    stopped?;
+                    self.dialog_message(receiver, "dismiss")?;
                     Ok(vec![])
                 }
-                "onCreate(Landroid/os/Bundle;)V" | "onContentChanged()V" => Ok(vec![]),
+                "onCreate(Landroid/os/Bundle;)V"
+                | "onContentChanged()V"
+                | "onStart()V"
+                | "onStop()V"
+                | "onAttachedToWindow()V"
+                | "onDetachedFromWindow()V" => Ok(vec![]),
+                "onWindowFocusChanged(Z)V" => {
+                    arg(1)?.int()?;
+                    Ok(vec![])
+                }
                 "onWindowAttributesChanged(Landroid/view/WindowManager$LayoutParams;)V" => {
                     ensure!(
                         self.is_a(&self.heap.get(arg(1)?)?.class, PARAMS),

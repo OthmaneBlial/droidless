@@ -619,7 +619,7 @@ impl Runtime {
         self.native_roots.truncate(roots);
         result
     }
-    pub(crate) fn bind_grids(&mut self) -> Result<()> {
+    pub(crate) fn bind_grids(&mut self, root: Word, width: f32, height: f32) -> Result<()> {
         fn collect(node: &ui::Node, out: &mut Vec<(Word, ui::GridMetrics)>) -> Result<()> {
             if node.view.grid.is_some() {
                 out.push((
@@ -637,7 +637,7 @@ impl Runtime {
         }
         for _ in 0..32 {
             let mut grids = vec![];
-            collect(&self.snapshot()?, &mut grids)?;
+            collect(&ui::layout(&self.heap, root, width, height)?, &mut grids)?;
             let mut bound = false;
             let roots = self.native_roots.len();
             self.native_roots

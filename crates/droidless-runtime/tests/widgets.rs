@@ -1,6 +1,230 @@
 use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
+fn dialog_surface_call(
+    vm: &mut Runtime,
+    name: &str,
+    parameters: &[&str],
+    returns: &str,
+    args: Vec<Word>,
+) -> anyhow::Result<Vec<Word>> {
+    vm.invoke(
+        Method {
+            class: "Lorg/droidless/images/DialogSurfaceContract;".into(),
+            name: name.into(),
+            parameters: parameters.iter().map(|s| (*s).into()).collect(),
+            returns: returns.into(),
+        },
+        args,
+        false,
+    )
+}
+
+#[test]
+fn compiled_dialog_surfaces_lifecycle_modal_input_back_gc_and_fault_recovery() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    vm.launch().unwrap();
+    let activity = vm.activity.unwrap();
+    let root = vm.root.unwrap();
+    let dialog = dialog_surface_call(
+        &mut vm,
+        "begin",
+        &["Landroid/app/Activity;"],
+        "Landroid/app/Dialog;",
+        vec![activity],
+    )
+    .unwrap()[0];
+    let state = |vm: &mut Runtime| {
+        let word = dialog_surface_call(vm, "state", &[], "Ljava/lang/String;", vec![]).unwrap()[0];
+        vm.heap.text(word).unwrap().to_owned()
+    };
+    let attachments = |vm: &mut Runtime| {
+        let word =
+            dialog_surface_call(vm, "attachments", &[], "Ljava/lang/String;", vec![]).unwrap()[0];
+        vm.heap.text(word).unwrap().to_owned()
+    };
+    assert_eq!(attachments(&mut vm), "1:0");
+    assert_eq!(vm.root, Some(root));
+    assert_eq!(
+        vm.activity_layout_snapshot().unwrap().handle,
+        root.reference().unwrap()
+    );
+    let surfaces = vm.dialog_layout_snapshots().unwrap();
+    assert_eq!(surfaces.len(), 1);
+    assert_eq!((surfaces[0].width, surfaces[0].height), (240.0, 160.0));
+    assert_eq!(surfaces[0].title, "Separate dialog");
+    for bad in [-3, 0, 16385] {
+        dialog_surface_call(
+            &mut vm,
+            "size",
+            &["I", "I"],
+            "V",
+            vec![Word::from(bad), Word::from(160)],
+        )
+        .unwrap();
+        assert!(
+            format!("{:#}", vm.dialog_layout_snapshots().err().unwrap())
+                .contains("unsupported Dialog width")
+        );
+        assert_eq!(vm.stack_depth(), 0);
+    }
+    dialog_surface_call(
+        &mut vm,
+        "size",
+        &["I", "I"],
+        "V",
+        vec![Word::from(-1), Word::from(-2)],
+    )
+    .unwrap();
+    let wrapped = vm.dialog_layout_snapshots().unwrap();
+    assert_eq!(wrapped[0].width, vm.width);
+    assert!(wrapped[0].height > 0.0 && wrapped[0].height <= vm.height);
+    dialog_surface_call(
+        &mut vm,
+        "size",
+        &["I", "I"],
+        "V",
+        vec![Word::from(240), Word::from(160)],
+    )
+    .unwrap();
+    let decor = Word::Ref(surfaces[0].tree.handle);
+    let token = |vm: &mut Runtime, view: Word| {
+        vm.invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: "getWindowToken".into(),
+                parameters: vec![],
+                returns: "Landroid/os/IBinder;".into(),
+            },
+            vec![view],
+            true,
+        )
+        .unwrap()[0]
+    };
+    assert_ne!(token(&mut vm, decor), Word::ZERO);
+    assert_ne!(token(&mut vm, decor), token(&mut vm, root));
+    let has_focus = |vm: &mut Runtime, view: Word| {
+        vm.invoke(
+            Method {
+                class: "Landroid/view/View;".into(),
+                name: "hasWindowFocus".into(),
+                parameters: vec![],
+                returns: "Z".into(),
+            },
+            vec![view],
+            true,
+        )
+        .unwrap()[0]
+    };
+    vm.set_host_dialog_focus(0, true).unwrap();
+    assert_eq!(has_focus(&mut vm, decor), Word::ZERO);
+    vm.set_host_dialog_focus(dialog.reference().unwrap(), true)
+        .unwrap();
+    assert_eq!(has_focus(&mut vm, decor), Word::from(1));
+    assert_eq!(has_focus(&mut vm, root), Word::ZERO);
+    vm.set_host_dialog_focus(dialog.reference().unwrap(), false)
+        .unwrap();
+    assert_eq!(has_focus(&mut vm, decor), Word::ZERO);
+
+    assert_eq!(vm.snapshot().unwrap().handle, decor.reference().unwrap());
+    assert_eq!(vm.poll_messages().unwrap(), 1);
+    assert_eq!(state(&mut vm), "1:1:0:0:0:S");
+    let background =
+        dialog_surface_call(&mut vm, "background", &[], "Landroid/view/View;", vec![]).unwrap()[0];
+    assert!(!vm.click(background.reference().unwrap()).unwrap());
+    assert!(!vm.focus(background.reference().unwrap()).unwrap());
+    vm.input("changed dialog").unwrap();
+    vm.focus_at(0).unwrap();
+    dialog_surface_call(&mut vm, "hide", &[], "V", vec![]).unwrap();
+    assert!(vm.dialog_layout_snapshots().unwrap().is_empty());
+    assert_eq!(vm.snapshot().unwrap().handle, root.reference().unwrap());
+    assert_eq!(
+        dialog_surface_call(&mut vm, "showing", &[], "Z", vec![]).unwrap(),
+        [Word::from(1)]
+    );
+    assert_ne!(token(&mut vm, decor), Word::ZERO);
+    dialog_surface_call(&mut vm, "show", &[], "V", vec![]).unwrap();
+    assert_eq!(vm.poll_messages().unwrap(), 0);
+    assert_eq!(state(&mut vm), "1:1:0:0:0:S");
+    let upper =
+        dialog_surface_call(&mut vm, "push", &[], "Landroid/app/Dialog;", vec![]).unwrap()[0];
+    assert_eq!(vm.dialog_layout_snapshots().unwrap().len(), 2);
+    assert_eq!(vm.poll_messages().unwrap(), 1);
+    vm.back().unwrap();
+    assert_eq!(vm.dialog_layout_snapshots().unwrap().len(), 1);
+    assert_eq!(vm.poll_messages().unwrap(), 2);
+    assert_eq!(state(&mut vm), "2:2:1:0:0:SSCD");
+    dialog_surface_call(&mut vm, "cancelable", &["Z"], "V", vec![Word::ZERO]).unwrap();
+    vm.back().unwrap();
+    assert_eq!(vm.dialog_layout_snapshots().unwrap().len(), 1);
+    dialog_surface_call(&mut vm, "outside", &["Z"], "V", vec![Word::from(1)]).unwrap();
+    dialog_surface_call(&mut vm, "outside", &["Z"], "V", vec![Word::ZERO]).unwrap();
+    vm.cancel_dialog_window(dialog.reference().unwrap(), true)
+        .unwrap();
+    assert_eq!(vm.dialog_layout_snapshots().unwrap().len(), 1);
+    // A real guest Button callback dismisses only its own Dialog.
+    assert!(vm.click_text("Confirm dialog").unwrap());
+    assert!(vm.dialog_layout_snapshots().unwrap().is_empty());
+    assert_eq!(token(&mut vm, decor), Word::ZERO);
+    assert_eq!(vm.poll_messages().unwrap(), 1);
+    assert_eq!(state(&mut vm), "2:2:2:1:0:SSCDD");
+    assert_eq!(attachments(&mut vm), "2:2");
+    assert!(vm.click(background.reference().unwrap()).unwrap());
+    dialog_surface_call(&mut vm, "show", &[], "V", vec![]).unwrap();
+    assert_eq!(vm.poll_messages().unwrap(), 1);
+    dialog_surface_call(&mut vm, "outside", &["Z"], "V", vec![Word::from(1)]).unwrap();
+    assert!(vm.touch_at(0, -10.0, 10.0, 100).unwrap());
+    assert!(vm.dialog_layout_snapshots().unwrap().is_empty());
+    assert!(!vm.touch_active());
+    assert_eq!(vm.poll_messages().unwrap(), 2);
+    dialog_surface_call(&mut vm, "show", &[], "V", vec![]).unwrap();
+    assert_eq!(vm.poll_messages().unwrap(), 1);
+    // Modal ownership must survive collection after every guest static reference is dropped.
+    dialog_surface_call(&mut vm, "drop", &[], "V", vec![]).unwrap();
+    vm.collect();
+    assert!(vm.heap.get(dialog).is_ok());
+    assert!(vm.heap.get(upper).is_err());
+    vm.cancel_dialog_window(dialog.reference().unwrap(), false)
+        .unwrap();
+    assert_eq!(vm.poll_messages().unwrap(), 2);
+    vm.collect();
+    assert!(vm.heap.get(dialog).is_err());
+    assert_eq!(vm.root, Some(root));
+    for phase in [1, 2] {
+        let failure = dialog_surface_call(
+            &mut vm,
+            "failed",
+            &["Landroid/app/Activity;", "I"],
+            "Landroid/app/Dialog;",
+            vec![activity, Word::from(phase)],
+        )
+        .unwrap_err();
+        assert!(format!("{failure:#}").contains(if phase == 1 {
+            "dialog create failure"
+        } else {
+            "dialog start failure"
+        }));
+        assert_eq!(vm.stack_depth(), 0);
+        assert!(vm.dialog_layout_snapshots().unwrap().is_empty());
+        dialog_surface_call(&mut vm, "recover", &[], "V", vec![]).unwrap();
+        assert_eq!(vm.poll_messages().unwrap(), 1);
+        assert!(
+            format!(
+                "{:#}",
+                dialog_surface_call(&mut vm, "failDismiss", &[], "V", vec![]).unwrap_err()
+            )
+            .contains("dialog stop failure")
+        );
+        assert!(vm.dialog_layout_snapshots().unwrap().is_empty());
+        assert_eq!(vm.stack_depth(), 0);
+        dialog_surface_call(&mut vm, "drop", &[], "V", vec![]).unwrap();
+        vm.collect();
+    }
+    vm.close().unwrap();
+}
+
 #[test]
 fn compiled_dialog_cancellation_messages_weak_owners_payload_snapshots_gc_and_faults() {
     let mut vm =
@@ -414,22 +638,34 @@ fn compiled_dialog_window_ownership_callbacks_theme_values_gc_and_faults() {
         true,
     )
     .unwrap();
-    let error = vm
-        .invoke(
-            Method {
-                class: "Landroid/app/Dialog;".into(),
-                name: "show".into(),
-                parameters: vec![],
-                returns: "V".into(),
-            },
-            vec![dialog],
-            true,
-        )
-        .unwrap_err();
+    vm.invoke(
+        Method {
+            class: "Landroid/app/Dialog;".into(),
+            name: "show".into(),
+            parameters: vec![],
+            returns: "V".into(),
+        },
+        vec![dialog],
+        true,
+    )
+    .unwrap();
+    assert_eq!(vm.dialog_layout_snapshots().unwrap().len(), 1);
+    vm.collect();
     assert!(
-        format!("{error:#}").contains("unsupported method Landroid/app/Dialog;->show()V"),
-        "{error:#}"
+        vm.heap.get(dialog).is_ok(),
+        "showing Dialog lost managed window ownership"
     );
+    vm.invoke(
+        Method {
+            class: "Landroid/app/Dialog;".into(),
+            name: "dismiss".into(),
+            parameters: vec![],
+            returns: "V".into(),
+        },
+        vec![dialog],
+        true,
+    )
+    .unwrap();
     assert_eq!(vm.stack_depth(), 0);
     vm.collect();
     assert!(

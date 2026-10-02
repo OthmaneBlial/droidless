@@ -108,6 +108,8 @@ impl Runtime {
         self.native_roots.push(root);
         let content = self.window_frame(context)?;
         self.native_roots.push(content);
+        self.view_mut(root)?.height = -2.0;
+        self.view_mut(content)?.height = -2.0;
         self.view_mut(content)?.id = 0x01020002;
         self.invoke(
             Method {

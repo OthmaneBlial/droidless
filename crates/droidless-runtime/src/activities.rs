@@ -170,8 +170,23 @@ impl Runtime {
     pub fn set_host_window_focus(&mut self, focused: bool) {
         self.host_window_focused = focused;
     }
+    /// Native hosts identify the actual key surface: zero is the Activity, otherwise a Dialog handle.
+    pub fn set_host_dialog_focus(&mut self, handle: usize, focused: bool) -> Result<()> {
+        let expected = self
+            .active_dialog()?
+            .map(Word::reference)
+            .transpose()?
+            .unwrap_or(0);
+        self.host_window_focused = focused && handle == expected;
+        Ok(())
+    }
     pub(crate) fn view_has_window_focus(&self, view: Word) -> Result<bool> {
         let token = self.view_window_token(view)?;
+        if let Some(dialog) = self.active_dialog()? {
+            return Ok(self.host_window_focused
+                && token != Word::ZERO
+                && token == self.window_word(dialog, "droidless:dialog:token")?);
+        }
         Ok(self.host_window_focused
             && token != Word::ZERO
             && self
@@ -183,6 +198,12 @@ impl Runtime {
         for _ in 0..128 {
             let object = self.heap.get(view)?;
             ensure!(object.view.is_some(), "window token requires a View");
+            for dialog in &self.dialogs {
+                let window = self.window_word(*dialog, "droidless:window")?;
+                if self.window_word(window, "droidless:window:decor")? == view {
+                    return self.window_word(*dialog, "droidless:dialog:token");
+                }
+            }
             if let Some(screen) = self
                 .screens
                 .values()
@@ -590,6 +611,21 @@ impl Runtime {
     }
     pub fn back(&mut self) -> Result<()> {
         self.reset_budget();
+        if let Some(dialog) = self.active_dialog()? {
+            self.invoke(
+                Method {
+                    class: "Landroid/app/Dialog;".into(),
+                    name: "onBackPressed".into(),
+                    parameters: vec![],
+                    returns: "V".into(),
+                },
+                vec![dialog],
+                true,
+            )?;
+            self.drain_navigation()?;
+            self.collect();
+            return Ok(());
+        }
         if let Some(activity) = self.activity {
             let class = self.heap.get(activity)?.class.clone();
             self.invoke(

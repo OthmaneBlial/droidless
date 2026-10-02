@@ -73,6 +73,7 @@ pub struct Runtime {
     pub(crate) interned: BTreeMap<String, Word>,
     budget: u64,
     pub(crate) screens: BTreeMap<usize, crate::activities::Screen>,
+    pub(crate) dialogs: Vec<Word>,
     pub(crate) back_stack: Vec<Word>,
     pub(crate) navigation: std::collections::VecDeque<crate::activities::Navigation>,
     pub(crate) directory_request: Option<(Word, i32)>,
@@ -149,6 +150,7 @@ impl Runtime {
             interned: BTreeMap::new(),
             budget: 0,
             screens: BTreeMap::new(),
+            dialogs: vec![],
             back_stack: vec![],
             navigation: std::collections::VecDeque::new(),
             directory_request: None,
@@ -274,6 +276,7 @@ impl Runtime {
     pub fn close(&mut self) -> Result<()> {
         self.budget = 0;
         self.touch = None;
+        self.close_dialogs()?;
         self.stop_messages()?;
         for screen in self.screens.values_mut() {
             screen.finishing = true;
@@ -298,15 +301,29 @@ impl Runtime {
         Ok(())
     }
     pub fn snapshot(&self) -> Result<Node> {
-        ui::layout(
-            &self.heap,
+        let (_, root, width, height) = self.input_surface()?;
+        ui::layout(&self.heap, root, width, height)
+    }
+    pub fn layout_snapshot(&mut self) -> Result<Node> {
+        let (_, root, width, height) = self.input_surface()?;
+        self.layout_root(root, width, height)
+    }
+    pub fn activity_layout_snapshot(&mut self) -> Result<Node> {
+        self.layout_root(
             self.root.context("no content View")?,
             self.width,
             self.height,
         )
     }
-    pub fn layout_snapshot(&mut self) -> Result<Node> {
-        self.bind_grids()?;
+    pub(crate) fn layout_root(&mut self, root: Word, width: f32, height: f32) -> Result<Node> {
+        let roots = self.native_roots.len();
+        self.native_roots.push(root);
+        let result = self.layout_root_inner(root, width, height);
+        self.native_roots.truncate(roots);
+        result
+    }
+    fn layout_root_inner(&mut self, root: Word, width: f32, height: f32) -> Result<Node> {
+        self.bind_grids(root, width, height)?;
         fn collect(
             heap: &Heap,
             node: &Node,
@@ -340,8 +357,7 @@ impl Runtime {
             }
             Ok(())
         }
-        let root = self.root.context("no content View")?;
-        let before = ui::layout(&self.heap, root, self.width, self.height)?;
+        let before = ui::layout(&self.heap, root, width, height)?;
         let mut views = vec![];
         collect(&self.heap, &before, (0.0, 0.0), &mut views)?;
         let mut layout_views = vec![];
@@ -371,6 +387,7 @@ impl Runtime {
             }
         }
         let roots = self.native_roots.len();
+        self.native_roots.push(root);
         self.native_roots
             .extend(layout_views.iter().map(|(view, _)| *view));
         let result = (|| -> Result<()> {
@@ -380,7 +397,7 @@ impl Runtime {
                 let mut current = vec![];
                 collect(
                     &self.heap,
-                    &ui::layout(&self.heap, root, self.width, self.height)?,
+                    &ui::layout(&self.heap, root, width, height)?,
                     (0.0, 0.0),
                     &mut current,
                 )?;
@@ -451,7 +468,7 @@ impl Runtime {
         self.native_roots.truncate(roots);
         result?;
         self.compute_scroll_frame(root, &mut vec![])?;
-        ui::layout(&self.heap, root, self.width, self.height)
+        ui::layout(&self.heap, root, width, height)
     }
     fn compute_scroll_frame(&mut self, view: Word, path: &mut Vec<Word>) -> Result<()> {
         ensure!(
@@ -516,6 +533,9 @@ impl Runtime {
         self.require_main_thread()?;
         self.budget = 0;
         let word = Word::Ref(handle);
+        if !self.input_view_allowed(word)? {
+            return Ok(false);
+        }
         let view = self
             .heap
             .get(word)?
@@ -543,6 +563,9 @@ impl Runtime {
     pub fn click(&mut self, handle: usize) -> Result<bool> {
         self.budget = 0;
         let word = Word::Ref(handle);
+        if !self.input_view_allowed(word)? {
+            return Ok(false);
+        }
         let view = self
             .heap
             .get(word)?
@@ -594,6 +617,10 @@ impl Runtime {
     pub fn edit(&mut self, handle: usize, text: &str) -> Result<()> {
         ensure!(text.len() <= 1_048_576, "text exceeds limit");
         let word = Word::Ref(handle);
+        ensure!(
+            self.input_view_allowed(word)?,
+            "View is blocked by a modal Dialog"
+        );
         {
             let view = self
                 .heap
@@ -640,6 +667,9 @@ impl Runtime {
         ensure!([0, 1].contains(&action), "invalid KeyEvent action");
         self.budget = 0;
         let word = Word::Ref(handle);
+        if !self.input_view_allowed(word)? {
+            return Ok(false);
+        }
         let view = self
             .heap
             .get(word)?
@@ -702,6 +732,7 @@ impl Runtime {
             .activity
             .into_iter()
             .chain(self.root)
+            .chain(self.dialogs.iter().copied())
             .chain(self.back_stack.iter().copied())
             .chain(
                 self.screens

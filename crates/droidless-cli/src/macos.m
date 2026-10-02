@@ -80,10 +80,20 @@ static NSFont *viewFont(const NativeView *node) {
 @property BOOL touchTracking;
 @property double clockOffset;
 @property NativeMotion lastMotion;
+@property NSMutableDictionary<NSNumber *,DroidlessHost *> *dialogs;
+@property NSMutableSet<NSNumber *> *dialogTouched;
+@property (weak) DroidlessHost *owner;
+@property (weak) DroidlessHost *activeDialog;
+@property size_t dialogHandle;
 - (void)clicked:(NSControl *)sender;
 - (void)cellClicked:(DroidlessClick *)sender;
 - (void)quit:(id)sender;
 @end
+
+static BOOL acceptsInput(DroidlessHost *host) {
+    DroidlessHost *owner = host.owner ?: host;
+    return owner.running && (owner.activeDialog ?: owner) == host;
+}
 
 @interface DroidlessTextField : NSTextField
 @end
@@ -91,7 +101,7 @@ static NSFont *viewFont(const NativeView *node) {
 - (BOOL)becomeFirstResponder {
     DroidlessHost *host = (DroidlessHost *)self.delegate;
     // Focus callbacks redraw the tree; never reenter Rust while applying native controls.
-    if (host.drawing) return NO;
+    if (host.drawing || !acceptsInput(host)) return NO;
     if (![super becomeFirstResponder]) return NO;
     if (!self.editable) return YES;
     int result = host.running ? host.callback(host.context, 10, (size_t)self.tag, NULL, NULL) : 0;
@@ -104,33 +114,48 @@ static NSFont *viewFont(const NativeView *node) {
 @implementation DroidlessHost
 - (void)quit:(id)sender { (void)sender; self.running = NO; }
 - (void)clicked:(NSControl *)sender {
+    if (!acceptsInput(self)) return;
     if (!self.callback(self.context, 1, (size_t)sender.tag, NULL, NULL)) self.running = NO;
 }
 - (void)cellClicked:(DroidlessClick *)sender {
+    if (!acceptsInput(self)) return;
     if (!self.callback(self.context, 1, sender.handle, NULL, NULL)) self.running = NO;
 }
 - (void)menuNeedsUpdate:(NSMenu *)menu {
     if (menu != self.options || !self.running) return;
+    if (self.activeDialog) {
+        [menu removeAllItems];
+        [menu addItemWithTitle:@"Dialog active" action:NULL keyEquivalent:@""].enabled = NO;
+        return;
+    }
     if (!self.callback(self.context, 8, 0, NULL, NULL)) {
         self.running = NO;
         [menu cancelTracking];
     }
 }
 - (void)optionSelected:(NSMenuItem *)sender {
+    if (!acceptsInput(self)) return;
     if (self.running && !self.callback(self.context, 9, (size_t)sender.tag, NULL, NULL)) self.running = NO;
 }
 - (void)controlTextDidChange:(NSNotification *)notification {
+    if (!acceptsInput(self)) return;
     NSTextField *field = notification.object;
     if (!self.callback(self.context, 2, (size_t)field.tag, field.stringValue.UTF8String, NULL)) self.running = NO;
 }
 - (BOOL)windowShouldClose:(NSWindow *)sender {
     (void)sender;
+    DroidlessHost *dialog = self.dialogHandle ? self : self.activeDialog;
+    if (dialog) {
+        DroidlessHost *owner = dialog.owner;
+        if (owner.running && !owner.callback(owner.context, 11, dialog.dialogHandle, NULL, NULL)) owner.running = NO;
+        return NO;
+    }
     self.running = NO;
     return YES;
 }
 - (void)windowDidResignKey:(NSNotification *)notification {
     (void)notification;
-    if (self.touchTracking && self.running) {
+    if (self.touchTracking && self.running && !self.drawing) {
         self.touchTracking = NO;
         NativeMotion motion = self.lastMotion;
         motion.action = 3;
@@ -176,6 +201,8 @@ void *dl_open(const char *title, float width, float height, void *context, Callb
     [menu addItem:optionsItem];
     host.views = [NSMutableDictionary new];
     host.touched = [NSMutableSet new];
+    host.dialogs = [NSMutableDictionary new];
+    host.dialogTouched = [NSMutableSet new];
     host.window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,width,height)
         styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable
         backing:NSBackingStoreBuffered defer:NO];
@@ -193,7 +220,68 @@ void *dl_open(const char *title, float width, float height, void *context, Callb
 
 int dl_has_window_focus(void *opaque) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;
-    return host.window.isKeyWindow;
+    return (host.activeDialog ?: host).window.isKeyWindow;
+}
+size_t dl_active_dialog_handle(void *opaque) {
+    DroidlessHost *host = (__bridge DroidlessHost *)opaque;
+    return host.activeDialog.dialogHandle;
+}
+void dl_dialog_begin_frame(void *opaque) {
+    DroidlessHost *host = (__bridge DroidlessHost *)opaque;
+    [host.dialogTouched removeAllObjects];
+    host.activeDialog = nil;
+}
+void *dl_dialog(void *opaque, size_t handle, float width, float height) {
+    DroidlessHost *owner = (__bridge DroidlessHost *)opaque;
+    NSNumber *key = @(handle);
+    DroidlessHost *host = owner.dialogs[key];
+    if (!host) {
+        host = [DroidlessHost new];
+        host.owner = owner;
+        host.dialogHandle = handle;
+        host.context = owner.context;
+        host.callback = owner.callback;
+        host.clockOffset = owner.clockOffset;
+        host.running = YES;
+        host.drawing = YES;
+        host.views = [NSMutableDictionary new];
+        host.touched = [NSMutableSet new];
+        host.window = [[NSPanel alloc] initWithContentRect:NSMakeRect(0,0,width,height)
+            styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable
+            backing:NSBackingStoreBuffered defer:NO];
+        host.window.releasedWhenClosed = NO;
+        host.window.delegate = host;
+        host.window.contentView = [[FlippedView alloc] initWithFrame:NSMakeRect(0,0,width,height)];
+        NSRect parent = owner.window.frame;
+        [host.window setFrameOrigin:NSMakePoint(NSMidX(parent)-host.window.frame.size.width/2,
+            NSMidY(parent)-host.window.frame.size.height/2)];
+        [owner.window addChildWindow:host.window ordered:NSWindowAbove];
+        owner.dialogs[key] = host;
+    }
+    host.drawing = YES;
+    [host.window setContentSize:NSMakeSize(width,height)];
+    [owner.dialogTouched addObject:key];
+    owner.activeDialog = host;
+    return (__bridge void *)host;
+}
+void dl_dialog_end_frame(void *opaque) {
+    DroidlessHost *owner = (__bridge DroidlessHost *)opaque;
+    // Applying the frame may change first responder; never reenter Rust from that transition.
+    owner.drawing = YES;
+    for (DroidlessHost *host in owner.dialogs.allValues) host.drawing = YES;
+    for (NSNumber *key in owner.dialogs.allKeys) {
+        if ([owner.dialogTouched containsObject:key]) continue;
+        DroidlessHost *host = owner.dialogs[key];
+        host.running = NO;
+        host.window.delegate = nil;
+        [owner.window removeChildWindow:host.window];
+        [host.window close];
+        [owner.dialogs removeObjectForKey:key];
+    }
+    NSWindow *window = (owner.activeDialog ?: owner).window;
+    if (NSApp.isActive && !window.isKeyWindow) [window makeKeyAndOrderFront:nil];
+    owner.drawing = NO;
+    for (DroidlessHost *host in owner.dialogs.allValues) host.drawing = NO;
 }
 void dl_begin(void *opaque, const char *title, uint32_t touchEnabled, uint32_t touchActive) {
     DroidlessHost *host = (__bridge DroidlessHost *)opaque;
@@ -338,33 +426,41 @@ void dl_run(void *opaque) {
             if (!host.callback(host.context, 6, 0, NULL, NULL)) { host.running = NO; break; }
             NSEvent *event = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:0.05] inMode:NSDefaultRunLoopMode dequeue:YES];
             if (event) {
+                DroidlessHost *target = [event.window.delegate isKindOfClass:[DroidlessHost class]] ?
+                    (DroidlessHost *)event.window.delegate : host;
+                if (host.activeDialog) target = host.activeDialog;
                 int consumed = 0;
                 if (getenv("DROIDLESS_NATIVE_TRACE") && (event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp))
                     fprintf(stderr, "native key type=%lu code=%u modifiers=%lu\n", (unsigned long)event.type, event.keyCode, (unsigned long)event.modifierFlags);
                 if ((event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp) && event.keyCode == 53 && !(event.modifierFlags&NSEventModifierFlagCommand)) {
                     if (event.type == NSEventTypeKeyDown && !host.callback(host.context, 5, 0, NULL, NULL)) host.running = NO;
                     consumed = 1;
-                } else if (host.keyTarget && (event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp) && !(event.modifierFlags&NSEventModifierFlagCommand)) {
-                    int result = host.callback(host.context, event.type == NSEventTypeKeyDown ? 3 : 4, host.keyTarget, event.charactersIgnoringModifiers.UTF8String, NULL);
+                } else if (target.keyTarget && (event.type == NSEventTypeKeyDown || event.type == NSEventTypeKeyUp) && !(event.modifierFlags&NSEventModifierFlagCommand)) {
+                    int result = host.callback(host.context, event.type == NSEventTypeKeyDown ? 3 : 4, target.keyTarget, event.charactersIgnoringModifiers.UTF8String, NULL);
                     if (!result) host.running = NO;
                     consumed = result == 2;
                 }
-                if (event.window == host.window && (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeLeftMouseDragged || event.type == NSEventTypeLeftMouseUp)) {
-                    NSPoint point = [host.window.contentView convertPoint:event.locationInWindow fromView:nil];
-                    if (event.type == NSEventTypeLeftMouseDown && host.touchEnabled && NSPointInRect(point, host.window.contentView.bounds)) {
+                if (host.activeDialog && event.window != target.window &&
+                    (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeLeftMouseDragged || event.type == NSEventTypeLeftMouseUp)) {
+                    if (event.type == NSEventTypeLeftMouseDown &&
+                        !host.callback(host.context, 12, target.dialogHandle, NULL, NULL)) host.running = NO;
+                    consumed = 1;
+                } else if (event.window == target.window && (event.type == NSEventTypeLeftMouseDown || event.type == NSEventTypeLeftMouseDragged || event.type == NSEventTypeLeftMouseUp)) {
+                    NSPoint point = [target.window.contentView convertPoint:event.locationInWindow fromView:nil];
+                    if (event.type == NSEventTypeLeftMouseDown && target.touchEnabled && NSPointInRect(point, target.window.contentView.bounds)) {
                         // NSView hitTest expects its superview coordinates; guest MotionEvent stays in flipped content coordinates.
-                        NSPoint hitPoint = [host.window.contentView.superview convertPoint:event.locationInWindow fromView:nil];
-                        NSView *hit = [host.window.contentView hitTest:hitPoint];
+                        NSPoint hitPoint = [target.window.contentView.superview convertPoint:event.locationInWindow fromView:nil];
+                        NSView *hit = [target.window.contentView hitTest:hitPoint];
                         // Keep AppKit's focus and text-selection behavior for editable controls.
-                        if (![hit isKindOfClass:[NSTextField class]] || !((NSTextField *)hit).editable) host.touchTracking = YES;
+                        if (![hit isKindOfClass:[NSTextField class]] || !((NSTextField *)hit).editable) target.touchTracking = YES;
                     }
-                    if (host.touchTracking) {
+                    if (target.touchTracking) {
                         NativeMotion motion = {(uint64_t)(MAX(0.0, event.timestamp + host.clockOffset) * 1000.0),
                             event.type == NSEventTypeLeftMouseDown ? 0 : event.type == NSEventTypeLeftMouseUp ? 1 : 2,
                             (float)point.x, (float)point.y};
-                        host.lastMotion = motion;
+                        target.lastMotion = motion;
                         if (getenv("DROIDLESS_NATIVE_TRACE")) fprintf(stderr, "native touch action=%d x=%.1f y=%.1f time=%llu\n", motion.action, motion.x, motion.y, (unsigned long long)motion.time);
-                        if (event.type == NSEventTypeLeftMouseUp) host.touchTracking = NO;
+                        if (event.type == NSEventTypeLeftMouseUp) target.touchTracking = NO;
                         if (!host.callback(host.context, 7, 0, NULL, &motion)) host.running = NO;
                         consumed = 1;
                     }
@@ -379,6 +475,10 @@ void dl_destroy(void *opaque) {
     DroidlessHost *host = (__bridge_transfer DroidlessHost *)opaque;
     if (getenv("DROIDLESS_NATIVE_TRACE")) fprintf(stderr, "native exit running=%d visible=%d\n", host.running, host.window.visible);
     host.options.delegate = nil;
+    [host.dialogTouched removeAllObjects];
+    host.activeDialog = nil;
+    dl_dialog_end_frame(opaque);
     NSApp.mainMenu = [NSMenu new];
+    host.window.delegate = nil;
     [host.window close];
 }

@@ -424,18 +424,18 @@ impl Runtime {
                 recycled: false,
             }
             .validate()?;
+            let (owner, root, _, _) = self.input_surface()?;
             ensure!(
                 !self
                     .touch
                     .as_ref()
-                    .is_some_and(|stream| Some(stream.owner) == self.activity
-                        && Some(stream.root) == self.root),
+                    .is_some_and(|stream| stream.owner == owner && stream.root == root),
                 "touch DOWN during active stream"
             );
             self.layout_snapshot()?;
         }
-        let owner = self.activity.context("touch without Activity")?;
-        let root = self.root.context("touch without content View")?;
+        let (owner, root, _, _) = self.input_surface()?;
+        ensure!(owner != Word::ZERO, "touch without Activity or Dialog");
         if self
             .touch
             .as_ref()
@@ -479,7 +479,16 @@ impl Runtime {
             let roots = self.native_roots.len();
             self.native_roots.push(event);
             let result = self.invoke(
-                method(ACTIVITY, "dispatchTouchEvent", &[MOTION], "Z"),
+                method(
+                    if self.active_dialog()?.is_some() {
+                        "Landroid/app/Dialog;"
+                    } else {
+                        ACTIVITY
+                    },
+                    "dispatchTouchEvent",
+                    &[MOTION],
+                    "Z",
+                ),
                 vec![owner, event],
                 true,
             );
@@ -493,7 +502,10 @@ impl Runtime {
         }
         let handled = result?.first().is_some_and(|w| w.truth());
         self.drain_navigation()?;
-        if self.activity != Some(owner) || self.root != Some(root) {
+        if !self
+            .input_surface()
+            .is_ok_and(|(current, content, _, _)| current == owner && content == root)
+        {
             self.touch = None;
         }
         self.collect();
@@ -503,9 +515,11 @@ impl Runtime {
         self.touch_at(action, x, y, self.uptime_ms())
     }
     pub fn touch_active(&self) -> bool {
-        self.touch
-            .as_ref()
-            .is_some_and(|s| self.activity == Some(s.owner) && self.root == Some(s.root))
+        self.input_surface().is_ok_and(|(owner, root, _, _)| {
+            self.touch
+                .as_ref()
+                .is_some_and(|s| s.owner == owner && s.root == root)
+        })
     }
     pub fn touch_input_enabled(&self) -> bool {
         fn guest(vm: &Runtime, mut class: String) -> bool {
@@ -547,9 +561,12 @@ impl Runtime {
                 .as_ref()
                 .is_some_and(|v| v.children.iter().any(|w| views(vm, *w, depth + 1)))
         }
-        self.activity
-            .is_some_and(|a| self.heap.get(a).is_ok_and(|o| guest(self, o.class.clone())))
-            || self.root.is_some_and(|r| views(self, r, 0))
+        self.input_surface().is_ok_and(|(owner, root, _, _)| {
+            self.heap
+                .get(owner)
+                .is_ok_and(|o| guest(self, o.class.clone()))
+                || views(self, root, 0)
+        })
     }
     fn perform_view_click(&mut self, view: Word) -> Result<bool> {
         let data = self
@@ -1027,8 +1044,18 @@ impl Runtime {
                 self.save_gesture(detector, &g)?;
                 result?;
             }
-            (ACTIVITY, "dispatchTouchEvent(Landroid/view/MotionEvent;)Z") => {
-                let root = self.root.context("Activity touch without content")?;
+            (
+                ACTIVITY | "Landroid/app/Dialog;",
+                "dispatchTouchEvent(Landroid/view/MotionEvent;)Z",
+            ) => {
+                let root = if method_.class == ACTIVITY {
+                    self.screen(receiver)?
+                        .root
+                        .context("Activity touch without content")?
+                } else {
+                    let window = self.window_word(receiver, "droidless:window")?;
+                    self.window_root(window, false)?
+                };
                 let event = arg(1)?;
                 let mut handled = self.invoke(
                     method(VIEW, "dispatchTouchEvent", &[MOTION], "Z"),
@@ -1038,7 +1065,7 @@ impl Runtime {
                     .truth();
                 if !handled {
                     handled = self.invoke(
-                        method(ACTIVITY, "onTouchEvent", &[MOTION], "Z"),
+                        method(&method_.class, "onTouchEvent", &[MOTION], "Z"),
                         vec![receiver, event],
                         true,
                     )?[0]
@@ -1049,6 +1076,32 @@ impl Runtime {
             (ACTIVITY, "onTouchEvent(Landroid/view/MotionEvent;)Z") => {
                 self.motion(arg(1)?)?;
                 result.push(Word::ZERO);
+            }
+            ("Landroid/app/Dialog;", "onTouchEvent(Landroid/view/MotionEvent;)Z") => {
+                let motion = self.motion(arg(1)?)?;
+                let (_, width, height) = self.dialog_geometry(receiver)?;
+                let outside = motion.action == 4
+                    || (motion.action == 0
+                        && (motion.x < 0.0
+                            || motion.y < 0.0
+                            || motion.x >= width
+                            || motion.y >= height));
+                let window = self.window_word(receiver, "droidless:window")?;
+                let close = outside
+                    && self
+                        .window_word(receiver, "droidless:dialog:cancelable")?
+                        .truth()
+                    && self
+                        .window_word(window, "droidless:window:close-outside")?
+                        .truth();
+                if close {
+                    self.invoke(
+                        method("Landroid/app/Dialog;", "cancel", &[], "V"),
+                        vec![receiver],
+                        true,
+                    )?;
+                }
+                result.push(Word::from(i32::from(close)));
             }
             (
                 VIEW | "Landroid/view/ViewGroup;",

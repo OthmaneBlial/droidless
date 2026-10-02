@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Modal Dialog surfaces now use separate native AppKit panels and guest View
+  trees. Actual creation/start/attachment/detachment/stop callbacks execute; the
+  top visible surface receives input, Back, panel close and outside cancellation.
+  Hide/reopen preserves showing state, dismissal restores the previous surface,
+  and GC retains only attached ownership. Authored DEX checks cover callback
+  order, nested surfaces, bounds, focus, errors and collection; AppKit checks
+  cover real panels, native controls, close routing, resize and retirement.
+  The unchanged Notepad APK enters its own dialog onCreate and stops at
+  FrameLayout foreground setup, preserving the exact folder and both notes.
+  Public confirmation and physical dialog input remain unverified.
+
 - WeakReference now excludes its referent from strong heap traversal and clears
   unreachable targets, including cycles. APK subclasses retain their other strong
   fields. clear(), stable handles, invalid targets and queue registration limits
@@ -12,13 +23,14 @@
   cancellation posts one copied message and calls the actual dismiss override.
   The listener handler holds its dialog weakly, so queued callbacks can receive
   null after collection. Guest callbacks, payload snapshots, custom messages,
-  callback faults and temporary-root cleanup pass compiled checks. Visible
-  presentation/dismissal and confirmation UI remain unsupported.
+  callback faults and temporary-root cleanup pass compiled checks. The modal
+  surface profile now adds visible lifecycle; public confirmation remains unverified.
 
 - Message.obtain(Message) snapshots supported fields/targets/callbacks without
   copying queue-use state or delivery time; sendToTarget uses the real Handler.
   The unchanged Notepad folder-delete builder now passes cancellation/listener
-  setup and reaches unsupported show(), preserving the exact folder and notes.
+  setup and reaches AppCompat foreground setup inside its dialog onCreate,
+  preserving the exact folder and notes.
 
 - Dialog construction now retains an independent themed context, owned Window,
   stable decor/content, actual inflater factories and real content/attribute

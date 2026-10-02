@@ -61,6 +61,10 @@ unsafe extern "C" {
     );
     fn dl_run(host: *mut c_void);
     fn dl_has_window_focus(host: *mut c_void) -> i32;
+    fn dl_active_dialog_handle(host: *mut c_void) -> usize;
+    fn dl_dialog_begin_frame(host: *mut c_void);
+    fn dl_dialog(host: *mut c_void, handle: usize, width: f32, height: f32) -> *mut c_void;
+    fn dl_dialog_end_frame(host: *mut c_void);
     fn dl_destroy(host: *mut c_void);
     fn dl_choose_directory(host: *mut c_void, path: *mut *mut c_char) -> i32;
     fn dl_free_path(path: *mut c_char);
@@ -79,12 +83,17 @@ extern "C" fn event(
 ) -> i32 {
     // SAFETY: dl_run calls synchronously on the main thread while ContextData is alive.
     let context = unsafe { &mut *context.cast::<ContextData<'_>>() };
+    if context.error.is_some() {
+        return 0;
+    }
     let mut consumed = false;
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<()> {
         // SAFETY: the main-thread event loop owns this live host for the callback's duration.
         context
             .runtime
-            .set_host_window_focus(unsafe { dl_has_window_focus(context.host) != 0 });
+            .set_host_dialog_focus(unsafe { dl_active_dialog_handle(context.host) }, unsafe {
+                dl_has_window_focus(context.host) != 0
+            })?;
         let dispatched = if kind == 6 {
             context.runtime.poll_messages()?
         } else {
@@ -156,6 +165,10 @@ extern "C" fn event(
             10 => {
                 consumed = context.runtime.focus(handle)?;
             }
+            11 | 12 => {
+                context.runtime.cancel_dialog_window(handle, kind == 12)?;
+                consumed = true;
+            }
             _ => anyhow::bail!("unknown native event {kind}"),
         }
         if context.runtime.activity.is_some() && (kind != 6 || dispatched > 0) {
@@ -202,7 +215,9 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
     // SAFETY: drawing runs on the owning thread with the live host returned by dl_open.
     context
         .runtime
-        .set_host_window_focus(unsafe { dl_has_window_focus(context.host) != 0 });
+        .set_host_dialog_focus(unsafe { dl_active_dialog_handle(context.host) }, unsafe {
+            dl_has_window_focus(context.host) != 0
+        })?;
     fn node(host: *mut c_void, n: &Node, ancestor_click: usize, ancestor_alpha: f32) -> Result<()> {
         if n.view.visible != 0 {
             return Ok(());
@@ -267,22 +282,54 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
         }
         Ok(())
     }
-    let tree = context.runtime.layout_snapshot()?;
+    let tree = context.runtime.activity_layout_snapshot()?;
+    let dialogs = context.runtime.dialog_layout_snapshots()?;
     let title = CString::new(format!("{} — DROIDLESS", context.runtime.title.trim()))?;
     // SAFETY: the live host pointer comes only from dl_open and is used on the same thread.
     unsafe {
         dl_begin(
             context.host,
             title.as_ptr(),
-            u32::from(context.runtime.touch_input_enabled()),
-            u32::from(context.runtime.touch_active()),
+            u32::from(dialogs.is_empty() && context.runtime.touch_input_enabled()),
+            u32::from(dialogs.is_empty() && context.runtime.touch_active()),
         );
     }
     node(context.host, &tree, 0, 1.0)?;
     // SAFETY: same live host as above.
     unsafe {
         dl_end(context.host);
+        dl_dialog_begin_frame(context.host);
     }
+    for (index, dialog) in dialogs.iter().enumerate() {
+        let title = CString::new(format!("{} — DROIDLESS", dialog.title.trim()))?;
+        // SAFETY: the main host owns each panel until end_frame retires it; C copies titles and views.
+        let host = unsafe { dl_dialog(context.host, dialog.handle, dialog.width, dialog.height) };
+        anyhow::ensure!(!host.is_null(), "native Dialog creation failed");
+        let active = index + 1 == dialogs.len();
+        unsafe {
+            dl_begin(
+                host,
+                title.as_ptr(),
+                u32::from(active && context.runtime.touch_input_enabled()),
+                u32::from(active && context.runtime.touch_active()),
+            );
+        }
+        node(host, &dialog.tree, 0, 1.0)?;
+        // SAFETY: host is still owned by the parent window, and drawing is synchronous.
+        unsafe {
+            dl_end(host);
+        }
+    }
+    // SAFETY: all native views have copied the snapshots; retire absent panels on this main thread.
+    unsafe {
+        dl_dialog_end_frame(context.host);
+    }
+    // SAFETY: panel application is complete; query the actual key surface on the owning thread.
+    context
+        .runtime
+        .set_host_dialog_focus(unsafe { dl_active_dialog_handle(context.host) }, unsafe {
+            dl_has_window_focus(context.host) != 0
+        })?;
     Ok(())
 }
 pub fn run(runtime: &mut Runtime) -> Result<()> {

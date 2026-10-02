@@ -88,6 +88,10 @@ The following are objectives, not completed capability claims.
    component checks cover key-view traversal, selection and refusal/failure.
    The same dispatcher creates and renames folders in optimized host replay.
    Physical folder input and complete bidirectional focus remain unverified.
+   Generic modal Dialog surfaces now use separate native panels with guest lifecycle,
+   input, nesting, cancellation and GC checks. The public folder-delete listener
+   enters its bundled dialog onCreate and stops at AppCompat foreground setup;
+   its confirmation window and confirmed deletion remain ahead.
    The neutral public calculator continues to prove boxed Double execution
    through native clicks.
 4. Async Java: main Handler/Looper/Message scheduling and native authored timer

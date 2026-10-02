@@ -47,5 +47,6 @@ mod vm;
 mod windows;
 mod workers;
 mod xml_resource;
+pub use dialogs::DialogWindow;
 pub use menus::MenuEntry;
 pub use vm::{Runtime, Trace};

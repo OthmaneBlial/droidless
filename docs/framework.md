@@ -727,7 +727,7 @@ Null bases, repeated attachment, wrong argument types, callback faults and
 wrapper chains are checked; native delegation is bounded to 32 synchronous calls.
 Temporary roots retain callbacks through GC and unwind on errors. Themed-wrapper
 operations use the main-thread profile. Configuration overrides, complete system
-theme resources, automatic XML theme wrapping and native Dialog presentation remain unsupported.
+theme resources and automatic XML theme wrapping remain unsupported.
 [ContextThemeWrapper reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/view/ContextThemeWrapper.java)
 and [Resources/Theme reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/content/res/Resources.java).
 
@@ -963,7 +963,7 @@ inflation uses the real cloned inflater/factories. Replacement detaches prior
 content without replacing the Activity root. Supported content and attribute
 changes invoke actual guest callbacks. Dialog.create runs onCreate(null) once after
 a successful return and can retry a failed callback. Layout/gravity/flag/title
-state is managed; it does not resize or display a native dialog. show, hide, visible dismissal, dialog input and confirmation/deletion remain unsupported.
+state is managed; the modal surface profile below handles show, hide and dismissal. This alone does not prove a third-party confirmation or deletion workflow.
 Calls retain temporary GC roots and enforce the 32-call callback bound.
 
 StateListDrawable supports construction, ordered addState, positive/negative and
@@ -976,7 +976,7 @@ profile renders selected ColorDrawable/resolved-color leaves, including nested
 selectors; unsupported selected leaf painting fails explicitly. Selected-child
 intrinsic size queries support drawer measurement. Pressed/enabled changes refresh drawable state through shared setters,
 and normal touch down/up/cancel use those setters. General selector XML inflation,
-composite drawable painting, transition animations and native dialog presentation
+composite drawable painting and transition animations
 remain future work. View.EMPTY_STATE_SET resolves as one shared inherited empty
 int array; APK-declared fields with the same name retain their own identity.
 
@@ -1002,7 +1002,7 @@ The main-thread profile supports setCancelable, setCanceledOnTouchOutside and
 onBackPressed. Enabling outside cancellation also enables Back cancellation;
 disabling outside cancellation does not disable Back. Window outside-close
 settings retain the explicit-set flag and support set-if-unset behavior. Actual
-outside-touch delivery requires dialog presentation, which remains unsupported.
+outside-click delivery uses the modal surface profile below.
 
 Cancel/dismiss/show/key listeners accept matching interface objects or null and
 retain their managed ownership. Programmatic cancel on an unshown dialog posts a
@@ -1013,8 +1013,8 @@ an otherwise unreachable dialog alive. Delivery uses the existing Handler/Looper
 queue, executes real guest callbacks and may pass null after the dialog is
 collected. Replacing a registered listener does not rewrite an already posted
 payload. Faults unwind temporary roots and retire the active message. Custom
-cancel/dismiss message registration is supported; visible dismissal, show/hide
-and their lifecycle events remain unsupported. This is not confirmation UI.
+cancel/dismiss message registration is supported. Visible lifecycle behavior is
+described below; this does not establish a public confirmation workflow.
 
 Message.obtain(Message) copies the supported scalar fields, obj, target and
 Runnable callback into a fresh message without copying its queued/consumed state
@@ -1022,3 +1022,40 @@ or delivery time. Existing Bundle data is copied separately. sendToTarget routes
 through the actual target Handler. Target/callback/payload handles are validated;
 a message cannot be sent twice. Messenger/replyTo, asynchronous message flags and
 broader Message data access APIs remain outside this profile.
+
+
+### Modal Dialog surfaces
+
+Dialog.show executes the actual virtual onCreate once, onStart on each new
+attachment, and onAttachedToWindow before posting a copied show-listener message.
+The runtime retains each showing Dialog, its independent Window/decor, context,
+content and attachment token as GC roots. It leaves the Activity root and back
+stack intact. Dialogs are bounded to 32; recursive transitions and invalid window
+sizes fail explicitly. Window dimensions support positive sizes up to 16,384,
+match-parent and bounded intrinsic wrap-content in the virtual viewport.
+
+Snapshots and headless actions target the top visible Dialog. Activity snapshots
+remain separately available to the native renderer. AppKit renders each surface
+into a real child NSPanel using the same guest View renderer as the Activity;
+native button/text/focus events execute guest callbacks. Both the native event
+path and runtime reject input below the top modal surface. Back and panel close
+follow the Dialog cancellation policy; outside clicks also require the Window's
+outside-close flag. Touch dispatch uses the Dialog's own decor and guest virtual
+callbacks, with stream retirement when the surface changes.
+
+Hide preserves isShowing, lifecycle state and the token but retires its visible
+native panel. Showing it again restores the surface without a second start or
+show notification. Dismiss dispatches detachment and onStop, clears ownership and
+the token, restores the previous surface, and posts a copied dismissal message.
+Lifecycle faults propagate; dismissal still removes the failed surface so a
+subsequent dialog can proceed. Reopening after dismissal starts a fresh attachment.
+Closing the runtime dismisses remaining surfaces before stopping its message queue.
+
+This is the main-thread modal profile. Dialog OnKeyListener delivery, native
+window-focus callback delivery, state save/restore, arbitrary WindowManager
+add/remove operations, nonmodal/floating-window flags and composite foreground
+painting remain unsupported. The public Notepad APK reaches its own dialog
+onCreate and AppCompat content installation, then fails at FrameLayout.setForeground;
+its confirmation dialog and folder deletion are not yet verified. Authored DEX
+contracts and real AppKit component checks cover the implemented surface behavior;
+physical interaction with a public dialog remains unverified.
