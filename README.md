@@ -63,10 +63,10 @@ name. Rename confirmation now completes using real host-font ascent/descent.
 The same folder ID/new name survive restart and Back with both exact notes.
 🪟 Dialogs now render into separate native panels with their own View trees.
 Authored DEX and AppKit checks cover lifecycle, input, nesting and dismissal.
-The original Notepad delete listener enters its dialog onCreate, then stops at
-AppCompat foreground setup. Its failed attempt preserves the folder and both
+The original Notepad delete listener enters its dialog onCreate and passes
+foreground setup, then stops at a missing dialog layout resource. Its failed attempt preserves the folder and both
 exact notes. Public confirmation, folder deletion and physical folder input
-remain unverified. [Dialog/window evidence](docs/verification.md#current-source-modal-dialog-surfaces-and-appcompat-content-boundary).
+remain unverified. [Dialog/window evidence](docs/verification.md#current-source-foreground-overlays-and-dialog-layout-boundary).
 [Folder rename and font-metrics evidence](docs/verification.md#current-source-folder-rename-and-host-font-metrics).
 
 ```sh
@@ -233,7 +233,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 136 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 137 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

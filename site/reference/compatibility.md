@@ -95,11 +95,12 @@ The actual saved-folder delete listener now completes bundled AppCompat themed
 context/inflater setup, state-list drawer measurement and Dialog construction with
 its own context/window. Cancellation settings and listener setup also complete.
 It enters the bundled dialog onCreate and AppCompat content installation, then
-fails explicitly at `Landroid/widget/FrameLayout;->setForeground(Landroid/graphics/drawable/Drawable;)V`. The failed
+passes AppCompat foreground setup, then fails explicitly during dialog content
+inflation with `resource @0x00000000 missing or complex`. The failed
 attempt retains the same folder and both exact note rows. The confirmation window,
 Cancel, confirmed folder deletion and native folder input remain unverified. The
 permanent replay tracks this boundary without treating it as a completed delete
-workflow. [Dialog/window evidence](verification.md#current-source-modal-dialog-surfaces-and-appcompat-content-boundary).
+workflow. [Dialog/window evidence](verification.md#current-source-foreground-overlays-and-dialog-layout-boundary).
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- FrameLayout foregrounds now retain real Drawable identity, use weak callbacks,
+  refresh supported color/state leaves and padding, and paint above native child
+  controls without capturing their input. Compiled DEX and AppKit component checks
+  cover clearing/replacement, alpha, visibility, GC and callback faults. FILL
+  painting is supported; theme/XML, composite and Canvas foregrounds remain ahead.
+  The unchanged Notepad delete listener passes AppCompat foreground setup and
+  reaches a missing dialog layout resource, preserving the folder and exact notes.
+  Public confirmation and confirmed folder deletion remain unverified.
+
 - Modal Dialog surfaces now use separate native AppKit panels and guest View
   trees. Actual creation/start/attachment/detachment/stop callbacks execute; the
   top visible surface receives input, Back, panel close and outside cancellation.

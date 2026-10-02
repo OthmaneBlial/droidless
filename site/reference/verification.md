@@ -1,6 +1,6 @@
 # First interactive milestone evidence
 
-Latest local source gate: 136 Rust tests, warning-free Clippy, optimized builds
+Latest local source gate: 137 Rust tests, warning-free Clippy, optimized builds
 and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
 
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
@@ -2326,3 +2326,50 @@ foreground boundary against one unchanged release CLI. Its unsigned development
 bundle is byte-identical: SHA-256 `9e81baab02d20dbef827f614c43ddd0da57a55b31c9f6ce9f8f527ec469b1697`. The replay keeps confirmed
 folder deletion false; entering onCreate is not completed dialog creation or
 presentation. The live site mirrors these source documents and compatibility data.
+
+
+## Current-source foreground overlays and dialog layout boundary
+
+Date: 2026-10-02. Runtime source commit 7c84ff2, beyond the published v0.1.0 archive.
+
+FrameLayout now retains actual programmatic foreground Drawable identity and
+paints supported color/selector leaves above its native descendants. A separate
+AppKit overlay preserves native child control hit testing and combines drawable
+ARGB with ancestor alpha. Replacement/null clears the old weak callback and
+retires the overlay. Visibility/color invalidation, View-driven selector state,
+constant selector padding, virtual getPadding and setBounds share the managed
+callback and layout paths. Effective padding takes each edge's maximum without
+rewriting the user's padding getters. Other gravity can be stored for a null
+foreground; painting outside FILL fails explicitly. Theme/XML foregrounds,
+bitmap/composite painting and tint/Canvas parity remain outside this increment.
+
+The actual compiled ForegroundContract checks original getter identity, no-op
+same assignment, click-through guest delivery, recoloring, visibility, pressed
+selector state, per-edge padding, replacement/clearing, weak callback collection,
+invalid references, unsupported paint and recovery after guest padding faults
+with System.gc during callbacks. The native component creates a real NSButton
+beneath the overlay and checks host hit testing, stacking, ARGB/ancestor alpha,
+resize/reuse and retirement. It is a component test, not physical input into the
+public Notepad dialog.
+
+The original SHA-256-pinned Notepad APK passes the prior setForeground boundary.
+Its actual focused EditFolderViewHolder.clickLeftButton still calls at PC 0x0057,
+its builder at PC 0x0004 and its bundled dialog onCreate at PC 0x0012. The new
+first failure is `resource @0x00000000 missing or complex`, while the bundled
+`Landroid/support/v7/a/ac;->b(I)V` installs dialog content at PC 0x0017 through
+LayoutInflater.inflate. The unchanged APK SHA-256 is
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+The disposable attempt preserves the saved folder ID/name and both exact note
+IDs/titles/bodies, and leaves the seed intact. Dialog creation/presentation is
+still incomplete; public confirmation, Cancel and confirmed folder deletion
+remain unverified. No APK patch or replacement confirmation is used.
+
+The complete local gate passes 137 Rust tests, warning-free Clippy, optimized
+workspace/document-replay builds, 4,096 seeded parser mutations and native
+font/focus/dialog/foreground component checks. GitHub Actions remain disabled.
+The unchanged optimized CLI and its unsigned development bundle are byte-identical:
+SHA-256 `71ce086381c8a340f6cf22b906b4de69dd9e6f5736347e3e0d537a5b53d25628`. The complete public replay passes calculator, image/grid/result, SwpieView and
+Notepad create/edit/delete/Undo/drawer/folder/restart workflows, and certifies
+this same unchanged CLI. Its folder-delete diagnostic records the new resource
+boundary while keeping confirmed folder deletion false. The 50% checkpoint remains active; no new release or physical
+public dialog interaction is claimed.

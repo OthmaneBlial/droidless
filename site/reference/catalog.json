@@ -262,8 +262,9 @@
       "headless_folder_delete_dialog_constructor_verified": true,
       "headless_folder_delete_dialog_builder_verified": true,
       "headless_folder_delete_dialog_oncreate_entered": true,
-      "folder_deletion_first_blocker": "Landroid/widget/FrameLayout;->setForeground(Landroid/graphics/drawable/Drawable;)V",
-      "folder_delete_failure_retains_exact_notes_and_folder": true
+      "folder_deletion_first_blocker": "resource @0x00000000 missing or complex",
+      "folder_delete_failure_retains_exact_notes_and_folder": true,
+      "headless_folder_delete_appcompat_foreground_setup_verified": true
     },
     {
       "package": "org.droidless.grids",

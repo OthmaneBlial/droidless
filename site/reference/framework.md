@@ -983,6 +983,29 @@ int array; APK-declared fields with the same name retain their own identity.
 [API-21 StateListDrawable reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/graphics/java/android/graphics/drawable/StateListDrawable.java)
 
 
+### FrameLayout foregrounds
+
+FrameLayout.setForeground/getForeground retains the actual Drawable identity,
+clears the prior callback on replacement or null, and paints supported color and
+selected color-selector leaves above descendants in a separate AppKit view.
+The overlay passes input to native child controls and combines ARGB alpha with
+ancestor alpha. Drawable callbacks use managed WeakReference ownership;
+invalidateSelf calls the actual callback. Color changes and visibility invalidation
+refresh the overlay; View drawable-state callbacks update stateful foregrounds.
+Virtual getPadding supplies per-edge padding without overwriting user padding;
+measurement/layout use each edge's maximum. Constant selector padding takes the
+maximum across its children. Layout forwards actual setBounds callbacks.
+
+The default foreground gravity is FILL. Other normalized gravity values can be
+retained while the foreground is null; painting outside FILL fails explicitly.
+The compiled contract checks click-through guest delivery, replacement/clearing,
+color/visibility/state, padding, GC, weak callbacks, invalid references and callback
+fault recovery. The native component checks real control hit testing, stacking,
+alpha, resize/reuse and clearing. Theme/XML foreground inflation, bitmap/composite
+foregrounds, tint and general Canvas painting remain outside this profile.
+
+[API-21 FrameLayout reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/FrameLayout.java).
+
 ### Weak references and collector reachability
 
 WeakReference retains a weak managed heap edge, including APK subclasses and
