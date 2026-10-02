@@ -2,6 +2,42 @@ use droidless_formats::{apk::Apk, dex::Method};
 use droidless_runtime::{Runtime, heap::Word};
 
 #[test]
+fn compiled_sized_children_virtual_factories_attachment_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let parent = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/images/SizedChildContract;".into(),
+                name: "run".into(),
+                parameters: vec![],
+                returns: "Landroid/view/View;".into(),
+            },
+            vec![],
+            false,
+        )
+        .unwrap()[0];
+    assert_eq!(
+        vm.heap
+            .get(parent)
+            .unwrap()
+            .view
+            .as_ref()
+            .unwrap()
+            .children
+            .len(),
+        2
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(parent).is_err(),
+        "sized attachment leaked temporary roots"
+    );
+}
+
+#[test]
 fn compiled_text_appearance_context_callbacks_gc_size_and_fault_recovery() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

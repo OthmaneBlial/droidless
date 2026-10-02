@@ -838,6 +838,156 @@ impl Runtime {
         Ok(attributes)
     }
 
+    fn sized_child_native(&mut self, method: &Method, args: &[Word]) -> Result<Option<Vec<Word>>> {
+        let sized = method.class == "Landroid/view/ViewGroup;"
+            && method.signature() == "addView(Landroid/view/View;II)V";
+        let factory = method.name == "generateDefaultLayoutParams"
+            && method.parameters.is_empty()
+            && matches!(
+                method.class.as_str(),
+                "Landroid/view/ViewGroup;"
+                    | "Landroid/widget/LinearLayout;"
+                    | "Landroid/widget/FrameLayout;"
+                    | "Landroid/widget/TableLayout;"
+                    | "Landroid/widget/TableRow;"
+            )
+            && matches!(
+                method.returns.as_str(),
+                "Landroid/view/ViewGroup$LayoutParams;"
+                    | "Landroid/widget/LinearLayout$LayoutParams;"
+                    | "Landroid/widget/FrameLayout$LayoutParams;"
+            );
+        if !sized && !factory {
+            return Ok(None);
+        }
+        self.require_main_thread()?;
+        ensure!(self.sync_depth < 32, "sized child callback nesting limit");
+        ensure!(
+            args.len() == if sized { 4 } else { 1 },
+            "invalid sized child argument count"
+        );
+        let receiver = args[0];
+        self.view_mut(receiver)?;
+        if self.trace.framework {
+            eprintln!("framework: {} {args:?}", method.key());
+        }
+        let roots = self.native_roots.len();
+        self.native_roots.extend(args.iter().copied());
+        let result = (|| -> Result<Vec<Word>> {
+            if sized {
+                let width = args[2].int()?;
+                let height = args[3].int()?;
+                let params = self.invoke(
+                    Method {
+                        class: "Landroid/view/ViewGroup;".into(),
+                        name: "generateDefaultLayoutParams".into(),
+                        parameters: vec![],
+                        returns: "Landroid/view/ViewGroup$LayoutParams;".into(),
+                    },
+                    vec![receiver],
+                    true,
+                )?[0];
+                if params == Word::ZERO {
+                    return Err(fault(
+                        "Ljava/lang/NullPointerException;",
+                        "null default layout parameters",
+                    ));
+                }
+                self.native_roots.push(params);
+                ensure!(
+                    self.is_a(
+                        &self.heap.get(params)?.class,
+                        "Landroid/view/ViewGroup$LayoutParams;"
+                    ),
+                    "default factory returned invalid layout parameters"
+                );
+                let fields = &mut self.heap.get_mut(params)?.fields;
+                fields.insert(
+                    "Landroid/view/ViewGroup$LayoutParams;->width:I".into(),
+                    vec![Word::from(width)],
+                );
+                fields.insert(
+                    "Landroid/view/ViewGroup$LayoutParams;->height:I".into(),
+                    vec![Word::from(height)],
+                );
+                self.invoke(
+                    Method {
+                        class: "Landroid/view/ViewGroup;".into(),
+                        name: "addView".into(),
+                        parameters: vec![
+                            "Landroid/view/View;".into(),
+                            "I".into(),
+                            "Landroid/view/ViewGroup$LayoutParams;".into(),
+                        ],
+                        returns: "V".into(),
+                    },
+                    vec![receiver, args[1], Word::from(-1), params],
+                    true,
+                )?;
+                return Ok(vec![]);
+            }
+            let (class, constructor, width, height) = match method.class.as_str() {
+                "Landroid/widget/LinearLayout;" => {
+                    let width = match self.view_mut(receiver)?.orientation {
+                        0 => -2,
+                        1 => -1,
+                        _ => return Ok(vec![Word::ZERO]),
+                    };
+                    (
+                        "Landroid/widget/LinearLayout$LayoutParams;",
+                        "Landroid/widget/LinearLayout$LayoutParams;",
+                        width,
+                        -2,
+                    )
+                }
+                "Landroid/widget/FrameLayout;" => (
+                    "Landroid/widget/FrameLayout$LayoutParams;",
+                    "Landroid/widget/FrameLayout$LayoutParams;",
+                    -1,
+                    -1,
+                ),
+                "Landroid/widget/TableLayout;" => (
+                    "Landroid/widget/TableLayout$LayoutParams;",
+                    "Landroid/widget/LinearLayout$LayoutParams;",
+                    -1,
+                    -2,
+                ),
+                "Landroid/widget/TableRow;" => (
+                    "Landroid/widget/TableRow$LayoutParams;",
+                    "Landroid/widget/LinearLayout$LayoutParams;",
+                    -1,
+                    -2,
+                ),
+                _ => (
+                    "Landroid/view/ViewGroup$LayoutParams;",
+                    "Landroid/view/ViewGroup$LayoutParams;",
+                    -2,
+                    -2,
+                ),
+            };
+            let params = self.new_instance(class)?;
+            self.native_roots.push(params);
+            self.invoke(
+                Method {
+                    class: constructor.into(),
+                    name: "<init>".into(),
+                    parameters: vec!["I".into(), "I".into()],
+                    returns: "V".into(),
+                },
+                vec![params, Word::from(width), Word::from(height)],
+                false,
+            )?;
+            if class == "Landroid/widget/TableRow$LayoutParams;" {
+                let fields = &mut self.heap.get_mut(params)?.fields;
+                fields.insert(format!("{class}->column:I"), vec![Word::from(-1)]);
+                fields.insert(format!("{class}->span:I"), vec![Word::from(1)]);
+            }
+            Ok(vec![params])
+        })();
+        self.native_roots.truncate(roots);
+        result.map(Some)
+    }
+
     fn text_appearance_native(
         &mut self,
         method: &Method,
@@ -1320,6 +1470,9 @@ impl Runtime {
             return Ok(Some(result));
         }
         if let Some(result) = self.text_appearance_native(method, args)? {
+            return Ok(Some(result));
+        }
+        if let Some(result) = self.sized_child_native(method, args)? {
             return Ok(Some(result));
         }
         if let Some(result) = self.focus_native(method, args)? {
@@ -5105,6 +5258,10 @@ impl Runtime {
             ("Landroid/widget/LinearLayout$LayoutParams;", "<init>(II)V") => {
                 let fields = &mut self.heap.get_mut(receiver)?.fields;
                 fields.insert(
+                    "Landroid/widget/LinearLayout$LayoutParams;->gravity:I".into(),
+                    vec![Word::from(-1)],
+                );
+                fields.insert(
                     "Landroid/view/ViewGroup$LayoutParams;->width:I".into(),
                     vec![arg(1)?],
                 );
@@ -5130,6 +5287,10 @@ impl Runtime {
             }
             ("Landroid/widget/FrameLayout$LayoutParams;", "<init>(II)V") => {
                 let fields = &mut self.heap.get_mut(receiver)?.fields;
+                fields.insert(
+                    "Landroid/widget/FrameLayout$LayoutParams;->gravity:I".into(),
+                    vec![Word::from(-1)],
+                );
                 fields.insert(
                     "Landroid/view/ViewGroup$LayoutParams;->width:I".into(),
                     vec![arg(1)?],

@@ -827,6 +827,8 @@ impl Runtime {
                         "Landroid/view/ViewGroup$MarginLayoutParams;",
                         "Landroid/widget/LinearLayout$LayoutParams;",
                         "Landroid/widget/FrameLayout$LayoutParams;",
+                        "Landroid/widget/TableLayout$LayoutParams;",
+                        "Landroid/widget/TableRow$LayoutParams;",
                         "Landroid/os/Message;",
                         "Landroid/database/Observable;",
                         "Landroid/content/pm/ActivityInfo;",
@@ -948,7 +950,11 @@ impl Runtime {
                             ]
                             .contains(&(field.name.as_str(), field.ty.as_str()))))
                     || (class == "Landroid/widget/LinearLayout$LayoutParams;"
-                        && [("weight", "F")].contains(&(field.name.as_str(), field.ty.as_str())))
+                        && [("weight", "F"), ("gravity", "I")]
+                            .contains(&(field.name.as_str(), field.ty.as_str())))
+                    || (class == "Landroid/widget/TableRow$LayoutParams;"
+                        && [("column", "I"), ("span", "I")]
+                            .contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/widget/FrameLayout$LayoutParams;"
                         && [("gravity", "I")].contains(&(field.name.as_str(), field.ty.as_str())))
                     || (class == "Landroid/os/Message;"
