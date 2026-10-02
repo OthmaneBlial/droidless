@@ -226,6 +226,8 @@ pub struct Node {
     pub rect: Rect,
     pub paint_clip: Rect,
     pub input_clip: Rect,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_text: Option<String>,
     #[serde(skip)]
     clip_padding: [f32; 4],
     pub children: Vec<Node>,
@@ -564,42 +566,70 @@ fn build(heap: &Heap, word: Word, mut rect: Rect, path: &mut Vec<usize>) -> Resu
         rect,
         paint_clip: rect,
         input_clip: rect,
+        display_text: heap
+            .get(word)?
+            .fields
+            .get(crate::text_layout::LAYOUT)
+            .and_then(|v| v.first())
+            .map(|layout| -> Result<Option<String>> {
+                heap.get(*layout)?
+                    .fields
+                    .get(crate::text_layout::DISPLAY)
+                    .and_then(|v| v.first())
+                    .map(|text| heap.text(*text).map(str::to_owned))
+                    .transpose()
+            })
+            .transpose()?
+            .flatten(),
         clip_padding,
         children,
     })
 }
-fn text_advance(size: f32) -> f32 {
+pub(crate) fn text_advance(size: f32) -> f32 {
     // ponytail: retain the existing scalar-character font approximation;
     // replace with shared shaping/font metrics when native text fidelity is required.
     size * 0.6
 }
 
 pub(crate) fn text_line_count(text: &str, size: f32, width: f32, single: bool) -> i32 {
+    text_lines(text, size, width, single).len() as i32
+}
+
+pub(crate) fn text_lines(
+    text: &str,
+    size: f32,
+    width: f32,
+    single: bool,
+) -> Vec<std::ops::Range<usize>> {
     if single {
-        return 1;
+        return std::iter::once(0..text.len()).collect();
     }
     let capacity = if size == 0.0 {
         usize::MAX
     } else {
         (width / text_advance(size)).floor().max(1.0) as usize
     };
-    let mut lines = 0;
+    let mut lines = vec![];
+    let mut offset = 0;
     for paragraph in text.split('\n') {
-        lines += 1;
-        let (mut start, mut last_break) = (0, 0);
-        for (index, character) in paragraph.chars().enumerate() {
-            if index - start >= capacity {
-                start = if last_break > start {
+        let (mut start, mut last_break) = ((0, 0), (0, 0));
+        for (index, (byte, character)) in paragraph.char_indices().enumerate() {
+            if index - start.0 >= capacity {
+                let end = if last_break.0 > start.0 {
                     last_break
                 } else {
-                    index
+                    (index, byte)
                 };
-                lines += 1;
+                lines.push(offset + start.1..offset + end.1);
+                start = end;
             }
             if matches!(character, ' ' | '\t' | '-') {
-                last_break = index + 1;
+                last_break = (index + 1, byte + character.len_utf8());
             }
         }
+        let end = (offset + paragraph.len() + 1).min(text.len());
+        lines.push(offset + start.1..end);
+        offset = end;
     }
     lines
 }

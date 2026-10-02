@@ -241,12 +241,13 @@ fn draw(context: &mut ContextData<'_>) -> Result<()> {
         } else {
             ancestor_click
         };
-        let text = CString::new(n.view.text.as_str())
+        let text = CString::new(n.display_text.as_deref().unwrap_or(&n.view.text))
             .context("NUL in UI text is unsupported by AppKit bridge")?;
         let description = n
             .view
             .content_description
             .as_deref()
+            .or_else(|| n.display_text.as_ref().map(|_| n.view.text.as_str()))
             .map(CString::new)
             .transpose()
             .context("NUL in content description is unsupported by AppKit bridge")?;

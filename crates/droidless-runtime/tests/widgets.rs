@@ -2318,6 +2318,65 @@ fn compiled_focus_ownership_callbacks_gc_removal_and_fault_recovery() {
 }
 
 #[test]
+fn compiled_ellipsis_utf16_invalidation_xml_and_native_projection() {
+    let mut vm = Runtime::new(
+        Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
+    )
+    .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    let text = vm
+        .invoke(
+            Method {
+                class: "Lorg/droidless/counter/EllipsisContract;".into(),
+                name: "run".into(),
+                parameters: vec!["Landroid/app/Activity;".into()],
+                returns: "Landroid/widget/TextView;".into(),
+            },
+            vec![activity],
+            false,
+        )
+        .unwrap()[0];
+    let tree = droidless_runtime::ui::layout(&vm.heap, text, 30.0, 100.0).unwrap();
+    assert_eq!(tree.view.text, "abcdefghij");
+    assert_eq!(tree.display_text.as_deref(), Some("abcd…"));
+    let previous = vm.heap.get(text).unwrap().fields["droidless:text:layout"][0];
+    let invalid = vm.heap.string("not an enum".into()).unwrap();
+    let error = vm
+        .invoke(
+            Method {
+                class: "Landroid/widget/TextView;".into(),
+                name: "setEllipsize".into(),
+                parameters: vec!["Landroid/text/TextUtils$TruncateAt;".into()],
+                returns: "V".into(),
+            },
+            vec![text, invalid],
+            true,
+        )
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("expected TextUtils.TruncateAt"));
+    assert_eq!(
+        vm.heap.get(text).unwrap().fields["droidless:text:layout"][0],
+        previous
+    );
+    assert_eq!(vm.stack_depth(), 0);
+    vm.root = Some(text);
+    vm.collect();
+    assert_eq!(
+        droidless_runtime::ui::layout(&vm.heap, text, 30.0, 100.0)
+            .unwrap()
+            .display_text
+            .as_deref(),
+        Some("abcd…")
+    );
+    vm.root = None;
+    vm.collect();
+    assert!(
+        vm.heap.get(text).is_err() && vm.heap.get(previous).is_err(),
+        "ellipsis retained a released hierarchy"
+    );
+}
+
+#[test]
 fn compiled_text_layout_measurement_invalidation_and_callback_gc() {
     let mut vm = Runtime::new(
         Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),

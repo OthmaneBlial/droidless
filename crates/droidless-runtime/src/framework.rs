@@ -6306,16 +6306,6 @@ impl Runtime {
                     .fields
                     .insert("droidless:motion-event-splitting".into(), vec![arg(1)?]);
             }
-            ("Landroid/widget/TextView;", "setEllipsize(Landroid/text/TextUtils$TruncateAt;)V") => {
-                let value = arg(1)?;
-                if value != Word::ZERO {
-                    self.heap.get(value)?;
-                }
-                self.heap
-                    .get_mut(receiver)?
-                    .fields
-                    .insert("droidless:text:ellipsize".into(), vec![value]);
-            }
             (
                 "Landroid/widget/TextView;",
                 "getTransformationMethod()Landroid/text/method/TransformationMethod;",
@@ -6740,6 +6730,7 @@ impl Runtime {
             ("Landroid/widget/TextView;", "setKeyListener(Landroid/text/method/KeyListener;)V") => {
                 ensure!(arg(1)? == Word::ZERO, "non-null KeyListener unsupported");
                 self.view_mut(receiver)?.editable = false;
+                self.invalidate_text_layout(receiver)?;
             }
             ("Landroid/widget/EditText;", "setSelection(I)V") => {
                 let n = arg(1)?.int()?;
@@ -9415,6 +9406,34 @@ impl Runtime {
                     view.image_scale = raw.data as i32;
                 }
                 "textSize" => view.text_size = dimension(&self.attribute(raw)?)?,
+                "singleLine" | "maxLines" | "minLines" => {
+                    let value = self.attribute(raw)?.data as i32;
+                    let key = match name.as_str() {
+                        "singleLine" => "droidless:text:single-line",
+                        "maxLines" => "droidless:text:setMaxLines",
+                        _ => "droidless:text:setMinLines",
+                    };
+                    self.heap
+                        .get_mut(word)?
+                        .fields
+                        .insert(key.into(), vec![Word::from(value)]);
+                    self.invalidate_text_layout(word)?;
+                }
+                "ellipsize" => {
+                    let value = self.attribute(raw)?.data;
+                    ensure!(value <= 4, "invalid XML ellipsize value");
+                    let value = if value == 0 {
+                        Word::ZERO
+                    } else {
+                        let class = "Landroid/text/TextUtils$TruncateAt;";
+                        self.text_truncate_at_object(&Field {
+                            class: class.into(),
+                            name: ["START", "MIDDLE", "END", "MARQUEE"][value as usize - 1].into(),
+                            ty: class.into(),
+                        })?
+                    };
+                    self.set_text_ellipsize(word, value)?;
+                }
                 "textColor" => {
                     let value = self.themed_attribute(context, raw)?;
                     let colors = self.color_state_list(&value)?;

@@ -898,13 +898,33 @@ and calculated line count. getLayout is null before measurement and after text,
 size, padding or line-policy changes; an unchanged measurement retains identity.
 Explicit newlines, narrow widths, word breaks and empty text contribute real
 lines, using the existing approximate advance of 0.6 times text size per Unicode
-scalar. The same line count drives intrinsic height; max/min lines constrain the
-View height without changing the underlying Layout count. EditText's covered
+scalar. The same line count drives intrinsic height; without ellipsizing, max/min
+lines constrain View height without changing the underlying Layout count. EditText's covered
 Editable.append(CharSequence) path updates its owner and invalidates measurement.
 Compiled checks exercise inherited onMeasure, GC, failure recovery and retained
 old text snapshots. This is an approximate plain-text profile, not Android font
-shaping, bidi, styled metrics, ellipsizing or native multiline painting parity.
+shaping, bidi, styled metrics or native multiline painting parity.
 The null-before-measurement behavior follows the [TextView contract](https://developer.android.com/reference/android/widget/TextView#getLayout()).
+
+TextView get/setEllipsize retain canonical TruncateAt values. Changing the mode or
+clearing it invalidates measurement; assigning the same value preserves Layout
+identity. XML singleLine, maxLines, minLines and ellipsize feed the same state.
+Layout.getEllipsisStart/getEllipsisCount report checked, line-relative UTF-16
+positions. The scalar-width profile supports START/MIDDLE/END on a single line
+and END on the last visible line of a positive maxLines limit. Suppressed text
+is replaced by an ellipsis and U+FEFF fillers in Layout.getText, preserving UTF-16
+length and old snapshots. TextView.getText retains the original text. Rendering
+receives the shortened visible lines separately and accessibility keeps the full
+logical text. Editable controls do not ellipsize; removing their key listener
+invalidates that policy. MARQUEE has no static ellipsis or host animation;
+multi-line START/MIDDLE have no ellipsis. Nonpositive multi-line limits with
+ellipsizing fail explicitly. Unicode scalar boundaries are preserved, but grapheme
+shaping, Android font parity, styled spans and single-line transformations remain
+outside this profile. Compiled DEX checks cover modes, fitting/empty/zero-width
+text, surrogate pairs, XML, invalid indices/enum objects, GC and snapshots.
+References: [Layout ellipsis API](https://developer.android.com/reference/android/text/Layout#getEllipsisCount(int)),
+[API-21 StaticLayout](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/text/StaticLayout.java),
+[API-21 TextView](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/widget/TextView.java).
 
 LinearLayout and FrameLayout now measure their children through virtual guest
 measure callbacks. The bounded pass handles padding, margins, GONE children,
