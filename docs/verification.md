@@ -2231,3 +2231,51 @@ certifies one unchanged optimized CLI digest. The unsigned development bundle
 matches that CLI byte for byte: SHA-256 `eeeedb82092aab345f66202e1f6bfe0c4696ec340180b56be4940c9a5d182a66`.
 GitHub Actions remain disabled. No new public release or physical dialog
 interaction is claimed; the 50% checkpoint remains active.
+
+
+## Current-source weak references and dialog cancellation messages
+
+Date: 2026-10-02. Runtime source commits ff681c7 and 009ff4c, beyond the published
+v0.1.0 archive.
+
+WeakReference now contributes a weak heap edge. Collection clears unreachable
+referents, including cyclic targets, while retaining a reference object's other
+strong fields and honoring independent roots. Calls through Reference and APK
+subclasses use the same behavior. clear(), nonreused handles and invalid receiver/
+target/queue arguments have a compiled DEX contract. Non-null ReferenceQueue
+registration and enqueue/finalization APIs remain unsupported; WeakHashMap retains
+its explicit strong-key profile.
+
+Dialog supports cancellation flags, outside-close settings and Back policy in the
+main-thread unshown profile. Registered cancel/dismiss/show/key listener objects
+are type-checked and retained. cancel posts a fresh message once, then executes
+the actual virtual dismiss override. Unshown dismissal follows the SDK no-op.
+The listener handler holds the Dialog weakly, so a pending message preserves its
+payload without retaining an abandoned owner. Delivery executes the real guest
+interface callback through the existing Handler/Looper queue and can receive null
+after owner collection. Message.obtain snapshots supported scalar/obj/target/
+callback fields without copying queue-use state or delivery time; sendToTarget
+uses the actual Handler. Compiled tests check listener replacement snapshots,
+queued-message cloning, duplicate sends, custom cancellation messages, callback
+GC/fault cleanup, owner collection and invalid inputs without accidental enqueue.
+Visible dialog presentation, dismissal and corresponding lifecycle events remain
+unsupported. Registration alone is not shown-dialog evidence.
+
+The original SHA-256-pinned Notepad APK now completes its bundled dialog builder,
+cancellation flags and listener setup. Focusing saved editor 1 and tapping the
+left button reaches EditFolderViewHolder.clickLeftButton at DEX PC 0x0057, then
+its builder at PC 0x0004. It fails explicitly at
+`Landroid/support/v7/a/q;->show()V` with exit status 1. Fresh SQLite reads verify
+that the disposable copy and seed retain the exact folder ID/name and both note
+IDs/titles/bodies. The permanent public replay certifies builder setup and this
+presentation boundary while keeping confirmed deletion false. Confirmation,
+Cancel through native input and physical folder input remain unverified.
+
+The complete local gate passes 135 Rust tests, warning-free Clippy, optimized
+workspace/document-replay builds, 4,096 seeded parser mutations and native
+font/focus component checks. The complete public replay retains prior calculator,
+image/grid/result, SwpieView and Notepad create/rename/restart/Back workflows and
+certifies one unchanged CLI. Its unsigned development bundle matches byte for
+byte: SHA-256 `53abe7906a87048e2de8f6857c36ef90d2895f8f12170327deb7738b9f8da309`. GitHub Actions stay disabled.
+No new public release or physical dialog interaction is claimed. The 50%
+checkpoint remains active.

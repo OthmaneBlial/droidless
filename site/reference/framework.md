@@ -904,7 +904,7 @@ resource, replaces itself at the same index and keeps the original parameters
 and inflated ID. Visibility is forwarded to the replacement. Indexed child removal retains parent links, guest hierarchy callbacks and index
 faults. Transient state is reference-counted and group queries include descendants;
 parent transient-state notification callbacks remain incomplete. Programmatic
-stub configuration and weak-reference collection parity remain unsupported.
+stub configuration remains unsupported.
 
 The compiled CustomLayout contract checks those callbacks and root touch,
 collection/failure recovery, per-side padding, measure specs/state bits, suggested
@@ -963,8 +963,7 @@ inflation uses the real cloned inflater/factories. Replacement detaches prior
 content without replacing the Activity root. Supported content and attribute
 changes invoke actual guest callbacks. Dialog.create runs onCreate(null) once after
 a successful return and can retry a failed callback. Layout/gravity/flag/title
-state is managed; it does not resize or display a native dialog. show, hide,
-dismiss, cancel, dialog input and confirmation/deletion remain unsupported.
+state is managed; it does not resize or display a native dialog. show, hide, visible dismissal, dialog input and confirmation/deletion remain unsupported.
 Calls retain temporary GC roots and enforce the 32-call callback bound.
 
 StateListDrawable supports construction, ordered addState, positive/negative and
@@ -982,3 +981,44 @@ remain future work. View.EMPTY_STATE_SET resolves as one shared inherited empty
 int array; APK-declared fields with the same name retain their own identity.
 
 [API-21 StateListDrawable reference](https://android.googlesource.com/platform/frameworks/base/+/android-5.0.0_r1/graphics/java/android/graphics/drawable/StateListDrawable.java)
+
+
+### Weak references and collector reachability
+
+WeakReference retains a weak managed heap edge, including APK subclasses and
+calls through Reference. Collection excludes only that referent edge, clears
+unreachable targets and preserves the reference object's other strong fields.
+Strong roots retain targets; unreachable referent cycles are reclaimed. clear()
+removes the referent without removing independent strong roots. Handles remain
+stable and collected handles are never reused. Constructors validate receivers
+and target handles. Null reference queues are accepted; ReferenceQueue registration
+and enqueue/finalization APIs remain unsupported. WeakHashMap retains its existing
+strong-key profile and does not claim weak-key collection.
+
+
+### Dialog cancellation and queued listener ownership
+
+The main-thread profile supports setCancelable, setCanceledOnTouchOutside and
+onBackPressed. Enabling outside cancellation also enables Back cancellation;
+disabling outside cancellation does not disable Back. Window outside-close
+settings retain the explicit-set flag and support set-if-unset behavior. Actual
+outside-touch delivery requires dialog presentation, which remains unsupported.
+
+Cancel/dismiss/show/key listeners accept matching interface objects or null and
+retain their managed ownership. Programmatic cancel on an unshown dialog posts a
+fresh cancellation message once, then calls the actual virtual dismiss override.
+Unshown dismissal follows the SDK no-op and sends no dismissal event. The listener
+handler uses WeakReference, so a pending event retains its payload without keeping
+an otherwise unreachable dialog alive. Delivery uses the existing Handler/Looper
+queue, executes real guest callbacks and may pass null after the dialog is
+collected. Replacing a registered listener does not rewrite an already posted
+payload. Faults unwind temporary roots and retire the active message. Custom
+cancel/dismiss message registration is supported; visible dismissal, show/hide
+and their lifecycle events remain unsupported. This is not confirmation UI.
+
+Message.obtain(Message) copies the supported scalar fields, obj, target and
+Runnable callback into a fresh message without copying its queued/consumed state
+or delivery time. Existing Bundle data is copied separately. sendToTarget routes
+through the actual target Handler. Target/callback/payload handles are validated;
+a message cannot be sent twice. Messenger/replyTo, asynchronous message flags and
+broader Message data access APIs remain outside this profile.

@@ -65,7 +65,7 @@ The same folder ID/new name survive restart and Back with both exact notes.
 also select and render their supported colors. The original delete listener passes
 Dialog construction and cancellation/listener setup, then stops at show(). Its failed
 attempt preserves the folder and both exact notes. Folder deletion and native
-folder input remain unverified. [Dialog/window evidence](docs/verification.md#current-source-owned-dialog-windows-and-state-list-backgrounds).
+folder input remain unverified. [Dialog/window evidence](docs/verification.md#current-source-weak-references-and-dialog-cancellation-messages).
 [Folder rename and font-metrics evidence](docs/verification.md#current-source-folder-rename-and-host-font-metrics).
 
 ```sh

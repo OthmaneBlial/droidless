@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- WeakReference now excludes its referent from strong heap traversal and clears
+  unreachable targets, including cycles. APK subclasses retain their other strong
+  fields. clear(), stable handles, invalid targets and queue registration limits
+  have compiled checks. WeakHashMap keeps its documented strong-key profile.
+
+- Dialog cancellation settings and Back policy now work in the main-thread
+  unshown profile. Listener/message registration retains managed ownership;
+  cancellation posts one copied message and calls the actual dismiss override.
+  The listener handler holds its dialog weakly, so queued callbacks can receive
+  null after collection. Guest callbacks, payload snapshots, custom messages,
+  callback faults and temporary-root cleanup pass compiled checks. Visible
+  presentation/dismissal and confirmation UI remain unsupported.
+
+- Message.obtain(Message) snapshots supported fields/targets/callbacks without
+  copying queue-use state or delivery time; sendToTarget uses the real Handler.
+  The unchanged Notepad folder-delete builder now passes cancellation/listener
+  setup and reaches unsupported show(), preserving the exact folder and notes.
+
 - Dialog construction now retains an independent themed context, owned Window,
   stable decor/content, actual inflater factories and real content/attribute
   callbacks. create() invokes onCreate once after success and retries faults.
