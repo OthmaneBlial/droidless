@@ -1,0 +1,5 @@
+<probe xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/DefaultsXml" android:textColor="#ff505050">
+    <alias style="?attr/defaultWidgetAlias" />
+    <cleared android:textColor="@null" />
+</probe>

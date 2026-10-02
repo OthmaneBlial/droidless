@@ -683,8 +683,17 @@ resources.arsc parsing covers package/type/key pools, simple typed values,
 reference chains and map entries, including sparse/16-bit offsets. Default
 configuration wins; otherwise the first variant is used. Qualifier matching,
 full theme resolution and compact entries are not implemented. Supported style
-bags merge explicit and implicit parents, with cycle/depth checks. Stable public
-framework IDs supply OK/Cancel strings; there is no embedded Android resource
+bags merge explicit and implicit parents, with cycle/depth checks. Context/Theme
+styled arrays select a referenced defStyleAttr from the theme, follow theme aliases,
+and use defStyleRes when no reference is found. A null reference suppresses that
+fallback. Explicit XML style overlays the selected defaults, then direct XML
+attributes win. Resources.obtainAttributes reads direct XML values only. Compiled
+checks cover precedence, missing/null defaults, layout IDs, snapshots, actual
+getTheme/GC/fault callbacks, invalid direct bridge arguments and bounded cycles.
+Framework tracing reports selected default IDs and typed attribute metadata.
+Full framework themes/qualifiers remain outside this profile.
+[API-21 style resolution reference](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/jni/android_util_AssetManager.cpp).
+Stable public framework IDs supply OK/Cancel strings; there is no embedded Android resource
 installation. String/color/dimension/layout resolution belongs to DROIDLESS.
 
 Binary layouts create TextView, Button, EditText, LinearLayout and FrameLayout.

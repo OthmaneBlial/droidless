@@ -21,6 +21,69 @@ fn dialog_surface_call(
 }
 
 #[test]
+fn compiled_styled_defaults_xml_precedence_snapshots_gc_and_faults() {
+    let mut vm =
+        Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())
+            .unwrap();
+    let method = |name: &str| Method {
+        class: "Lorg/droidless/images/StyledDefaultsContract;".into(),
+        name: name.into(),
+        parameters: vec![],
+        returns: "Landroid/content/res/TypedArray;".into(),
+    };
+    let value = vm.invoke(method("run"), vec![], false).unwrap()[0];
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    assert!(
+        vm.heap.get(value).is_err(),
+        "style callbacks leaked temporary roots"
+    );
+    let theme = vm
+        .heap
+        .instance("Landroid/content/res/Resources$Theme;")
+        .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    let styled = Method {
+        class: "Landroid/content/res/Resources$Theme;".into(),
+        name: "obtainStyledAttributes".into(),
+        parameters: vec![
+            "Landroid/util/AttributeSet;".into(),
+            "[I".into(),
+            "I".into(),
+            "I".into(),
+        ],
+        returns: "Landroid/content/res/TypedArray;".into(),
+    };
+    for (receiver, attrs, default) in [
+        (theme, activity, Word::ZERO),
+        (theme, Word::Ref(usize::MAX), Word::ZERO),
+        (activity, Word::ZERO, Word::ZERO),
+        (theme, Word::ZERO, activity),
+    ] {
+        assert!(
+            vm.invoke(
+                styled.clone(),
+                vec![receiver, Word::ZERO, attrs, default, Word::ZERO],
+                false
+            )
+            .is_err(),
+            "invalid direct styled bridge receiver={receiver:?}, attrs={attrs:?}, default={default:?}"
+        );
+        assert_eq!(vm.stack_depth(), 0);
+    }
+    vm.collect();
+    assert!(
+        vm.heap.get(theme).is_err() && vm.heap.get(activity).is_err(),
+        "style faults leaked roots"
+    );
+    let error = vm.invoke(method("cycle"), vec![], false).unwrap_err();
+    assert!(format!("{error:#}").contains("theme style reference cycle or depth limit"));
+    assert_eq!(vm.stack_depth(), 0);
+    vm.collect();
+    vm.invoke(method("run"), vec![], false).unwrap();
+}
+
+#[test]
 fn compiled_foreground_overlay_padding_state_weak_callbacks_gc_and_faults() {
     let mut vm =
         Runtime::new(Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap())

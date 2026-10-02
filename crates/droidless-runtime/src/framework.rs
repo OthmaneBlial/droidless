@@ -874,6 +874,59 @@ impl Runtime {
         Ok(attributes)
     }
 
+    fn theme_style_reference(
+        &self,
+        theme: &std::collections::BTreeMap<u32, Value>,
+        mut value: Option<Value>,
+    ) -> Result<Option<u32>> {
+        let mut seen = std::collections::BTreeSet::new();
+        while let Some(current) = value {
+            if current.kind != 2 {
+                return Ok((current.kind == 1).then_some(current.data));
+            }
+            ensure!(
+                seen.len() < 32 && seen.insert(current.data),
+                "theme style reference cycle or depth limit"
+            );
+            value = theme.get(&current.data).cloned();
+        }
+        Ok(None)
+    }
+
+    fn styled_set_attributes(
+        &self,
+        snapshot: &[u32],
+        set: Word,
+        default_attribute: u32,
+        default_resource: u32,
+    ) -> Result<std::collections::BTreeMap<u32, Value>> {
+        let theme = self.styled_attributes(snapshot)?;
+        let default = if default_attribute == 0 {
+            default_resource
+        } else {
+            self.theme_style_reference(&theme, theme.get(&default_attribute).cloned())?
+                .unwrap_or(default_resource)
+        };
+        if self.trace.framework {
+            eprintln!(
+                "styled default: theme={snapshot:x?}, attr=?0x{default_attribute:08x}, style=@0x{default:08x}"
+            );
+        }
+        let mut attributes = theme.clone();
+        if default != 0 {
+            attributes.extend(self.styled_attributes(&[default])?);
+        }
+        if set != Word::ZERO {
+            let style =
+                self.theme_style_reference(&theme, self.attribute_set_value(set, "style")?)?;
+            if let Some(style) = style.filter(|style| *style != 0) {
+                attributes.extend(self.styled_attributes(&[style])?);
+            }
+            self.overlay_attributes(set, &mut attributes)?;
+        }
+        Ok(attributes)
+    }
+
     fn child_attachment_native(
         &mut self,
         method: &Method,
@@ -1253,6 +1306,10 @@ impl Runtime {
                 .context("styled attribute argument missing")
         };
         let receiver = arg(0)?;
+        ensure!(
+            self.is_a(&self.heap.get(receiver)?.class, &method.class),
+            "invalid styled attribute receiver"
+        );
         let signature = method.signature();
         if self.trace.framework {
             eprintln!("framework: {} {args:?}", method.key());
@@ -1377,17 +1434,28 @@ impl Runtime {
                     {
                         styles.push(arg(1)?.int()? as u32);
                     }
-                    if method.parameters.len() == 4 {
-                        styles.push(arg(4)?.int()? as u32);
-                    }
-                    let mut attributes = self.styled_attributes(&styles)?;
-                    if method
+                    let attributes = if method
                         .parameters
                         .first()
                         .is_some_and(|parameter| parameter == "Landroid/util/AttributeSet;")
                     {
-                        self.overlay_attributes(arg(1)?, &mut attributes)?;
-                    }
+                        self.styled_set_attributes(
+                            &snapshot,
+                            arg(1)?,
+                            if method.parameters.len() == 4 {
+                                arg(3)?.int()? as u32
+                            } else {
+                                0
+                            },
+                            if method.parameters.len() == 4 {
+                                arg(4)?.int()? as u32
+                            } else {
+                                0
+                            },
+                        )?
+                    } else {
+                        self.styled_attributes(&styles)?
+                    };
                     Ok(Some(vec![self.typed_array(
                         attrs,
                         &attributes,
@@ -1409,18 +1477,30 @@ impl Runtime {
                     } else {
                         vec![]
                     };
-                    let mut styles = snapshot.clone();
-                    if method.parameters.len() == 4 {
-                        styles.push(arg(4)?.int()? as u32);
-                    }
-                    let mut attributes = self.styled_attributes(&styles)?;
-                    if method
-                        .parameters
-                        .first()
-                        .is_some_and(|parameter| parameter == "Landroid/util/AttributeSet;")
-                    {
+                    let attributes = if method.class == "Landroid/content/res/Resources$Theme;" {
+                        self.styled_set_attributes(
+                            &snapshot,
+                            if method.parameters.len() == 4 {
+                                arg(1)?
+                            } else {
+                                Word::ZERO
+                            },
+                            if method.parameters.len() == 4 {
+                                arg(3)?.int()? as u32
+                            } else {
+                                0
+                            },
+                            if method.parameters.len() == 4 {
+                                arg(4)?.int()? as u32
+                            } else {
+                                0
+                            },
+                        )?
+                    } else {
+                        let mut attributes = std::collections::BTreeMap::new();
                         self.overlay_attributes(arg(1)?, &mut attributes)?;
-                    }
+                        attributes
+                    };
                     Ok(Some(vec![self.typed_array(
                         attrs,
                         &attributes,
@@ -1522,7 +1602,14 @@ impl Runtime {
                             .copied()
                             .context("empty attribute id")?
                             .int()? as u32;
-                        Ok(attributes.get(&id).cloned())
+                        let value = attributes.get(&id).cloned();
+                        if self.trace.framework {
+                            eprintln!(
+                                "styled attribute ?0x{id:08x}: {:?}",
+                                value.as_ref().map(|v| (v.kind, v.data))
+                            );
+                        }
+                        Ok(value)
                     })
                     .collect::<Result<Vec<_>>>()?
             }
