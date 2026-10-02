@@ -1,8 +1,9 @@
 # Persistent preferences
 
 Current source implements bounded `SharedPreferences` and SQLite subsets. The
-v0.1.0 release archive predates these capabilities. General Java file APIs,
-filesDir, cacheDir, preference listeners and String sets remain unsupported.
+v0.2.0 includes these bounded profiles; the v0.1.0 archive predates them. Private files/cache directory
+metadata and bounded input streams are modeled; output streams, preference listeners and String
+sets remain unsupported.
 
 ## Host-selected data root
 
@@ -16,6 +17,43 @@ The CLI persists preferences by default below:
 disk access and keeps values in this runtime only; the options are mutually
 exclusive. The Rust API `Runtime::new` remains ephemeral; `with_data_dir` explicitly
 grants the chosen directory capability. Manifest permissions grant no host access.
+
+## Virtual external directory
+
+Environment.getExternalStorageDirectory returns the virtual path
+`/storage/emulated/0`. Directory operations map it to
+`APPS_ROOT/<package>/external/` through the same package directory capability as
+private storage. Subdirectories persist with `--data-dir`; ephemeral runtimes
+retain directory metadata in memory only. Paths are normalized before mapping,
+and other virtual users, traversal outside the volume and symlink traversal are
+rejected. A second package sees its own external directory.
+
+This is DROIDLESS's app-isolated external-volume profile; Android's cross-app
+shared media storage and host home/Downloads access are not provided. Returning
+the directory does not make backup/restore or general Java file I/O work.
+References: [API-21 Environment](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/os/Environment.java).
+
+## Bounded file input
+
+FileInputStream constructors accepting a String or File can read regular files
+inside the current package's private or virtual external directory. The existing
+directory capability opens every parent and file without following symlinks;
+special files, hard links, missing files and paths outside the package fail with
+FileNotFoundException. Reads snapshot at most 64 MiB at construction, so later
+file replacement does not change that stream. Existing read/skip/available/close
+behavior applies to the snapshot. Ephemeral runtimes have no disk file access;
+the bounded virtual `/proc/self/cmdline` file remains available. Live descriptors,
+output streams and channel transfer operations remain unsupported.
+
+FileInputStream.getChannel returns one retained FileChannel for that stream.
+The read-only snapshot channel exposes size, shared position, isOpen and close.
+Seeking changes subsequent stream reads; seeking beyond EOF preserves size and
+returns EOF on reading. Negative positions fail. Closing either object closes
+the other, with catchable ClosedChannelException from closed channel operations.
+Compiled DEX checks cover wide positions, interface identity, aliasing, faults
+and collection of the source/channel cycle. ByteBuffer reads, transfers, writes,
+mapping, locking and interruptible descriptor I/O remain unsupported.
+Reference: [FileChannel API](https://developer.android.com/reference/java/nio/channels/FileChannel).
 
 ## API behavior
 

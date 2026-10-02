@@ -1,28 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 490" role="img" aria-labelledby="title desc">
-  <title id="title">DROIDLESS. Run Android apps without Android.</title>
-  <desc id="desc">A lime and ink project banner with a friendly robot explorer. Experimental Rust runtime, native macOS ARM64.</desc>
-  <defs><pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0v32" fill="none" stroke="#171c21" stroke-opacity=".07"/></pattern></defs>
-  <rect width="1280" height="490" rx="24" fill="#d9ff63"/>
-  <rect width="1280" height="490" rx="24" fill="url(#grid)"/>
-  <g fill="#171c21" font-family="Chivo, Helvetica, sans-serif">
-    <rect x="48" y="40" width="292" height="33" rx="16"/>
-    <text x="194" y="62" text-anchor="middle" font-size="12" font-weight="700" letter-spacing="2" fill="#d9ff63">EXPERIMENTAL / OPEN SOURCE</text>
-    <text x="45" y="205" font-size="116" font-weight="900" letter-spacing="-7">DROIDLESS</text>
-    <text x="51" y="282" font-size="46" font-weight="700" letter-spacing="-2">Run Android apps</text>
-    <text x="51" y="341" font-size="46" font-weight="700" letter-spacing="-2">without Android.</text>
-    <path d="M51 371h662" stroke="#171c21" stroke-width="2"/>
-    <text x="51" y="415" font-family="monospace" font-size="16">RUST ENGINE  /  REAL APK BYTECODE  /  NATIVE DESKTOP UI</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 540" role="img" aria-labelledby="title desc">
+  <title id="title">DROIDLESS — Android apps. New desktop habitat.</title>
+  <desc id="desc">Ink, lime and blue artwork: original APK bytecode flows through Rust into native views. A robot explorer carries a note beside an illustrated desktop window. Experimental macOS runtime.</desc>
+  <defs><pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0v32" fill="none" stroke="#fffdf7" stroke-opacity=".045"/></pattern></defs>
+  <rect width="1280" height="540" rx="24" fill="#171c21"/>
+  <rect width="1280" height="540" rx="24" fill="url(#grid)"/>
+  <g font-family="Chivo, Helvetica, sans-serif">
+    <rect x="48" y="38" width="324" height="34" rx="17" fill="#d9ff63"/>
+    <text x="210" y="60" text-anchor="middle" font-family="monospace" font-size="12" font-weight="700" fill="#171c21">EXPERIMENTAL / RUST / macOS ARM64</text>
+    <text x="43" y="197" font-size="110" font-weight="900" letter-spacing="-6" fill="#fffdf7">DROIDLESS</text>
+    <text x="49" y="269" font-size="44" font-weight="700" letter-spacing="-1.5" fill="#d9ff63">Android apps.</text>
+    <text x="49" y="325" font-size="44" font-weight="700" letter-spacing="-1.5" fill="#fffdf7">New desktop habitat.</text>
+    <g font-family="monospace" font-size="14" font-weight="700" text-anchor="middle">
+      <rect x="48" y="380" width="144" height="54" rx="9" fill="none" stroke="#56616b"/><text x="120" y="413" fill="#fffdf7">ORIGINAL APK</text>
+      <path d="M207 407h25m-7-7 7 7-7 7" fill="none" stroke="#83b8ff" stroke-width="2"/>
+      <rect x="248" y="380" width="168" height="54" rx="9" fill="#d9ff63"/><text x="332" y="413" fill="#171c21">OWN RUST ENGINE</text>
+      <path d="M431 407h25m-7-7 7 7-7 7" fill="none" stroke="#83b8ff" stroke-width="2"/>
+      <rect x="472" y="380" width="144" height="54" rx="9" fill="none" stroke="#56616b"/><text x="544" y="413" fill="#fffdf7">NATIVE VIEWS</text>
+    </g>
+    <path d="M48 472h568" stroke="#56616b"/>
+    <text x="49" y="504" font-family="monospace" font-size="13" letter-spacing="1.2" fill="#aeb8c0">REAL BYTECODE. LITTLE ROBOT. BIG IDEA.</text>
   </g>
-  <g transform="translate(822 49) scale(1.08)" stroke="#171c21" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="180" cy="180" r="170" fill="#fffdf7" stroke-width="2"/>
-    <path d="M134 265v39h-35m126-39v39h35M79 189l-25 41 27 26m202-67 23 38" fill="none"/>
-    <rect x="79" y="119" width="204" height="156" rx="44" fill="#d9ff63"/>
-    <path d="M180 119V80" fill="none"/>
-    <path d="M190 24l-32 41h22l-9 31 40-45h-24z" fill="#83b8ff" stroke-width="5"/>
-    <rect x="106" y="149" width="63" height="53" rx="25" fill="#fffdf7"/><rect x="191" y="149" width="63" height="53" rx="25" fill="#fffdf7"/>
-    <path d="M169 170h22m-85-2-26-6m174 6 25-6" fill="none" stroke-width="6"/>
-    <circle cx="140" cy="177" r="8" fill="#171c21" stroke="none"/><circle cx="221" cy="177" r="8" fill="#171c21" stroke="none"/>
-    <path d="M163 223q18 19 37 0" fill="none" stroke-width="6"/>
-    <g transform="rotate(12 287 266)"><rect x="253" y="220" width="67" height="90" rx="10" fill="#83b8ff" stroke-width="6"/><path d="M270 241h33m-33 14h25m-25 14h33" stroke-width="4"/></g>
+  <g transform="rotate(3 1002 259)">
+    <rect x="827" y="102" width="359" height="339" rx="15" fill="#83b8ff"/>
+    <rect x="815" y="90" width="359" height="339" rx="15" fill="#fffdf7" stroke="#171c21" stroke-width="3"/>
+    <path d="M815 135h359" stroke="#171c21" stroke-width="2"/>
+    <g fill="#56616b"><circle cx="836" cy="112" r="4"/><circle cx="851" cy="112" r="4"/><circle cx="866" cy="112" r="4"/></g>
+    <g font-family="Chivo, Helvetica, sans-serif" fill="#171c21">
+      <text x="898" y="117" font-family="monospace" font-size="11">a new home for your APK</text>
+      <text x="841" y="183" font-size="31" font-weight="800" letter-spacing="-1">Notes</text>
+      <circle cx="1136" cy="174" r="16" fill="#d9ff63"/><path d="M1128 174h16m-8-8v16" stroke="#171c21" stroke-width="2"/>
+      <path d="M841 206h306" stroke="#cdd0c7"/>
+      <text x="841" y="243" font-size="19" font-weight="700">Hello, desktop.</text>
+      <text x="841" y="269" font-size="12" fill="#56616b">Saved. Reopened. Still here.</text>
+      <path d="M841 290h306" stroke="#cdd0c7"/>
+      <text x="841" y="327" font-size="19" font-weight="700">Made of Rust &amp; curiosity.</text>
+      <text x="841" y="354" font-size="12" fill="#56616b">One real app flow at a time.</text>
+      <rect x="841" y="378" width="306" height="27" rx="5" fill="#171c21"/>
+      <text x="994" y="396" text-anchor="middle" font-family="monospace" font-size="10" fill="#d9ff63">ILLUSTRATION / NOT A SCREENSHOT</text>
+    </g>
   </g>
+  <g transform="translate(658 312) scale(.7)" stroke="#171c21" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M100 202v51H65m155-51v51h35M54 123 19 167l28 19m227-63 32 38" fill="none" stroke="#83b8ff"/>
+    <rect x="54" y="53" width="220" height="161" rx="44" fill="#d9ff63"/>
+    <path d="M164 53V21" stroke="#d9ff63"/><circle cx="164" cy="10" r="12" fill="#83b8ff" stroke-width="5"/>
+    <rect x="77" y="86" width="65" height="52" rx="25" fill="#fffdf7"/><rect x="184" y="86" width="65" height="52" rx="25" fill="#fffdf7"/>
+    <path d="M142 108h42" fill="none" stroke-width="6"/><circle cx="112" cy="111" r="8" fill="#171c21" stroke="none"/><circle cx="217" cy="111" r="8" fill="#171c21" stroke="none"/>
+    <path d="M144 169q20 21 41 0" fill="none" stroke-width="6"/>
+    <g transform="rotate(12 275 200)"><rect x="242" y="154" width="69" height="89" rx="10" fill="#83b8ff" stroke-width="6"/><path d="M259 177h34m-34 16h26m-26 16h34" stroke-width="4"/></g>
+  </g>
+  <path d="M1210 47v24m-12-12h24M745 93v17m-8-8h17" stroke="#d9ff63" stroke-width="2"/>
 </svg>

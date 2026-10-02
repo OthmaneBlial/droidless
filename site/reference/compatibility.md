@@ -208,7 +208,14 @@ SharedPreferences adds String/int/long/float/boolean reads and staged editors,
 commit/apply/remove/clear, MODE_PRIVATE stores, Activity.getPreferences and a
 minimal application-context singleton. Native authored-note save/restart/clear
 and isolated persistence are verified. Apply is synchronous; preference listeners,
-String sets and general file APIs remain unsupported. [Storage limits](storage.md).
+String sets and general file APIs remain unsupported. Bounded FileInputStream
+snapshots can read regular private files within the package capability. The
+virtual external directory is package-isolated; input channels share stream
+position/close state. Output, channel transfer, mapping and locking remain
+unsupported. Original Notepad backup reaches its private input channel and stops
+at FileOutputStream; missing-file restore stops at Toast. The diagnostic replay
+preserves every Note/Folder field in the copy and seed, and creates no backup.
+[Storage limits](storage.md).
 HashSet/ArrayList/HashMap and basic LinkedHashMap add bounded operations using
 guest equals; lists preserve duplicates/order and support indexed operations.
 Native HashMap/LinkedHashMap/Hashtable putAll copies bounded entries with snapshot GC roots.

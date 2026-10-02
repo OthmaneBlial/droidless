@@ -1,7 +1,7 @@
 # Persistent preferences
 
 Current source implements bounded `SharedPreferences` and SQLite subsets. The
-v0.1.0 release archive predates these capabilities. Private files/cache directory
+v0.2.0 includes these bounded profiles; the v0.1.0 archive predates them. Private files/cache directory
 metadata and bounded input streams are modeled; output streams, preference listeners and String
 sets remain unsupported.
 

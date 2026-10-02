@@ -2534,3 +2534,68 @@ The unsigned development bundle is byte-identical: SHA-256
 `76f48bbc9a356cd0d62ccdd6ee6befc491bcefa7485608eab4956a219e459beb`.
 GitHub Actions remain disabled. The 50% checkpoint remains active; no new release
 or physical public-dialog interaction is claimed.
+
+## Current source: bounded private file input and backup diagnosis
+
+Date: 2026-10-02. Runtime increments 2cf3047 (virtual external directory),
+488375c (private input) and ee02770 (shared input channel); version 0.2.0 is
+prepared in 8606e6e.
+
+Environment.getExternalStorageDirectory now returns a real virtual guest File
+whose directory maps to the current package's existing directory capability.
+This profile grants no shared host volume or cross-package data. Private and
+virtual external FileInputStream constructors read regular, no-follow files
+with hard-link rejection and a 64 MiB ceiling. Construction snapshots bytes;
+replacement leaves an existing stream unchanged. Missing/outside/oversized and
+linked paths fail without initializing the receiver.
+
+getChannel retains one managed input channel per stream. Shared size, position,
+EOF and close state pass compiled DEX checks, including negative positions,
+seeking beyond EOF, a 1 << 40 position, inherited interface identity, catchable
+ClosedChannelException/IOException and GC of the source/channel cycle. The
+existing stream path now copies only the requested read slice rather than the
+entire snapshot on every read, skip or available query. Output, transfer,
+ByteBuffer I/O, mapping, locking and live descriptors remain unsupported.
+
+The original SHA-256-pinned Notepad 1.0.0 APK's Backup data listener now opens its
+actual private AppDatabase.db input and obtains that channel. Its next explicit
+failure is unsupported class `Ljava/io/FileOutputStream;`, in
+`Lir/cafebazaar/notepad/activities/home/i;->a(Landroid/view/MenuItem;)Z` at DEX
+PC 0x0091. Missing-file Restore data stops at
+`Landroid/widget/Toast;->makeText(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;`
+in the same listener at PC 0x00eb. This is diagnosis, not successful backup/restore.
+
+The permanent public replay takes separate copies of the two-note/named-folder
+seed. Both diagnostic failures preserve every column of the Note and Folder
+tables in the copy and seed. The external directory contains no backup file.
+The catalog/report retain explicit false backup and restore workflow flags.
+
+`sh tools/ci.sh` completed with 147 Rust tests, formatting/checks, warning-free
+Clippy, optimized builds, 4,096 seeded parser mutations and five native component
+checks. `python3 tools/compatibility.py` completed the full public suite, including
+the new diagnostic, original folder deletion, exact note persistence and malformed
+XML preservation. The certificate records one unchanged optimized CLI SHA-256:
+`8ac84853d73959bc1ff9e901639a5363651dd11518fb0396542e5434fb7f6f61`.
+The rebuilt unsigned development bundle has the same executable. GitHub Actions
+remain disabled; the 50% goal stays active. No new physical public-app input is
+claimed for this increment.
+
+## v0.2.0: clean extracted release validation
+
+Date: 2026-10-02. The macOS ARM64 package requires the successful public-replay
+certificate for the exact executable before it can be assembled. A clean
+temporary extraction verifies the executable hash, Counter's real Increment
+callback, same-APK detail navigation and Back, UTF-8 preference save/restart,
+and the unchanged public Notepad APK's note save/restart. The Notepad artifact is
+checked against its pinned SHA-256 and copied into the consumer test directory
+after extraction; it is never included in the tarball. All these checks passed.
+
+The tarball contains the CLI, license, five authored fixtures, three upstream
+APK fetch/check helpers, README.txt and RELEASE.json. That record identifies
+the executable SHA-256 and source revision; SHA256SUMS verifies the entire
+archive. The unsigned development app bundle matches the same optimized CLI.
+Earlier native public-app observations are retained separately; this release
+gate does not claim new physical public-app input. Backup/restore remain
+unfinished and the 50% goal remains active. GitHub Actions stay disabled.
+
+[v0.2.0 scope and download](releases/0.2.0.md).

@@ -1,119 +1,156 @@
 <div align="center">
 
-<img src="docs/assets/droidless-banner.svg" alt="DROIDLESS — Run Android apps without Android. Experimental Rust runtime." width="100%">
+<img src="docs/assets/droidless-banner.svg" alt="DROIDLESS — Android apps. New desktop habitat. An experimental Rust runtime with native views." width="100%">
 
 <br>
 
-[![Release](https://img.shields.io/github/v/release/OthmaneBlial/droidless?style=for-the-badge&color=d9ff63&labelColor=171c21)](https://github.com/OthmaneBlial/droidless/releases/latest)
-[![Rust](https://img.shields.io/badge/Rust-1.95-83b8ff?style=for-the-badge&logo=rust&labelColor=171c21)](rust-toolchain.toml)
-[![License](https://img.shields.io/badge/license-Apache%202.0-d9ff63?style=for-the-badge&labelColor=171c21)](LICENSE)
-[![Checks](https://img.shields.io/badge/checks-local%20only-fffdf7?style=for-the-badge&labelColor=171c21)](tools/ci.sh)
+[![Release](https://img.shields.io/github/v/release/OthmaneBlial/droidless?style=for-the-badge&color=d9ff63&labelColor=171c21)](https://github.com/OthmaneBlial/droidless/releases/latest) [![Rust](https://img.shields.io/badge/Rust-1.95-83b8ff?style=for-the-badge&logo=rust&labelColor=171c21)](rust-toolchain.toml) [![License](https://img.shields.io/badge/license-Apache%202.0-d9ff63?style=for-the-badge&labelColor=171c21)](LICENSE) [![Checks](https://img.shields.io/badge/CI-local%20only-fffdf7?style=for-the-badge&labelColor=171c21)](tools/ci.sh)
 
-**[🌐 Explore the website](https://othmaneblial.github.io/droidless/)** ·
-**[📖 Open the runtime notebook](https://othmaneblial.github.io/droidless/docs.html)** ·
-**[📦 Grab v0.1.0](https://github.com/OthmaneBlial/droidless/releases/tag/v0.1.0)**
+**[📦 Download v0.2.0](https://github.com/OthmaneBlial/droidless/releases/tag/v0.2.0)** · **[🌐 Explore the website](https://othmaneblial.github.io/droidless/)** · **[📖 Open the notebook](https://othmaneblial.github.io/droidless/docs.html)**
+
+**Original APK bytecode → our Rust engine → native desktop views.**
 
 </div>
 
-## 👋 Meet the little runtime with a big idea
+## 👋 A little runtime with a big idea
 
-Take an Android APK. Execute its own bytecode. Give it a native desktop window.
+Give an Android app a new home on your desktop. Open a note, change its title and
+body, save it, then restart: the original APK brings your edits back. ✍️
 
-**DROIDLESS is an experimental Android compatibility runtime, written in Rust.**
-It owns the DEX interpreter, managed heap, Android API bridge, resource system
-and View model. A small AppKit bridge supplies the macOS controls.
+**DROIDLESS is an experimental Android compatibility runtime written in Rust.**
+It owns the DEX interpreter, managed heap, resource system, Android API bridge
+and View model. AppKit supplies native macOS controls; clicks and keyboard input
+return to the APK's own callbacks.
 
-No Android Emulator. No Android VM. No ART or borrowed Dalvik engine.
-No browser renderer or hidden Android installation. Android SDK tools compile
-our authored test APKs only; they do not participate in execution.
+The execution path runs without an Android emulator, ART, Dalvik or a hidden
+Android installation. Android SDK tools are used only to compile authored test
+fixtures. Compatibility is narrow, and unsupported APIs report explicit errors.
 
-> 🧭 A working slice of Android, one real APK at a time. Compatibility is narrow;
-> unsupported methods and opcodes report errors.
+## ✨ What can it actually do?
 
-## 📓 A public notes APK, opened in DROIDLESS
+| Real app | Verified native interaction | Verified headless replay |
+|---|---|---|
+| 📓 **[Notepad 1.0.0](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0)** | Mouse selection, keyboard title/body edits, Back save and exact restoration in a fresh process | Two persistent SQLite notes; edit/restart; Delete/Undo; drawer; folder create/rename; original folder-delete dialog, Cancel and confirmation |
+| 🖼️ **[SwpieView 1.3.2](https://f-droid.org/en/packages/org.voidptr.swpieview/)** | Folder chooser → three thumbnails → JPEG/PNG/WebP viewer → Escape back; taps hide/show controls | Original image swipes, first/last bounds, control visibility, Parcelable transfer and Back |
+| 🧮 **[Simple Calculator 1.0](https://github.com/swiftugandan/Simple-Android-Calculator/tree/3ba860b281eba34f144e4e75115f0c0a06bced31)** | Original clicks produce `7 + 5 = 12`, `8 × 8 = 64` and `9 / 3 = 3` | Seven arithmetic and input scenarios |
 
-The unmodified [Notepad 1.0.0 release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0)
-opens its Notes screen and editor. The headless replay saves two notes, reopens
-one, edits its title and multiline body, then restarts: both fields return
-through the APK's own code. ✍️
+Public APKs are pinned, SHA-256 checked and executed unchanged. They are fetched
+from upstream and **never bundled in our release**. Native observations and
+headless checks have separate evidence; authored fixtures establish engine
+contracts, not arbitrary APK compatibility. [Read the verification record](docs/verification.md).
 
 <div align="center">
-<img src="site/assets/notepad-preview.svg" alt="Illustrated headless View-tree preview of the public Notepad APK in DROIDLESS, with two saved notes and a revised title." width="280">
-<p><sub>Illustrated from the 390 × 844 View snapshot; this is not a native-window capture.</sub></p>
+<table align="center">
+<tr>
+<td align="center" width="50%" valign="top">
+<img src="site/assets/notepad-preview.svg" alt="Illustrated headless Notepad View tree showing two saved notes." height="320"><br>
+<strong>📓 Save. Reopen. Keep writing.</strong><br>
+<sub>Illustrated View-tree preview, not a native capture.</sub>
+</td>
+<td align="center" width="50%" valign="top">
+<img src="docs/assets/simple-calculator-native.png" alt="Actual public Simple Calculator APK in a native macOS window, showing 12." height="320"><br>
+<strong>🧮 Original clicks. Original result.</strong><br>
+<sub>Earlier native capture at a 192 × 400 viewport.</sub>
+</td>
+</tr>
+</table>
 </div>
 
-The original APK's SHA-256 is checked by `sh tools/fetch-notepad.sh`; DROIDLESS
-does not patch or redistribute it. After Back, the Notes list shows the saved
-titles; editing an existing note keeps its original row ID and refreshes the list.
-A fresh process restores its revised title and body. An earlier native AppKit
-run verified keyboard entry and saving a new note. Native mouse selection now
-opens an existing note, keyboard input edits both fields, and Escape saves back
-to the list. A fresh native process reopens the exact revised title and body.
-[Exact evidence and limits](docs/verification.md#current-source-editing-an-existing-public-note).
+## 🚀 Get your first APK running
 
-🗂️ Current source also opens the original Edit Folders screen in headless replay.
-Installed AppCompat inflater callbacks construct its own widgets and bind its
-editor/listener. Tapping the editor now runs its focus callback, and the original
-Done action creates one visible named folder in SQLite. A fresh process reopens
-the saved row, and Back restores both unchanged notes. The APK's own error-label
-fallback now runs through themed text appearance and sized child attachment.
-Saved-row attachment now runs the APK's real TextInputLayout binding callbacks.
-Headless focus and pending input complete; restarting discards an unconfirmed
-name. Rename confirmation now completes using real host-font ascent/descent.
-The same folder ID/new name survive restart and Back with both exact notes.
-🪟 Dialogs now render into separate native panels with their own View trees.
-Authored DEX and AppKit checks cover lifecycle, input, nesting and dismissal.
-✂️ Native ViewGroups now clip descendants and foregrounds while keeping input
-bounds separate. The original Notepad delete listener passes dialog creation,
-clipping setup, guest start/attachment, both scroll-indicator queries and title
-measurement. Headless replay now shows its original confirmation and buttons:
-Cancel keeps the folder; Delete Folder removes it. Restart and Back preserve both
-exact notes. Physical folder/dialog input remains unverified.
-[Current dialog evidence](docs/verification.md#current-source-public-folder-deletion-and-text-ellipses).
-[Folder rename and font-metrics evidence](docs/verification.md#current-source-folder-rename-and-host-font-metrics).
+**v0.2.0 is a macOS ARM64 preview.** The archive contains the CLI, five authored
+fixtures, three hash-checking public APK fetch helpers and release provenance.
+It has no Apple developer signature or notarization.
+
+[Download the archive and SHA256SUMS](https://github.com/OthmaneBlial/droidless/releases/tag/v0.2.0),
+then, from their download directory:
+
+```sh
+shasum -a 256 -c SHA256SUMS
+tar -xzf droidless-0.2.0-macos-arm64.tar.gz
+cd droidless-0.2.0-macos-arm64
+
+# Your first guest callback 🤖
+./droidless run --headless --ephemeral fixtures/counter.apk --click Increment
+```
+
+Try the **original public notes app**, using a dedicated local data directory:
 
 ```sh
 sh tools/fetch-notepad.sh
-target/release/droidless run --headless --ephemeral --size 390x844 \
-  --click "＋" --input "Hello, desktop" artifacts/apks/notepad-v1.0.0.apk
+
+# Notes → editor → save → return to the list
+./droidless run --headless --size 390x844 --data-dir ./test-apps \
+  --click "＋" --input "Hello, desktop" --input-at 1 "Made of Rust and curiosity." \
+  --back artifacts/apks/notepad-v1.0.0.apk
+
+# A fresh process restores your note
+./droidless run --headless --size 390x844 --data-dir ./test-apps \
+  artifacts/apks/notepad-v1.0.0.apk
+
+# Open a native desktop window
+./droidless run --size 390x720 --data-dir ./test-apps \
+  artifacts/apks/notepad-v1.0.0.apk
 ```
 
-## 🧮 The native calculator milestone
+**Escape delivers Back** in the native window. The package also includes
+`fetch-simple-calculator.sh` and `fetch-swpieview.sh`.
+[Release scope and known limits](docs/releases/0.2.0.md).
 
-The independently published [Simple Calculator 1.0](https://github.com/swiftugandan/Simple-Android-Calculator/tree/3ba860b281eba34f144e4e75115f0c0a06bced31)
-also runs unmodified. Original APK clicks produce `7 + 5 = 12`, `8 × 8 = 64`
-and `9 / 3 = 3` in a native macOS window.
+<details>
+<summary><strong>🛠️ Prefer building from source?</strong></summary>
 
-<div align="center">
-<img src="docs/assets/simple-calculator-native.png" alt="Actual public Simple Calculator APK in a native macOS window, displaying 12 after clicking 7 plus 5 equals" width="230">
-<p><sub>Actual native capture · 192 × 400 logical viewport · earlier calculator proof.</sub></p>
-</div>
-
-Its upstream artifact is pinned and SHA-256 checked, never rebuilt or repackaged,
-and not redistributed. Styling, table layout and complete numeric behavior remain
-incomplete or unverified. [Calculator evidence](docs/verification.md#current-source-neutral-public-calculator).
-
-## 🚀 Give it a spin
-
-Build with **Rust 1.95.0** and Apple's **Command Line Tools** on macOS:
+Use Rust **1.95.0** and Apple's Command Line Tools on macOS:
 
 ```sh
 git clone https://github.com/OthmaneBlial/droidless.git
 cd droidless
 cargo build --release --locked
 sh tools/fetch-notepad.sh
-# Notes → editor → typed title 👋
-target/release/droidless run --headless --ephemeral --size 390x844 --click "＋" \
-  --input "Hello, desktop" artifacts/apks/notepad-v1.0.0.apk
+target/release/droidless run --headless --ephemeral --size 390x844 \
+  --click "＋" --input "Hello, desktop" artifacts/apks/notepad-v1.0.0.apk
 ```
 
-The [v0.1.0 release](https://github.com/OthmaneBlial/droidless/releases/tag/v0.1.0)
-includes a locally tested macOS ARM64 CLI archive and SHA-256 checksum. The binary
-has no Apple developer signature or notarization. Linux has a headless code path;
-its build and native UI have not been verified.
+Normal builds and tests need no Android SDK or emulator. Linux has a headless
+code path; Linux builds and native UI have not been verified.
+
+</details>
+
+## ⚙️ Follow the bytecode
+
+<img src="docs/assets/runtime-path.svg" alt="APK → Rust DEX interpreter → Android API bridge → native AppKit controls; input returns to APK callbacks." width="100%">
+
+| Crate | What it owns |
+|---|---|
+| `droidless-formats` | Bounded APK, binary XML, DEX and compiled-resource parsers |
+| `droidless-runtime` | Register interpreter, managed objects, GC, lifecycle, framework APIs and Views |
+| `droidless` | CLI, native macOS rendering and input bridge |
+
+[Architecture](docs/architecture.md) · [DEX VM](docs/dex-vm.md) · [Framework](docs/framework.md)
+
+## 🧰 Inside v0.2.0
+
+| Capability | Implemented scope |
+|---|---|
+| 🧠 **Our own VM** | DEX 035–040; arithmetic, wide values, branches, arrays, fields, dispatch, managed continuations, Java throw/catch and retained DEX stack diagnostics |
+| 🪟 **Native views** | Text, buttons, editors, nested layouts, bounded adapter grids, a targeted support-RecyclerView notes path and separate dialog panels |
+| 🧭 **Navigation** | Same-APK Intents, typed Bundle extras, retained Back stack, results, real Parcelable writers/CREATORs and lifecycle observers |
+| 📓 **Persistence** | Isolated SharedPreferences and the public Notepad's SQLite save/edit/restart workflows |
+| 🖼️ **Images** | Packaged XML, typed resources, PNG/JPEG/WebP decoding, granted read-only document streams and native ImageViews |
+| ⏱️ **Scheduled work** | Main Handler/Looper/Message queue, guest Timer tasks, deferred workers, executor/Future results and main-thread delivery |
+| 🗂️ **Java foundations** | Bounded collections, guest equality, reflection, primitive metadata, weak references and handle-based mark/sweep GC |
+| ✂️ **Layout and input** | Measured text, UTF-16 ellipsis metadata, host-font ascent/descent, full accessibility labels for shortened text, clipping, focus and single-pointer gesture contracts |
+| 💾 **Bounded file input** | App-private reads and a package-isolated virtual external directory; FileInputStream snapshots and shared channel position/close state |
+
+These are supported profiles with explicit ceilings. **Notepad backup/restore
+remains unfinished**: backup reaches its private input channel, then stops at
+FileOutputStream. Missing-file restore stops at Toast. Physical public folder
+and dialog input, Android font/pixel parity, GIF animation and usable slideshow
+remain unverified. Broad AndroidX/Compose, JNI, networking, JIT and games are
+future work. [Exact compatibility](docs/compatibility.md) · [Storage limits](docs/storage.md)
 
 <details>
-<summary><strong>🔎 Prefer the terminal? Inspect, replay and trace.</strong></summary>
+<summary><strong>🔎 Inspect, replay and trace</strong></summary>
 
 ```sh
 target/release/droidless inspect app.apk
@@ -123,162 +160,84 @@ target/release/droidless classes app.apk
 target/release/droidless methods app.apk
 target/release/droidless resources app.apk
 
-# Original APK listeners update the emitted JSON View tree
-target/release/droidless run --headless --size 192x400 artifacts/apks/SimpleCalculator.apk \
-  --click 7 --click + --click 5 --click = --stats
-
-# Current source: authored multi-screen navigation fixture
-target/release/droidless run --headless fixtures/generated/intents.apk \
+target/release/droidless run --headless --ephemeral fixtures/generated/intents.apk \
   --click "Open detail" --back
-
-# Current source: replay the authored timer without waiting
 target/release/droidless run --headless --ephemeral fixtures/generated/scheduling.apk \
   --click "Start timer" --advance-ms 1500 --advance-ms 1500 --advance-ms 1500
 ```
 
-Use `--trace-bytecode`, `--trace-methods`, `--trace-framework` or
-`--trace-lifecycle` to follow execution. `--stats` / `--heap-stats` report real
-counters and timings. `--click`, `--key`, `--back`, `--headless` and `inspect-ui`
-support repeatable experiments. `--size WIDTHxHEIGHT` selects a 128–4096 logical viewport on each axis (default 420×720). **Escape delivers Back** in the native window.
-`--menu-item TEXT` prepares the current Activity's options and invokes its own
-enabled menu callback. Headless Notepad Delete returns to Notes and preserves the
-survivor's ID/title/body after restart. AppKit now offers an Options menu bridge;
-physical menu input remains unverified. [Menu scope](docs/compatibility.md).
-`--focus-at INDEX` requests actual guest focus for an editable field through the
-same dispatcher as AppKit first-responder gains; `--input-at INDEX TEXT` edits
-that field. Native component checks cover key-view traversal and retained text
-selection. Physical folder input remains unverified.
-Timed headless replay also shows the original delete feedback, removes its
-Snackbar after timeout, and runs Undo to restore both fields with a fresh row ID
-that survives restart and reopen. Native Delete/Undo input remains unverified.
-Headless navigation taps now open the APK's own drawer at 1000 ms; Back closes it
-while keeping Notes and both exact note rows. Generic View focus requests execute
-APK callbacks. Native drawer and physical folder input remain unverified.
-[Current checks](docs/verification.md#current-source-focus-and-original-notepad-drawer-navigation).
-Current source adds `--input TEXT` for the first visible EditText, per-package
-preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only runs.
-`--advance-ms MILLISECONDS` lays out and polls the current frame, advances the
-deterministic clock, then renders the advanced frame before the next action.
+Use `--trace-bytecode`, `--trace-methods`, `--trace-framework` and
+`--trace-lifecycle` to follow the real execution path. `--stats` and
+`--heap-stats` report measured counters. `--click`, `--tap`, `--key`,
+`--back`, `--input-at`, `--focus-at` and `--menu-item` replay guest input.
+`--advance-ms` advances the deterministic headless clock.
+[CLI reference](https://othmaneblial.github.io/droidless/docs.html#commands).
 
 </details>
 
-## ⚙️ Bytecode in. Native views out.
+## 🧪 Small lab. Executable evidence.
 
-<img src="docs/assets/runtime-path.svg" alt="APK → Rust DEX interpreter → Android API bridge → native AppKit controls; input returns to APK callbacks" width="100%">
-
-| Crate | Its job |
-|---|---|
-| `droidless-formats` | Bounded APK, binary XML, DEX and compiled-resource parsers |
-| `droidless-runtime` | Register interpreter, objects, GC, lifecycle, framework APIs and Views |
-| `droidless` | CLI, native macOS rendering and input bridge |
-
-[Architecture & decisions](docs/architecture.md) · [DEX VM](docs/dex-vm.md) ·
-[Framework & UI](docs/framework.md)
-
-## 🧰 What's in the toolbox?
-
-| Capability | Proven scope |
-|---|---|
-| 📦 APK / manifest / resources | Real APKs and malformed-input checks; default resource configuration |
-| 🧠 DEX 035–040 | Headers, digests, IDs, classes, code and try handlers; annotations/debug partial |
-| ⚡ Own register interpreter | Arithmetic, wide values, branches, arrays, fields, dispatch, managed call continuations, Java throw/catch and retained DEX stack diagnostics |
-| 🧹 Managed objects | Inheritance, strings, sticky class initialization and handle-based mark/sweep GC |
-| 🪟 Native widgets | TextView, Button, EditText, LinearLayout, FrameLayout and bounded adapter-backed GridView; a targeted support-RecyclerView two-note path; measured text Layout with approximate font metrics |
-| 🖼️ Resources and images | Packaged XML pull events and typed XML attributes; PNG/JPEG/WebP through BitmapFactory and ImageView; four native image views confirmed in an authored fixture |
-| 📝 Rich text/XML | Android spannable text and a bounded SAX parser subset exercised by an unmodified APK |
-| 🖱️ Input | Native calculator clicks, Counter text/key callbacks, and real keyboard text in the public Notepad APK |
-| 🧭 Activity navigation | Explicit same-APK Intents, typed Bundle extras, preserved Back stack, finish, Application observers and platform fragments without Views — current source |
-| 📓 Persistent storage | Two public Notepad notes survive restart; reopening and editing an existing title/body keeps the same SQLite row — current source |
-| 🗂️ Java collections | Bounded HashSet/ArrayList/HashMap/basic LinkedHashMap, snapshot CopyOnWriteArrayList, immediate FIFO queues, indexed lists, guest equality, native map copying and live read-only Set/List views — current source |
-| 🔎 APK classes | APK-local Class lookup, no-argument construction, initialization/access faults, primitive TYPE metadata and inherited field resolution — current source |
-| 🌍 API profile | Fixed read-only Build.VERSION.SDK_INT = 21 for app version checks; partial framework support — current source |
-| ⏱️ Scheduled callbacks | Main Handler/Looper/Message queue, delayed APK callbacks, cancellation and GC retention; native authored timer verified — current source |
-| ⌛ Java timers | One guest worker per Timer; one-shot, fixed-delay/fixed-rate tasks, Date deadlines, cancellation/purge pass compiled checks; main Handler UI results and cancellation also pass natively — current source |
-| 🧵 Guest workers | Deferred DEX execution with shared objects; reusable executor pools, real Future results/waits/cancellation and shutdown; main Handler delivery verified natively — current source |
-| 🛠️ Next up | Extend the public image viewer beyond static-image swipes and taps; GIF animation and slideshow remain ahead |
-
-The published **v0.1.0 archive predates navigation, persistence, collections, scheduling and the new calculator demo**. Current source capability
-is documented separately. AndroidX, Compose, JNI, networking, Linux native UI
-and games remain future compatibility work. [Exact limits](docs/compatibility.md).
-
-## 🧪 Tiny lab. Real bytecode.
-
-| APK | Origin | What we observed |
-|---|---|---|
-| Simple Calculator 1.0 | [Pinned independent APK](https://github.com/swiftugandan/Simple-Android-Calculator/tree/3ba860b281eba34f144e4e75115f0c0a06bced31) | Three native arithmetic cases; seven headless cases |
-| KasCalc 1.0 | [Independent release](https://github.com/KasRoudra/simplecalculator/releases/tag/v1.0) | Native calculations; ten headless arithmetic/input cases |
-| SmallestAPK | [Independent sample](https://github.com/krossovochkin/SmallestAPK) | Original signed APK executes its Activity and creates the expected TextView |
-| Counter | [Authored Java/XML fixture](examples/counter/MainActivity.java) | Native text/key callbacks, resources and VM conformance; retained Throwable diagnostics and nested FrameContract also pass on desktop Java |
-| Intents | [Authored Java/XML fixture](examples/intents/MainActivity.java) | Native screen transitions, retained input, Back and lifecycle observers; headless snapshot registration, GC during transitions and callback fault cleanup |
-| Preferences | [Authored Java/XML fixture](examples/preferences/MainActivity.java) | Native UTF-8 paste, save/restart/clear, typed values and package/path isolation |
-| Collections | [Authored Java fixture](examples/collections/MainActivity.java) | Headless list/queue ordering, snapshot iteration across mutation/GC/worker writes, guest equality, read-only views and limits; same normal list, snapshot, map-copy and immediate queue contracts pass on desktop Java |
-| Reflection | [Authored Java fixture](examples/reflection/ReflectionContract.java) | Class lookup, reference constructors, runtime/inherited annotations, primitive TYPE identities, guest faults and inherited fields; portable contracts pass on desktop Java. SDK profile field checks are compiled DEX evidence |
-| Scheduling | [Authored Java fixture](examples/scheduling/MainActivity.java) | Native timer and Future wait/deliver/cancel flows; automated native sleep/join → main result → clean close. Compiled Looper, TimerTask and executor contracts; portable thread waits also pass on desktop Java. [Exact scheduling scope](docs/threading.md) |
-| Images and XML | [Authored Java/XML fixture](examples/images/MainActivity.java) | XML pull traversal, typed attributes, PNG/JPEG/WebP decoding and four native AppKit ImageViews. Unmodified SwpieView also opens selected-folder images in its native full-screen viewer |
-| Activity results and folders | [Authored Java fixture](examples/results/MainActivity.java) | Actual request codes, copied return data, Back cancellation and native folder selection; stopped callers, GC and failure cleanup pass compiled checks. Bounded read-only document queries and streams are supported; writes and persistent grants remain open |
-| Document images | [Authored Java fixture](examples/documents/MainActivity.java) and [SwpieView 1.3.2](https://f-droid.org/en/packages/org.voidptr.swpieview/) | Folder chooser → three thumbnails → JPEG/PNG/WebP full-screen viewer → Back, verified in native AppKit with the unmodified public APK. URI confinement, GC, links, oversized files and sort contracts pass compiled checks |
-| Parcelable state | [Authored Java fixture](examples/parcels/MainActivity.java) | Actual guest writers/CREATORs, nested Bundles/lists/nulls, Unicode/wide values, isolated activity/result payloads, GC during source mutation and malformed-data/error cleanup |
-| Touch and gestures | [Authored Java fixture](examples/touch/MainActivity.java) | Single-pointer dispatch, child coordinates/capture, click fallback, timed taps/double taps/presses, scroll/fling, cancellation and callback GC/error cleanup. SwpieView replay verifies actual next/previous images; native taps hide/show controls. Native drag verification remains pending |
-| Photo grid | [Authored Java/XML fixture](examples/grids/MainActivity.java) | Guest BaseAdapter cells, auto-fit and four stretch modes, observer updates and native photo clicks with 64-bit IDs; disabled items ignore clicks and Refresh replaces seven photos with four |
-| Widgets | [Authored Java contracts](examples/images/WidgetProbe.java) | Timed scrolling, manifest application metadata, listener overrides, virtual background dispatch and content-description retention; image accessibility labels verified in native AppKit |
-| Notepad 1.0.0 | [Independent release](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0) | Headless two-row save/restart and timed Delete feedback/dismissal. Native existing-row mouse selection, keyboard title/body edits, Back save and exact field restoration after a fresh process; original SQLite ID retained |
-
-Authored fixtures test implementation; they do not establish arbitrary APK
-compatibility. [Evidence catalog](compatibility/catalog.json).
+**147 Rust tests**, warning-free Clippy, optimized builds, five native component
+checks and **4,096 seeded parser mutations** run locally. The public APK replay
+checks the original app flows and certifies one unchanged CLI SHA-256. Release
+packaging extracts the archive into a clean directory and checks Counter,
+navigation/Back, UTF-8 preferences and original Notepad save/restart.
 
 ```sh
-# CI lives on your machine. GitHub Actions stays disabled.
+# CI runs on your machine. GitHub Actions stays disabled.
 sh tools/ci.sh
-sh tools/fetch-kascalc.sh # Earlier calculator regression APK
+sh tools/fetch-kascalc.sh                 # Earlier regression fixture
 sh tools/fetch-simple-calculator.sh
 sh tools/fetch-notepad.sh
 sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
+python3 tools/package-macos.py
 ```
 
-Local checks cover formatting, builds, 145 Rust tests, Clippy and 4,096 seeded parser
-mutations. Normal tests require neither an Android SDK nor an emulator.
+[Evidence catalog](compatibility/catalog.json) · [Verification record](docs/verification.md) ·
+[Changelog](CHANGELOG.md)
 
 <details>
-<summary><strong>🔧 Rebuild fixtures or create a development app bundle</strong></summary>
+<summary><strong>🔧 Rebuild fixtures or a development app bundle</strong></summary>
 
 ```sh
 python3 tools/build-fixtures.py --sdk "$ANDROID_SDK_ROOT"
 sh tools/macos-app.sh
 ```
 
-The bundle is unsigned and intended for local development.
+SDK tools compile fixtures only. The app bundle is unsigned and intended for
+local development.
 
 </details>
 
-## 🗺️ Next checkpoint: 50%
+## 🗺️ On the road to 50%
 
-The **20% milestone** is demonstrated: an unmodified APK renders, accepts clicks,
-executes its own logic and updates native UI without Android. This is a milestone
-label, not a measurement of Android API coverage.
+The **20% milestone** demonstrated an unmodified APK rendering, accepting input,
+executing its own logic and updating native UI. Everyday-app workflows now add
+multiple screens, persistent notes, folders, images and scheduled callbacks.
 
-The next ambition is **50%**: move beyond calculators toward useful everyday
-apps, with multiple screens, persistent data, lists, images and scheduled callbacks.
-That target remains ahead of us. Every step needs executable evidence and a
+**50% remains the active target.** These labels describe project milestones,
+not measured Android API coverage. Each step needs a working app flow and a
 clear compatibility boundary. [Follow the roadmap](docs/roadmap.md).
 
-## 🔐 A small but important boundary
+## 🔐 Bring trusted APKs
 
-This prototype is not a security sandbox. Parser/VM limits do not replace OS
-isolation. Current source grants isolated SharedPreferences storage plus a fixed
-virtual `/proc/self/cmdline` response; general file, network, native-library and
-process APIs are unavailable. Use trusted APKs.
-[Storage behavior and limits](docs/storage.md).
-[Security boundaries](docs/security.md).
+DROIDLESS is an experimental runtime, not an audited security sandbox.
+Package storage is confined to the host-selected app root; external storage is
+a package-isolated virtual directory. Granted document access is bounded and
+read-only. General file access, networking and native-library/process APIs
+remain unavailable. [Security boundaries](docs/security.md).
 
 ---
 
 <div align="center">
 
-**Built in Rust. Powered by original APK bytecode. A little stubborn by design. 🤖**
+<img src="docs/assets/droid.svg" alt="DROIDLESS robot explorer" width="84">
 
-DROIDLESS is Apache-2.0. Third-party artifacts retain their own licenses.
+**Built in Rust. A little stubborn by design. 🤖**
 
-[Website](https://othmaneblial.github.io/droidless/) · [Documentation](https://othmaneblial.github.io/droidless/docs.html) · [Source](https://github.com/OthmaneBlial/droidless)
+Apache-2.0 · Third-party artifacts retain their upstream licenses.
+
+[Website](https://othmaneblial.github.io/droidless/) · [Notebook](https://othmaneblial.github.io/droidless/docs.html) · [Release](https://github.com/OthmaneBlial/droidless/releases/tag/v0.2.0)
 
 </div>

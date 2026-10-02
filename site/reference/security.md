@@ -31,7 +31,17 @@ and bound declared and actual length to 64 MiB. Enumeration is capped at 4,096
 entries and path depth at 64. Grants disappear on runtime close/restart; writes,
 persistent permissions, other providers and ambient file URIs remain unavailable.
 
-General file, network, clipboard, camera, microphone, location, process and
+Environment's virtual external directory maps to a separate subtree inside the
+current package capability. It grants no shared host volume or cross-package
+access. Directory traversal and symlinks are checked by the same storage boundary.
+
+FileInputStream snapshots regular files only within the package capability,
+with no-follow opens, hard-link rejection and a 64 MiB read ceiling. Its input
+channel shares the snapshot's position and close state without granting a host
+descriptor. Output streams, transfer/mapping/locking and general file channels
+remain unavailable.
+
+Network, clipboard, camera, microphone, location, process and
 native-library APIs are unavailable. Inspected manifest permissions grant no host
 capabilities. Native controls handle explicit user input/paste, while the AppKit bridge consumes
 trusted Rust structures on the main thread. UI strings with NUL fail C conversion;

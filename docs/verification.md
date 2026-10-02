@@ -2579,3 +2579,23 @@ XML preservation. The certificate records one unchanged optimized CLI SHA-256:
 The rebuilt unsigned development bundle has the same executable. GitHub Actions
 remain disabled; the 50% goal stays active. No new physical public-app input is
 claimed for this increment.
+
+## v0.2.0: clean extracted release validation
+
+Date: 2026-10-02. The macOS ARM64 package requires the successful public-replay
+certificate for the exact executable before it can be assembled. A clean
+temporary extraction verifies the executable hash, Counter's real Increment
+callback, same-APK detail navigation and Back, UTF-8 preference save/restart,
+and the unchanged public Notepad APK's note save/restart. The Notepad artifact is
+checked against its pinned SHA-256 and copied into the consumer test directory
+after extraction; it is never included in the tarball. All these checks passed.
+
+The tarball contains the CLI, license, five authored fixtures, three upstream
+APK fetch/check helpers, README.txt and RELEASE.json. That record identifies
+the executable SHA-256 and source revision; SHA256SUMS verifies the entire
+archive. The unsigned development app bundle matches the same optimized CLI.
+Earlier native public-app observations are retained separately; this release
+gate does not claim new physical public-app input. Backup/restore remain
+unfinished and the 50% goal remains active. GitHub Actions stay disabled.
+
+[v0.2.0 scope and download](releases/0.2.0.md).
