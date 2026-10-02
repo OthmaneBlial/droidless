@@ -15,7 +15,9 @@
   MIME extension lookup. Java serialization, fragment back stacks and broad
   Android API compatibility remain outside this preview.
 - Refreshed the README and release/website links for v0.3.0. CI runs locally;
-  GitHub Actions remain disabled.
+  GitHub Actions remain disabled. The local release gate passes 150 Rust tests,
+  Clippy, optimized builds, 4,096 seeded mutations, five AppKit checks and the
+  full optimized public-APK replay.
 
 ## 0.2.0 — 2026-10-02
 

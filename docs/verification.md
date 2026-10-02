@@ -2627,3 +2627,15 @@ method is still unsupported, so DROIDLESS reports a guest error after the data
 recovery has succeeded. This evidence is a bounded workflow check, not complete
 process-shutdown or Android compatibility. Custom Bundle Serializable objects
 are same-runtime references, not Java serialization or cross-process persistence.
+
+The final v0.3.0 local release gate passed on 2026-10-02: `sh tools/ci.sh`
+completed formatting, workspace checks, 150 Rust tests, warning-free Clippy,
+optimized workspace/document-replay builds, 4,096 seeded parser mutations and
+five AppKit component checks. GitHub Actions were not used. The optimized
+`python3 tools/compatibility.py --binary target/release/droidless` replay passed
+calculator, image/grid/result, SwpieView and Notepad scenarios with one
+unchanged CLI, SHA-256
+`c793225d9963e1186774eca5b0a5b0488963d14cbcc1f5aba3b236c514fdc438`. The
+machine-readable Notepad replay is `artifacts/notepad-compatibility.json`.
+Backup and restore both pass; the only reported boundary is the original APK's
+unsupported `System.exit(0)` after its restored data has been verified.
