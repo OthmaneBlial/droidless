@@ -355,25 +355,39 @@ with tempfile.TemporaryDirectory(prefix="droidless-notepad-") as app_data:
             if retained != rows:
                 raise SystemExit(f"Notepad folder {phase} changed an existing note row")
 
-    # Diagnose the next original callback gap without touching the saved seed.
+    # Create and reopen a real folder without touching the saved seed.
     with tempfile.TemporaryDirectory(prefix="droidless-notepad-folder-create-") as folder_root:
         folder_data = Path(folder_root) / "apps"
         shutil.copytree(app_data, folder_data)
-        process = subprocess.run([
-            str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(folder_data),
-            "--tap", "24", "22", "--advance-ms", "1000", "--click", "Create or edit folders",
-            "--tap", "180", "72", "--input", "Runtime folder", "--tap", "362", "72", str(notepad),
-        ], text=True, capture_output=True, timeout=120)
-        folder_blocker = "unsupported method Landroid/support/design/widget/TextInputLayout;->addView(Landroid/view/View;II)V"
-        if process.returncode == 0 or folder_blocker not in process.stderr or "TextInputLayout;->setErrorEnabled(Z)V" not in process.stderr:
-            raise SystemExit("Notepad saved folder row did not reach its diagnosed TextInputLayout sized-child attachment dependency")
-        with sqlite3.connect(folder_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
-            retained = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
-            folders = connection.execute("SELECT id,name FROM Folder ORDER BY id").fetchall()
-        with sqlite3.connect(database) as connection:
-            original = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
-        if retained != rows or original != rows or folders != [(1, "Runtime folder")]:
-            raise SystemExit("Notepad folder callback did not persist exactly one named folder while preserving both seed/copy notes")
+        open_folders = ["--tap", "24", "22", "--advance-ms", "1000", "--click", "Create or edit folders"]
+        for phase, actions in [
+            ("create", open_folders + ["--tap", "180", "72", "--input", "Runtime folder", "--tap", "362", "72"]),
+            ("restart-open", open_folders),
+            ("restart-back", open_folders + ["--back"]),
+        ]:
+            process = subprocess.run([
+                str(args.binary), "run", "--headless", "--size", "390x844", "--data-dir", str(folder_data),
+                *actions, str(notepad),
+            ], text=True, capture_output=True, check=True, timeout=120)
+            tree = json.loads(process.stdout)
+            nodes = list(flatten(tree))
+            labels = {node["view"]["text"] for node in nodes}
+            if phase == "restart-back":
+                if not {"Notes", revised_title, probe_titles[1]} <= labels:
+                    raise SystemExit("Notepad saved-folder Back did not restore both note titles")
+            else:
+                visible = [node for node, alpha in visible_nodes(tree) if node["view"]["text"] == "Runtime folder"
+                           and alpha > 0 and node["rect"]["width"] > 0 and node["rect"]["height"] > 0
+                           and node["rect"]["y"] >= 0 and node["rect"]["y"] + node["rect"]["height"] <= 844]
+                if "Edit Folders" not in labels or len(visible) != 1:
+                    raise SystemExit(f"Notepad folder {phase} did not display exactly one saved row")
+            with sqlite3.connect(folder_data / "ir.cafebazaar.notepad/databases/AppDatabase.db") as connection:
+                retained = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+                folders = connection.execute("SELECT id,name FROM Folder ORDER BY id").fetchall()
+            with sqlite3.connect(database) as connection:
+                original = connection.execute("SELECT id, title, body FROM Note ORDER BY id").fetchall()
+            if retained != rows or original != rows or folders != [(1, "Runtime folder")]:
+                raise SystemExit(f"Notepad folder {phase} changed the saved folder or seed/copy notes")
 
     survivor = next(row for row in rows if row[0] != original_id)
     # Original Undo calls note.save(); the APK's INSERT omits its auto-increment ID.
@@ -473,10 +487,11 @@ report["drawer_open_close_steps_ms"] = [1000, 1000]
 report["headless_folder_open_back_verified"] = True
 report["headless_folder_existing_note_rows_retained"] = True
 report["native_folder_input_verified"] = False
-report["headless_folder_creation_verified"] = False
-report["folder_creation_blocker"] = folder_blocker
-report["failed_folder_creation_existing_note_rows_retained"] = True
-report["headless_folder_row_persisted_before_layout_failure"] = True
+report["headless_folder_creation_verified"] = True
+report["headless_saved_folder_display_restart_back_verified"] = True
+report["folder_creation_blocker"] = None
+report["folder_creation_existing_note_rows_retained"] = True
+report["headless_folder_editing_verified"] = False
 (root / "artifacts/notepad-compatibility.json").write_text(json.dumps(report, indent=2) + "\n")
 print("PASS Notepad: Notes screen → note editor → typed title visible")
 print("PASS Notepad: two saved titles appear immediately and survive restart")
@@ -488,7 +503,7 @@ print("PASS Notepad: original navigation tap reveals an on-screen drawer animati
 print("PASS Notepad: original drawer settles at 1000ms; Back closes it, retains Notes and preserves both exact rows")
 
 print("PASS Notepad: original Edit Folders binds its editor/listener; Back retains both exact note rows")
-print("PASS Notepad diagnosis: original editor focus/Done persists one folder; row rendering stops at sized-child attachment while both exact seed/copy notes remain")
+print("PASS Notepad: original editor/Done creates one visible folder; saved row reopens after restart and Back restores both exact notes")
 
 # The original APK stores XML metacharacters unescaped. Its own catch path must
 # log the actual exception and show !ERROR!, without rewriting the stored body.
