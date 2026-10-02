@@ -2,7 +2,9 @@ package org.droidless.counter;
 
 import android.app.Activity;
 import java.io.Closeable;
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.channels.Channel;
 import java.nio.channels.ClosedChannelException;
@@ -57,4 +59,52 @@ public final class FileChannelContract {
         return retained;
     }
     public static void release() { retained = null; }
+
+    public static void output(Activity context) throws IOException {
+        File file = new File(context.getFilesDir(), "channel.bin");
+        FileOutputStream output = new FileOutputStream(file);
+        FileChannel target = output.getChannel();
+        FileInputStream input = new FileInputStream("/proc/self/cmdline");
+        FileChannel source = input.getChannel();
+        long size = source.size();
+        check(output instanceof Closeable && target.isOpen());
+        check(target.transferFrom(source, 0, size) == size);
+        check(source.position() == size && target.position() == 0 && target.size() == size);
+        output.write(0xab);
+        check(target.position() == 1 && target.size() == size);
+        output.flush();
+        output.close();
+        check(!target.isOpen());
+        input.close();
+
+        FileInputStream saved = new FileInputStream(file);
+        check(saved.read() == 0xab && saved.read() == 'r');
+        FileOutputStream copy = new FileOutputStream(
+                new File(context.getFilesDir(), "copy.bin"));
+        FileChannel copyChannel = copy.getChannel();
+        long copied = saved.getChannel().transferTo(0, saved.getChannel().size(), copyChannel);
+        check(copied == size && saved.getChannel().position() == 2);
+        check(copyChannel.position() == size);
+        copyChannel.close();
+        saved.close();
+
+        FileOutputStream append = new FileOutputStream(file, true);
+        append.write(new byte[] {(byte) 0xfe, 0x7f}, 0, 2);
+        append.close();
+        FileInputStream appended = new FileInputStream(file);
+        appended.getChannel().position(size);
+        check(appended.read() == 0xfe && appended.read() == 0x7f);
+        appended.close();
+
+        FileOutputStream abandoned = new FileOutputStream(file);
+        abandoned.write(0x55);
+        FileInputStream unchanged = new FileInputStream(file);
+        check(unchanged.read() == 0xab);
+        unchanged.close();
+
+        try {
+            new FileOutputStream("/proc/self/cmdline");
+            check(false);
+        } catch (java.io.FileNotFoundException expected) { }
+    }
 }

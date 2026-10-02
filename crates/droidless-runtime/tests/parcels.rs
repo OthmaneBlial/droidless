@@ -47,7 +47,7 @@ fn parcel(vm: &mut Runtime, bytes: Vec<u8>) -> Word {
 }
 
 #[test]
-fn boxed_bundle_and_list_values_round_trip_with_aliases_types_and_gc() {
+fn boxed_bundle_and_same_runtime_serializable_references_round_trip_with_gc() {
     let mut vm = Runtime::new(
         Apk::parse(include_bytes!("../../../fixtures/generated/parcels.apk")).unwrap(),
     )
@@ -58,8 +58,10 @@ fn boxed_bundle_and_list_values_round_trip_with_aliases_types_and_gc() {
         [Word::from(1)]
     );
     vm.collect();
-    let error = invoke(&mut vm, class, "unsupported", &[], "V", vec![]).unwrap_err();
-    assert!(format!("{error:#}").contains("Java serialization is unavailable"));
+    assert_eq!(
+        invoke(&mut vm, class, "sameRuntimeCustom", &[], "I", vec![]).unwrap(),
+        [Word::from(1)]
+    );
     assert_eq!(vm.stack_depth(), 0);
     vm.collect();
     assert_eq!(

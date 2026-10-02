@@ -3,6 +3,10 @@ use droidless_runtime::{
     Runtime,
     heap::{Data, Word},
 };
+use std::{
+    fs,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 #[test]
 fn compiled_view_scroll_queries_virtual_metrics_boundaries_gc_and_faults() {
@@ -2356,6 +2360,47 @@ fn compiled_file_channel_shared_position_close_wide_values_and_gc() {
         "channel cycle retained a released stream"
     );
     assert_eq!(vm.stack_depth(), 0);
+}
+
+#[test]
+fn compiled_bounded_file_output_stream_and_channel_transfers() {
+    let root = std::env::temp_dir().join(format!(
+        "droidless-file-output-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let mut vm = Runtime::with_data_dir(
+        Apk::parse(include_bytes!("../../../fixtures/generated/counter.apk")).unwrap(),
+        &root,
+    )
+    .unwrap();
+    let activity = vm.heap.instance("Landroid/app/Activity;").unwrap();
+    vm.invoke(
+        Method {
+            class: "Lorg/droidless/counter/FileChannelContract;".into(),
+            name: "output".into(),
+            parameters: vec!["Landroid/app/Activity;".into()],
+            returns: "V".into(),
+        },
+        vec![activity],
+        false,
+    )
+    .unwrap();
+
+    let mut expected = b"org.droidless.counter\0".to_vec();
+    expected[0] = 0xab;
+    assert_eq!(
+        fs::read(root.join("org.droidless.counter/files/channel.bin")).unwrap(),
+        [expected.as_slice(), &[0xfe, 0x7f]].concat()
+    );
+    assert_eq!(
+        fs::read(root.join("org.droidless.counter/files/copy.bin")).unwrap(),
+        expected
+    );
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

@@ -1,5 +1,6 @@
 use crate::{
     heap::{Data, Word, bits64, fault, wide},
+    storage::MAX_APP_FILE_BYTES,
     vm::Runtime,
 };
 use anyhow::{Context, Result, ensure};
@@ -9,7 +10,433 @@ const EXTERNAL_ROOT: &str = "/storage/emulated/0";
 const CHANNEL: &str = "droidless:file:channel";
 const CHANNEL_STREAM: &str = "droidless:file:channel-stream";
 
+fn file_not_found(message: impl Into<String>) -> anyhow::Error {
+    fault("Ljava/io/FileNotFoundException;", message)
+}
+
+fn io_error(error: impl std::fmt::Display) -> anyhow::Error {
+    fault("Ljava/io/IOException;", error.to_string())
+}
+
 impl Runtime {
+    fn file_channel(&mut self, stream: Word) -> Result<Word> {
+        let object = self.heap.get(stream)?;
+        ensure!(
+            matches!(
+                object.data,
+                Data::ByteStream { .. } | Data::ByteOutput { .. }
+            ),
+            fault(
+                "Ljava/lang/IllegalStateException;",
+                "stream is not initialized"
+            )
+        );
+        if let Some(channel) = object.fields.get(CHANNEL).and_then(|v| v.first()) {
+            return Ok(*channel);
+        }
+        let channel = self.heap.instance("Ljava/nio/channels/FileChannel;")?;
+        self.heap
+            .get_mut(channel)?
+            .fields
+            .insert(CHANNEL_STREAM.into(), vec![stream]);
+        self.heap
+            .get_mut(stream)?
+            .fields
+            .insert(CHANNEL.into(), vec![channel]);
+        Ok(channel)
+    }
+
+    fn channel_stream(&self, channel: Word) -> Result<Word> {
+        self.heap
+            .get(channel)?
+            .fields
+            .get(CHANNEL_STREAM)
+            .and_then(|values| values.first())
+            .copied()
+            .context("uninitialized file channel")
+    }
+
+    fn open_output(&mut self, receiver: Word, path: String, append: bool) -> Result<()> {
+        let missing = || file_not_found(format!("not writable in DROIDLESS virtual files: {path}"));
+        let relative = self.guest_file_relative(&path).ok_or_else(missing)?;
+        ensure!(!relative.is_empty(), missing());
+        let storage = self.storage.as_ref().ok_or_else(missing)?;
+        let parent = &relative[..relative.len() - 1];
+        ensure!(storage.app_path_kind(parent)? == Some(true), missing());
+        let existing = storage
+            .read_app_file(&relative)
+            .map_err(|error| file_not_found(format!("{error:#}")))?;
+        let mut bytes = existing.unwrap_or_default();
+        if !append {
+            bytes.clear();
+        }
+        let position = bytes.len();
+        self.heap.get_mut(receiver)?.data = Data::ByteOutput {
+            path: relative,
+            bytes,
+            position,
+            closed: false,
+        };
+        Ok(())
+    }
+
+    fn output_write(&mut self, stream: Word, source: &[u8]) -> Result<()> {
+        let Data::ByteOutput {
+            bytes,
+            position,
+            closed,
+            ..
+        } = &mut self.heap.get_mut(stream)?.data
+        else {
+            return Err(fault(
+                "Ljava/lang/IllegalStateException;",
+                "FileOutputStream is not initialized",
+            ));
+        };
+        ensure!(!*closed, fault("Ljava/io/IOException;", "Stream closed"));
+        if source.is_empty() {
+            return Ok(());
+        }
+        let end = position
+            .checked_add(source.len())
+            .filter(|end| *end <= MAX_APP_FILE_BYTES)
+            .ok_or_else(|| fault("Ljava/io/IOException;", "app file exceeds 64 MiB"))?;
+        if *position > bytes.len() {
+            bytes.resize(*position, 0);
+        }
+        if end > bytes.len() {
+            bytes.resize(end, 0);
+        }
+        bytes[*position..end].copy_from_slice(source);
+        *position = end;
+        Ok(())
+    }
+
+    fn commit_output(&mut self, stream: Word, close: bool) -> Result<()> {
+        let (path, bytes) = match &self.heap.get(stream)?.data {
+            Data::ByteOutput {
+                path,
+                bytes,
+                closed,
+                ..
+            } => {
+                if *closed {
+                    if close {
+                        return Ok(());
+                    }
+                    return Err(fault("Ljava/io/IOException;", "Stream closed"));
+                }
+                (path.clone(), bytes.clone())
+            }
+            _ => {
+                return Err(fault(
+                    "Ljava/lang/IllegalStateException;",
+                    "FileOutputStream is not initialized",
+                ));
+            }
+        };
+        if close && let Data::ByteOutput { closed, .. } = &mut self.heap.get_mut(stream)?.data {
+            *closed = true;
+        }
+        self.storage
+            .as_mut()
+            .ok_or_else(|| fault("Ljava/io/IOException;", "app storage is unavailable"))?
+            .write_app_file(&path, &bytes)
+            .map_err(io_error)
+    }
+
+    fn file_channel_native(&mut self, method: &Method, args: &[Word]) -> Result<Vec<Word>> {
+        let receiver = args.first().copied().unwrap_or(Word::ZERO);
+        let stream = self.channel_stream(receiver)?;
+        let signature = method.signature();
+        if signature == "transferFrom(Ljava/nio/channels/ReadableByteChannel;JJ)J" {
+            ensure!(args.len() == 6, "invalid transferFrom arguments");
+            return self.transfer_from(args);
+        }
+        if signature == "transferTo(JJLjava/nio/channels/WritableByteChannel;)J" {
+            ensure!(args.len() == 6, "invalid transferTo arguments");
+            return self.transfer_to(args);
+        }
+
+        let (size, position, closed) = match &self.heap.get(stream)?.data {
+            Data::ByteStream {
+                bytes,
+                position,
+                closed,
+            } => (bytes.len(), *position, *closed),
+            Data::ByteOutput {
+                bytes,
+                position,
+                closed,
+                ..
+            } => (bytes.len(), *position, *closed),
+            _ => {
+                return Err(fault(
+                    "Ljava/lang/IllegalStateException;",
+                    "file channel has no stream",
+                ));
+            }
+        };
+        if method.name == "isOpen" {
+            return Ok(vec![Word::from(i32::from(!closed))]);
+        }
+        if method.name == "close" {
+            return match &self.heap.get(stream)?.data {
+                Data::ByteStream { .. } => {
+                    if let Data::ByteStream { closed, .. } = &mut self.heap.get_mut(stream)?.data {
+                        *closed = true;
+                    }
+                    Ok(vec![])
+                }
+                Data::ByteOutput { .. } => {
+                    self.commit_output(stream, true)?;
+                    Ok(vec![])
+                }
+                _ => unreachable!(),
+            };
+        }
+        ensure!(
+            !closed,
+            fault(
+                "Ljava/nio/channels/ClosedChannelException;",
+                "Channel closed"
+            )
+        );
+        if signature == "position(J)Ljava/nio/channels/FileChannel;" {
+            ensure!(args.len() == 3, "invalid channel position arguments");
+            let next = bits64(&args[1..])? as i64;
+            ensure!(
+                next >= 0,
+                fault(
+                    "Ljava/lang/IllegalArgumentException;",
+                    "negative channel position"
+                )
+            );
+            let next = usize::try_from(next).map_err(|_| {
+                fault(
+                    "Ljava/lang/IllegalArgumentException;",
+                    "channel position is too large",
+                )
+            })?;
+            match &mut self.heap.get_mut(stream)?.data {
+                Data::ByteStream { position, .. } | Data::ByteOutput { position, .. } => {
+                    *position = next;
+                }
+                _ => unreachable!(),
+            }
+            return Ok(vec![receiver]);
+        }
+        ensure!(args.len() == 1, "invalid file channel arguments");
+        Ok(wide(if method.name == "size" {
+            size
+        } else {
+            position
+        } as u64))
+    }
+
+    fn transfer_from(&mut self, args: &[Word]) -> Result<Vec<Word>> {
+        let target = args[0];
+        let source = args[1];
+        ensure!(
+            self.is_a(
+                &self.heap.get(source)?.class,
+                "Ljava/nio/channels/ReadableByteChannel;"
+            ),
+            fault(
+                "Ljava/lang/ClassCastException;",
+                "source is not a readable channel"
+            )
+        );
+        let target_stream = self.channel_stream(target)?;
+        let source_stream = self.channel_stream(source)?;
+        let position = bits64(&args[2..4])? as i64;
+        let count = bits64(&args[4..6])? as i64;
+        ensure!(
+            position >= 0 && count >= 0,
+            fault(
+                "Ljava/lang/IllegalArgumentException;",
+                "negative transfer range"
+            )
+        );
+        let position = usize::try_from(position)
+            .map_err(|_| fault("Ljava/lang/IllegalArgumentException;", "position too large"))?;
+        let count = usize::try_from(count)
+            .map_err(|_| fault("Ljava/lang/IllegalArgumentException;", "count too large"))?;
+        let (source_start, source_end) = match &self.heap.get(source_stream)?.data {
+            Data::ByteStream {
+                bytes,
+                position,
+                closed: false,
+            } => (*position, bytes.len()),
+            Data::ByteStream { closed: true, .. } => {
+                return Err(fault(
+                    "Ljava/nio/channels/ClosedChannelException;",
+                    "source channel closed",
+                ));
+            }
+            Data::ByteOutput { .. } => {
+                return Err(fault(
+                    "Ljava/nio/channels/NonReadableChannelException;",
+                    "source channel is not readable",
+                ));
+            }
+            _ => {
+                return Err(fault(
+                    "Ljava/lang/IllegalStateException;",
+                    "invalid source channel",
+                ));
+            }
+        };
+        let target_size = match &self.heap.get(target_stream)?.data {
+            Data::ByteOutput {
+                bytes,
+                closed: false,
+                ..
+            } => bytes.len(),
+            Data::ByteOutput { closed: true, .. } => {
+                return Err(fault(
+                    "Ljava/nio/channels/ClosedChannelException;",
+                    "target channel closed",
+                ));
+            }
+            Data::ByteStream { .. } => {
+                return Err(fault(
+                    "Ljava/nio/channels/NonWritableChannelException;",
+                    "target channel is not writable",
+                ));
+            }
+            _ => {
+                return Err(fault(
+                    "Ljava/lang/IllegalStateException;",
+                    "invalid target channel",
+                ));
+            }
+        };
+        if position > target_size || count == 0 || source_start == source_end {
+            return Ok(wide(0));
+        }
+        let count = count
+            .min(source_end - source_start)
+            .min(MAX_APP_FILE_BYTES.saturating_sub(position));
+        if count == 0 {
+            return Ok(wide(0));
+        }
+        let copied = match &self.heap.get(source_stream)?.data {
+            Data::ByteStream { bytes, .. } => bytes[source_start..source_start + count].to_vec(),
+            _ => unreachable!(),
+        };
+        let Data::ByteOutput {
+            bytes, position: _, ..
+        } = &mut self.heap.get_mut(target_stream)?.data
+        else {
+            unreachable!();
+        };
+        let end = position + count;
+        if end > bytes.len() {
+            bytes.resize(end, 0);
+        }
+        bytes[position..end].copy_from_slice(&copied);
+        if let Data::ByteStream { position, .. } = &mut self.heap.get_mut(source_stream)?.data {
+            *position += count;
+        }
+        Ok(wide(count as u64))
+    }
+
+    fn transfer_to(&mut self, args: &[Word]) -> Result<Vec<Word>> {
+        let source = args[0];
+        let target = args[5];
+        ensure!(
+            self.is_a(
+                &self.heap.get(target)?.class,
+                "Ljava/nio/channels/WritableByteChannel;"
+            ),
+            fault(
+                "Ljava/lang/ClassCastException;",
+                "target is not a writable channel"
+            )
+        );
+        let source_stream = self.channel_stream(source)?;
+        let target_stream = self.channel_stream(target)?;
+        let position = bits64(&args[1..3])? as i64;
+        let count = bits64(&args[3..5])? as i64;
+        ensure!(
+            position >= 0 && count >= 0,
+            fault(
+                "Ljava/lang/IllegalArgumentException;",
+                "negative transfer range"
+            )
+        );
+        let position = usize::try_from(position)
+            .map_err(|_| fault("Ljava/lang/IllegalArgumentException;", "position too large"))?;
+        let count = usize::try_from(count)
+            .map_err(|_| fault("Ljava/lang/IllegalArgumentException;", "count too large"))?;
+        let source_end = match &self.heap.get(source_stream)?.data {
+            Data::ByteStream {
+                bytes,
+                closed: false,
+                ..
+            } => bytes.len(),
+            Data::ByteStream { closed: true, .. } => {
+                return Err(fault(
+                    "Ljava/nio/channels/ClosedChannelException;",
+                    "source channel closed",
+                ));
+            }
+            Data::ByteOutput { .. } => {
+                return Err(fault(
+                    "Ljava/nio/channels/NonReadableChannelException;",
+                    "source channel is not readable",
+                ));
+            }
+            _ => {
+                return Err(fault(
+                    "Ljava/lang/IllegalStateException;",
+                    "invalid source channel",
+                ));
+            }
+        };
+        if position >= source_end || count == 0 {
+            return Ok(wide(0));
+        }
+        let start = position;
+        let available = (source_end - start).min(count);
+        let target_position = match &self.heap.get(target_stream)?.data {
+            Data::ByteOutput {
+                position,
+                closed: false,
+                ..
+            } => *position,
+            Data::ByteOutput { closed: true, .. } => {
+                return Err(fault(
+                    "Ljava/nio/channels/ClosedChannelException;",
+                    "target channel closed",
+                ));
+            }
+            Data::ByteStream { .. } => {
+                return Err(fault(
+                    "Ljava/nio/channels/NonWritableChannelException;",
+                    "target channel is not writable",
+                ));
+            }
+            _ => {
+                return Err(fault(
+                    "Ljava/lang/IllegalStateException;",
+                    "invalid target channel",
+                ));
+            }
+        };
+        let amount = available.min(MAX_APP_FILE_BYTES.saturating_sub(target_position));
+        if amount == 0 {
+            return Ok(wide(0));
+        }
+        let copied = match &self.heap.get(source_stream)?.data {
+            Data::ByteStream { bytes, .. } => bytes[start..start + amount].to_vec(),
+            _ => unreachable!(),
+        };
+        self.output_write(target_stream, &copied)?;
+        Ok(wide(amount as u64))
+    }
+
     pub(crate) fn file_io_native(
         &mut self,
         method: &Method,
@@ -23,101 +450,112 @@ impl Runtime {
                 .with_context(|| format!("{} argument missing", method.key()))
         };
         match (method.class.as_str(), signature.as_str()) {
-            ("Ljava/io/FileInputStream;", "getChannel()Ljava/nio/channels/FileChannel;") => {
+            (
+                "Ljava/io/FileInputStream;" | "Ljava/io/FileOutputStream;",
+                "getChannel()Ljava/nio/channels/FileChannel;",
+            ) => {
                 ensure!(args.len() == 1, "invalid getChannel arguments");
-                let object = self.heap.get(receiver)?;
-                ensure!(
-                    matches!(object.data, Data::ByteStream { .. }),
-                    fault(
-                        "Ljava/lang/IllegalStateException;",
-                        "FileInputStream is not initialized"
-                    )
-                );
-                if let Some(channel) = object.fields.get(CHANNEL).and_then(|v| v.first()) {
-                    return Ok(Some(vec![*channel]));
-                }
-                let channel = self.heap.instance("Ljava/nio/channels/FileChannel;")?;
-                self.heap
-                    .get_mut(channel)?
-                    .fields
-                    .insert(CHANNEL_STREAM.into(), vec![receiver]);
-                self.heap
-                    .get_mut(receiver)?
-                    .fields
-                    .insert(CHANNEL.into(), vec![channel]);
-                Ok(Some(vec![channel]))
+                Ok(Some(vec![self.file_channel(receiver)?]))
             }
             (
                 "Ljava/nio/channels/FileChannel;",
-                "size()J" | "position()J" | "position(J)Ljava/nio/channels/FileChannel;",
+                "size()J"
+                | "position()J"
+                | "position(J)Ljava/nio/channels/FileChannel;"
+                | "transferFrom(Ljava/nio/channels/ReadableByteChannel;JJ)J"
+                | "transferTo(JJLjava/nio/channels/WritableByteChannel;)J",
             )
             | (
                 "Ljava/nio/channels/FileChannel;"
                 | "Ljava/nio/channels/spi/AbstractInterruptibleChannel;"
                 | "Ljava/nio/channels/Channel;",
                 "isOpen()Z" | "close()V",
+            ) => Ok(Some(self.file_channel_native(method, args)?)),
+            ("Ljava/io/FileOutputStream;", "<init>(Ljava/lang/String;)V") => {
+                let path = self.heap.text(argument(1)?)?.to_owned();
+                self.open_output(receiver, path, false)?;
+                Ok(Some(vec![]))
+            }
+            ("Ljava/io/FileOutputStream;", "<init>(Ljava/io/File;)V") => {
+                let path = self.file_path(argument(1)?)?.to_owned();
+                self.open_output(receiver, path, false)?;
+                Ok(Some(vec![]))
+            }
+            ("Ljava/io/FileOutputStream;", "<init>(Ljava/lang/String;Z)V") => {
+                let path = self.heap.text(argument(1)?)?.to_owned();
+                self.open_output(receiver, path, argument(2)?.int()? != 0)?;
+                Ok(Some(vec![]))
+            }
+            ("Ljava/io/FileOutputStream;", "<init>(Ljava/io/File;Z)V") => {
+                let path = self.file_path(argument(1)?)?.to_owned();
+                self.open_output(receiver, path, argument(2)?.int()? != 0)?;
+                Ok(Some(vec![]))
+            }
+            (
+                "Ljava/io/FileOutputStream;" | "Ljava/io/OutputStream;",
+                "write(I)V" | "write([B)V" | "write([BII)V" | "flush()V" | "close()V",
             ) => {
                 ensure!(
-                    args.len() == if method.parameters.is_empty() { 1 } else { 3 },
-                    "invalid file channel arguments"
+                    self.heap.get(receiver)?.class == "Ljava/io/FileOutputStream;",
+                    "unsupported OutputStream"
                 );
-                let stream = *self
-                    .heap
-                    .get(receiver)?
-                    .fields
-                    .get(CHANNEL_STREAM)
-                    .and_then(|v| v.first())
-                    .context("uninitialized file channel")?;
-                let Data::ByteStream {
-                    bytes,
-                    position,
-                    closed,
-                } = &self.heap.get(stream)?.data
-                else {
-                    return Err(fault(
-                        "Ljava/lang/IllegalStateException;",
-                        "file channel has no input stream",
-                    ));
-                };
-                if method.name == "isOpen" {
-                    return Ok(Some(vec![Word::from(i32::from(!closed))]));
-                }
-                if method.name == "close" {
-                    if let Data::ByteStream { closed, .. } = &mut self.heap.get_mut(stream)?.data {
-                        *closed = true;
+                match signature.as_str() {
+                    "write(I)V" => self.output_write(receiver, &[argument(1)?.int()? as u8])?,
+                    "write([B)V" | "write([BII)V" => {
+                        let array = argument(1)?;
+                        let bytes = match &self.heap.get(array)?.data {
+                            Data::Array { element, values } if element == "B" => {
+                                let (offset, length) = if signature == "write([B)V" {
+                                    (0, values.len())
+                                } else {
+                                    let offset =
+                                        usize::try_from(argument(2)?.int()?).map_err(|_| {
+                                            fault(
+                                                "Ljava/lang/IndexOutOfBoundsException;",
+                                                "negative byte offset",
+                                            )
+                                        })?;
+                                    let length =
+                                        usize::try_from(argument(3)?.int()?).map_err(|_| {
+                                            fault(
+                                                "Ljava/lang/IndexOutOfBoundsException;",
+                                                "negative byte count",
+                                            )
+                                        })?;
+                                    ensure!(
+                                        offset <= values.len() && length <= values.len() - offset,
+                                        fault(
+                                            "Ljava/lang/IndexOutOfBoundsException;",
+                                            "byte-array range is out of bounds"
+                                        )
+                                    );
+                                    (offset, length)
+                                };
+                                values[offset..offset + length]
+                                    .iter()
+                                    .map(|value| value[0].int().map(|byte| byte as i8 as u8))
+                                    .collect::<Result<Vec<_>>>()?
+                            }
+                            Data::Array { .. } => {
+                                return Err(fault(
+                                    "Ljava/lang/IllegalArgumentException;",
+                                    "write source must be a byte array",
+                                ));
+                            }
+                            _ => {
+                                return Err(fault(
+                                    "Ljava/lang/IllegalArgumentException;",
+                                    "write source must be a byte array",
+                                ));
+                            }
+                        };
+                        self.output_write(receiver, &bytes)?;
                     }
-                    return Ok(Some(vec![]));
+                    "flush()V" => self.commit_output(receiver, false)?,
+                    "close()V" => self.commit_output(receiver, true)?,
+                    _ => unreachable!(),
                 }
-                ensure!(
-                    !closed,
-                    fault(
-                        "Ljava/nio/channels/ClosedChannelException;",
-                        "Channel closed"
-                    )
-                );
-                if signature == "position(J)Ljava/nio/channels/FileChannel;" {
-                    let next = bits64(&args[1..])? as i64;
-                    ensure!(
-                        next >= 0,
-                        fault(
-                            "Ljava/lang/IllegalArgumentException;",
-                            "negative channel position"
-                        )
-                    );
-                    let next = usize::try_from(next)
-                        .context("channel position exceeds host index size")?;
-                    if let Data::ByteStream { position, .. } = &mut self.heap.get_mut(stream)?.data
-                    {
-                        *position = next;
-                    }
-                    Ok(Some(vec![receiver]))
-                } else {
-                    Ok(Some(wide(if method.name == "size" {
-                        bytes.len()
-                    } else {
-                        *position
-                    } as u64)))
-                }
+                Ok(Some(vec![]))
             }
             ("Landroid/os/Environment;", "getExternalStorageDirectory()Ljava/io/File;") => {
                 ensure!(
@@ -293,6 +731,66 @@ impl Runtime {
                     unreachable!();
                 };
                 *values = names;
+                Ok(Some(vec![array]))
+            }
+            ("Ljava/io/File;", "listFiles(Ljava/io/FileFilter;)[Ljava/io/File;") => {
+                let path = self.file_path(receiver)?.to_owned();
+                let Some(relative) = self.guest_file_relative(&path) else {
+                    return Ok(Some(vec![Word::ZERO]));
+                };
+                let entries = if let Some(storage) = &self.storage {
+                    storage.app_entries(&relative)?
+                } else {
+                    Some(
+                        self.virtual_directories
+                            .iter()
+                            .filter(|directory| {
+                                directory.len() > relative.len() && directory.starts_with(&relative)
+                            })
+                            .map(|directory| directory[relative.len()].clone())
+                            .collect::<std::collections::BTreeSet<_>>()
+                            .into_iter()
+                            .collect(),
+                    )
+                };
+                let Some(entries) = entries else {
+                    return Ok(Some(vec![Word::ZERO]));
+                };
+                ensure!(
+                    entries.len() <= 16_384,
+                    "File.listFiles entry limit reached"
+                );
+                let filter = argument(1)?;
+                let mut files = Vec::with_capacity(entries.len());
+                for name in entries {
+                    let mut child = relative.clone();
+                    child.push(name.clone());
+                    if self.file_path_kind(&child)?.is_none() {
+                        continue;
+                    }
+                    let file = self.file_object(join_guest_path(&path, &name))?;
+                    if filter != Word::ZERO
+                        && self.invoke(
+                            Method {
+                                class: "Ljava/io/FileFilter;".into(),
+                                name: "accept".into(),
+                                parameters: vec!["Ljava/io/File;".into()],
+                                returns: "Z".into(),
+                            },
+                            vec![filter, file],
+                            true,
+                        )?[0]
+                            .int()?
+                            == 0
+                    {
+                        continue;
+                    }
+                    files.push(vec![file]);
+                }
+                let array = self.array("Ljava/io/File;".into(), files.len())?;
+                if let Data::Array { values, .. } = &mut self.heap.get_mut(array)?.data {
+                    *values = files;
+                }
                 Ok(Some(vec![array]))
             }
             ("Ljava/lang/String;", "<init>([CII)V") => {

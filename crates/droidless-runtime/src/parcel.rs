@@ -8,6 +8,7 @@ use droidless_formats::dex::{Field, Method};
 
 const LIMIT: usize = 4 * 1024 * 1024;
 const BUNDLE_MAGIC: i32 = 0x4c444e42;
+const SERIALIZABLE_REFS: &str = "droidless:parcel:serializable-refs";
 
 impl Runtime {
     pub(crate) fn apk_class_loader(&mut self) -> Result<Word> {
@@ -362,8 +363,32 @@ impl Runtime {
                 self.parcel_int(parcel, 4)?;
                 self.parcel_write_object(parcel, value, 0)
             }
+            _ if self.is_a(&class, "Ljava/io/Serializable;") => {
+                // Activity-to-Activity snapshots stay in this VM; Java serialization is not emulated.
+                let index = {
+                    let references = self
+                        .heap
+                        .get_mut(parcel)?
+                        .fields
+                        .entry(SERIALIZABLE_REFS.into())
+                        .or_default();
+                    if let Some(index) = references.iter().position(|reference| *reference == value)
+                    {
+                        index
+                    } else {
+                        ensure!(
+                            references.len() < 16_384,
+                            "Parcel object reference limit reached"
+                        );
+                        references.push(value);
+                        references.len() - 1
+                    }
+                };
+                self.parcel_int(parcel, 13)?;
+                self.parcel_int(parcel, index as i32)
+            }
             _ => {
-                bail!("unsupported parcelled reference {class}; Java serialization is unavailable")
+                bail!("unsupported parcelled reference {class}; object is not Serializable")
             }
         }
     }
@@ -490,6 +515,24 @@ impl Runtime {
                 })?;
                 ("Ljava/util/ArrayList;", list)
             }
+            13 => {
+                let index = self.parcel_read_int(parcel)?;
+                let value = self
+                    .heap
+                    .get(parcel)?
+                    .fields
+                    .get(SERIALIZABLE_REFS)
+                    .and_then(|references| {
+                        usize::try_from(index).ok().and_then(|i| references.get(i))
+                    })
+                    .copied()
+                    .context("invalid same-runtime Serializable reference")?;
+                ensure!(
+                    self.is_a(&self.heap.get(value)?.class, "Ljava/io/Serializable;"),
+                    "invalid same-runtime Serializable object"
+                );
+                ("Ljava/io/Serializable;", value)
+            }
             _ => bail!("unsupported Parcel value tag {tag}"),
         };
         Ok((ty.into(), vec![value]))
@@ -576,7 +619,9 @@ impl Runtime {
                 .insert("extras".into(), vec![extras]);
             Ok(copy)
         });
-        self.heap.get_mut(parcel)?.data = Data::Instance;
+        let parcel = self.heap.get_mut(parcel)?;
+        parcel.data = Data::Instance;
+        parcel.fields.remove(SERIALIZABLE_REFS);
         result
     }
     pub(crate) fn parcel_native(
@@ -592,23 +637,29 @@ impl Runtime {
                 result.push(self.new_parcel()?)
             }
             ("Landroid/os/Parcel;", "recycle()V") => {
-                let Data::Parcel {
-                    depth,
-                    recycled,
-                    bytes,
-                    position,
-                    ..
-                } = &mut self.heap.get_mut(receiver)?.data
-                else {
-                    bail!("expected Parcel");
-                };
-                ensure!(
-                    *depth == 0 && !*recycled,
-                    "Parcel cannot be recycled during a callback or twice"
-                );
-                *recycled = true;
-                bytes.clear();
-                *position = 0;
+                {
+                    let Data::Parcel {
+                        depth,
+                        recycled,
+                        bytes,
+                        position,
+                        ..
+                    } = &mut self.heap.get_mut(receiver)?.data
+                    else {
+                        bail!("expected Parcel");
+                    };
+                    ensure!(
+                        *depth == 0 && !*recycled,
+                        "Parcel cannot be recycled during a callback or twice"
+                    );
+                    *recycled = true;
+                    bytes.clear();
+                    *position = 0;
+                }
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .remove(SERIALIZABLE_REFS);
             }
             ("Landroid/os/Parcel;", "dataPosition()I") => {
                 result.push(Word::from(self.parcel_position(receiver)? as i32))

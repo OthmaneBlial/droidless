@@ -39,6 +39,31 @@ impl Runtime {
                 Ok(Some(vec![self.heap.string(replaced)?]))
             }
             (
+                "Ljava/lang/String;",
+                "replaceFirst(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+            ) => {
+                let source = self.heap.text(argument(0)?)?.to_owned();
+                let pattern = self.heap.text(argument(1)?)?;
+                let replacement = self.heap.text(argument(2)?)?;
+                ensure!(
+                    source.len() <= MAX_INPUT_BYTES && pattern.len() <= MAX_PATTERN_BYTES,
+                    "String.replaceFirst input exceeds runtime limit"
+                );
+                let regex = RegexBuilder::new(pattern)
+                    .size_limit(MAX_REGEX_SIZE)
+                    .dfa_size_limit(MAX_REGEX_SIZE)
+                    .build()
+                    .map_err(|error| {
+                        fault(
+                            "Ljava/util/regex/PatternSyntaxException;",
+                            error.to_string(),
+                        )
+                    })?;
+                Ok(Some(vec![self.heap.string(
+                    regex.replace(&source, replacement).into_owned(),
+                )?]))
+            }
+            (
                 "Ljava/util/regex/Pattern;",
                 "compile(Ljava/lang/String;)Ljava/util/regex/Pattern;",
             ) => {
@@ -768,6 +793,23 @@ mod tests {
             &[source, pattern, replacement],
         )[0];
         assert_eq!(vm.heap.text(output).unwrap(), "note #12");
+    }
+
+    #[test]
+    fn string_replace_first_expands_groups_and_leaves_later_matches() {
+        let mut vm = runtime();
+        let source = vm.heap.string("notes notes".into()).unwrap();
+        let pattern = vm.heap.string("(notes)".into()).unwrap();
+        let replacement = vm.heap.string("<$1>".into()).unwrap();
+        let output = call(
+            &mut vm,
+            "Ljava/lang/String;",
+            "replaceFirst",
+            &["Ljava/lang/String;", "Ljava/lang/String;"],
+            "Ljava/lang/String;",
+            &[source, pattern, replacement],
+        )[0];
+        assert_eq!(vm.heap.text(output).unwrap(), "<notes> notes");
     }
 
     #[test]

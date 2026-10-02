@@ -52,6 +52,7 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         }
         "Landroid/database/sqlite/SQLiteException;" => "Ljava/lang/RuntimeException;",
         "Ljava/lang/ClassNotFoundException;"
+        | "Ljava/lang/NoSuchFieldException;"
         | "Ljava/lang/NoSuchMethodException;"
         | "Ljava/lang/reflect/InvocationTargetException;"
         | "Ljava/lang/InstantiationException;"
@@ -70,7 +71,10 @@ pub(crate) fn exception_parent(class: &str) -> Option<&'static str> {
         "Ljava/lang/Exception;" => "Ljava/lang/Throwable;",
         "Ljava/lang/Throwable;" => "Ljava/lang/Object;",
         "Ljava/io/FileNotFoundException;" => "Ljava/io/IOException;",
+        "Ljava/io/UnsupportedEncodingException;" => "Ljava/io/IOException;",
         "Ljava/nio/channels/ClosedChannelException;" => "Ljava/io/IOException;",
+        "Ljava/nio/channels/NonReadableChannelException;"
+        | "Ljava/nio/channels/NonWritableChannelException;" => "Ljava/lang/IllegalStateException;",
         "Ljava/io/IOException;" => "Ljava/lang/Exception;",
         _ => return None,
     })
@@ -169,6 +173,7 @@ pub enum Data {
         closed: bool,
     },
     ReflectedMethod(droidless_formats::dex::Method),
+    ReflectedField(droidless_formats::dex::Field),
     Collection {
         values: Vec<Word>,
         version: u32,
@@ -181,6 +186,12 @@ pub enum Data {
     },
     SparseArray(std::collections::BTreeMap<i32, Word>),
     ByteStream {
+        bytes: Vec<u8>,
+        position: usize,
+        closed: bool,
+    },
+    ByteOutput {
+        path: Vec<String>,
         bytes: Vec<u8>,
         position: usize,
         closed: bool,

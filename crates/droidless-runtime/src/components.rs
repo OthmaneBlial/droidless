@@ -348,6 +348,31 @@ impl Runtime {
         let mut result = vec![];
         match (method.class.as_str(), sig.as_str()) {
             (
+                "Landroid/widget/Toast;",
+                "makeText(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;",
+            ) => {
+                let message = arg(1)?;
+                self.heap.text(message)?;
+                let toast = self.heap.instance("Landroid/widget/Toast;")?;
+                let fields = &mut self.heap.get_mut(toast)?.fields;
+                fields.insert("droidless:toast:message".into(), vec![message]);
+                fields.insert("droidless:toast:duration".into(), vec![arg(2)?]);
+                result.push(toast);
+            }
+            ("Landroid/widget/Toast;", "show()V") => {
+                let message = *self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:toast:message")
+                    .and_then(|values| values.first())
+                    .context("Toast has no message")?;
+                let message = self.heap.text(message)?;
+                if self.trace.framework {
+                    eprintln!("toast: {message}");
+                }
+            }
+            (
                 "Landroid/app/Application;",
                 "registerActivityLifecycleCallbacks(Landroid/app/Application$ActivityLifecycleCallbacks;)V",
             )
@@ -869,6 +894,13 @@ impl Runtime {
                 } else {
                     self.clone_bundle(extras)?
                 });
+            }
+            ("Landroid/content/Intent;", "hasExtra(Ljava/lang/String;)Z") => {
+                let key = self.heap.text(arg(1)?)?.to_owned();
+                let extras = self.intent_extras(receiver, false)?;
+                let present = extras != Word::ZERO
+                    && matches!(&self.heap.get(extras)?.data, Data::Bundle(values) if values.contains_key(&key));
+                result.push(Word::from(i32::from(present)));
             }
             ("Landroid/content/Context;", "startActivity(Landroid/content/Intent;)V") => {
                 self.start_activity(receiver, arg(1)?, -1)?;

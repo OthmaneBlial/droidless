@@ -2,7 +2,7 @@ use crate::{
     heap::{Data, Word, bits64, fault},
     vm::Runtime,
 };
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use droidless_formats::dex::Method;
 
 impl Runtime {
@@ -11,6 +11,54 @@ impl Runtime {
         method: &Method,
         args: &[Word],
     ) -> Result<Option<Vec<Word>>> {
+        if method.class == "Landroid/webkit/MimeTypeMap;"
+            && method.signature() == "getFileExtensionFromUrl(Ljava/lang/String;)Ljava/lang/String;"
+        {
+            let url = self
+                .heap
+                .text(*args.first().context("MimeTypeMap URL missing")?)?;
+            let path = url.split(['?', '#']).next().unwrap_or("");
+            let name = path.rsplit('/').next().unwrap_or("");
+            let extension = name
+                .rfind('.')
+                .filter(|index| *index + 1 < name.len())
+                .map_or("", |index| &name[index + 1..]);
+            return Ok(Some(vec![self.heap.string(extension.to_owned())?]));
+        }
+        if method.class == "Ljava/net/URLEncoder;"
+            && method.signature()
+                == "encode(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;"
+        {
+            let value = self
+                .heap
+                .text(*args.first().context("URLEncoder input missing")?)?;
+            let charset = self
+                .heap
+                .text(*args.get(1).context("URLEncoder charset missing")?)?;
+            ensure!(
+                matches!(
+                    charset.to_ascii_lowercase().replace('_', "-").as_str(),
+                    "utf-8" | "utf8"
+                ),
+                fault(
+                    "Ljava/io/UnsupportedEncodingException;",
+                    format!("unsupported charset: {charset}"),
+                )
+            );
+            let mut encoded = String::with_capacity(value.len());
+            const HEX: &[u8; 16] = b"0123456789ABCDEF";
+            for byte in value.bytes() {
+                if byte.is_ascii_alphanumeric() || b"-_. *".contains(&byte) {
+                    encoded.push(if byte == b' ' { '+' } else { byte as char });
+                } else {
+                    encoded.push('%');
+                    encoded.push(HEX[usize::from(byte >> 4)] as char);
+                    encoded.push(HEX[usize::from(byte & 15)] as char);
+                }
+            }
+            ensure!(encoded.len() <= 1_048_576, "encoded string exceeds 1 MiB");
+            return Ok(Some(vec![self.heap.string(encoded)?]));
+        }
         if method.class != "Ljava/lang/String;"
             || method.signature()
                 != "format(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;"
@@ -416,5 +464,31 @@ mod tests {
             )
             .unwrap()[0];
         assert_eq!(vm.heap.text(result).unwrap(), "row 0012 %");
+    }
+
+    #[test]
+    fn url_encoder_uses_utf8_form_encoding() {
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/intents.apk")).unwrap(),
+        )
+        .unwrap();
+        let value = vm.heap.string("notes café/backup 2.nbu".into()).unwrap();
+        let charset = vm.heap.string("UTF-8".into()).unwrap();
+        let result = vm
+            .invoke(
+                Method {
+                    class: "Ljava/net/URLEncoder;".into(),
+                    name: "encode".into(),
+                    parameters: vec!["Ljava/lang/String;".into(), "Ljava/lang/String;".into()],
+                    returns: "Ljava/lang/String;".into(),
+                },
+                vec![value, charset],
+                false,
+            )
+            .unwrap()[0];
+        assert_eq!(
+            vm.heap.text(result).unwrap(),
+            "notes+caf%C3%A9%2Fbackup+2.nbu"
+        );
     }
 }

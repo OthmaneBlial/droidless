@@ -54,6 +54,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/lang/ref/Reference;",
             "Ljava/lang/ref/WeakReference;",
             "Ljava/lang/reflect/Method;",
+            "Ljava/lang/reflect/Field;",
             "Ljava/lang/reflect/Constructor;",
             "Ljava/lang/reflect/AccessibleObject;",
             "Ljava/lang/Boolean;",
@@ -95,6 +96,7 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Landroid/animation/StateListAnimator;",
             "Landroid/animation/LayoutTransition;",
             "Ljava/lang/ThreadGroup;",
+            "Ljava/net/URLEncoder;",
             "Landroid/view/animation/Animation;",
             "Landroid/view/animation/AnimationUtils;",
             "Landroid/view/animation/AccelerateDecelerateInterpolator;",
@@ -110,10 +112,13 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Ljava/util/concurrent/TimeUnit;",
             "Landroid/net/ConnectivityManager;",
             "Landroid/net/ConnectivityManager$NetworkCallback;",
+            "Landroid/webkit/MimeTypeMap;",
             "Landroid/net/NetworkRequest;",
             "Landroid/net/NetworkRequest$Builder;",
             "Landroid/view/accessibility/AccessibilityManager;",
+            "Landroid/widget/Toast;",
             "Ljava/io/InputStream;",
+            "Ljava/io/OutputStream;",
             "Ljava/io/Reader;",
             "Ljava/io/StringReader;",
             "Ljavax/xml/parsers/SAXParserFactory;",
@@ -124,7 +129,9 @@ pub(crate) fn known_class(class: &str) -> bool {
             "Lorg/xml/sax/SAXException;",
             "Lorg/xml/sax/helpers/DefaultHandler;",
             "Ljava/io/File;",
+            "Ljava/io/FileFilter;",
             "Ljava/io/FileInputStream;",
+            "Ljava/io/FileOutputStream;",
             "Ljava/nio/channels/FileChannel;",
             "Ljava/nio/channels/spi/AbstractInterruptibleChannel;",
             "Ljava/nio/channels/SeekableByteChannel;",
@@ -3570,6 +3577,17 @@ impl Runtime {
             }
             (
                 "Ljava/lang/String;",
+                "toLowerCase()Ljava/lang/String;" | "toUpperCase()Ljava/lang/String;",
+            ) => {
+                let value = self.heap.text(receiver)?;
+                result.push(self.heap.string(if method.name == "toLowerCase" {
+                    value.to_lowercase()
+                } else {
+                    value.to_uppercase()
+                })?);
+            }
+            (
+                "Ljava/lang/String;",
                 "replace(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;",
             ) => {
                 let source = self.heap.text(receiver)?.to_owned();
@@ -4258,6 +4276,7 @@ impl Runtime {
                 result.push(Word::from(i32::from(enabled)));
             }
             ("Landroid/content/Context;", "getString(I)Ljava/lang/String;")
+            | ("Landroid/content/Context;", "getText(I)Ljava/lang/CharSequence;")
             | ("Landroid/content/res/Resources;", "getString(I)Ljava/lang/String;") => {
                 let text = self.resource_text(arg(1)?.int()? as u32)?;
                 result.push(self.heap.string(text)?);

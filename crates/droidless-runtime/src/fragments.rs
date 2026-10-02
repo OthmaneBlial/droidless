@@ -124,22 +124,75 @@ impl Runtime {
                             .first()
                             .copied()
                             .context("LayoutInflater result missing")?;
-                        let view = self.fragment_callback(
-                            fragment,
-                            "onCreateView",
-                            &[
-                                "Landroid/view/LayoutInflater;",
-                                "Landroid/view/ViewGroup;",
-                                "Landroid/os/Bundle;",
-                            ],
-                            vec![inflater, Word::ZERO, Word::ZERO],
-                            "Landroid/view/View;",
-                        )?;
-                        // ponytail: only headless fragments; mount returned Views when a real APK requires them.
-                        ensure!(
-                            view == [Word::ZERO],
-                            "Fragment View mounting is unsupported"
-                        );
+                        let activity =
+                            self.fragment_word(fragment, "droidless:fragment:activity")?;
+                        let container_id = self
+                            .fragment_word(fragment, "droidless:fragment:container-id")?
+                            .int()?;
+                        let container = if container_id == 0 {
+                            Word::ZERO
+                        } else {
+                            self.invoke(
+                                Method {
+                                    class: "Landroid/app/Activity;".into(),
+                                    name: "findViewById".into(),
+                                    parameters: vec!["I".into()],
+                                    returns: "Landroid/view/View;".into(),
+                                },
+                                vec![activity, Word::from(container_id)],
+                                true,
+                            )?
+                            .first()
+                            .copied()
+                            .context("Fragment container lookup returned no value")?
+                        };
+                        let view = self
+                            .fragment_callback(
+                                fragment,
+                                "onCreateView",
+                                &[
+                                    "Landroid/view/LayoutInflater;",
+                                    "Landroid/view/ViewGroup;",
+                                    "Landroid/os/Bundle;",
+                                ],
+                                vec![inflater, container, Word::ZERO],
+                                "Landroid/view/View;",
+                            )?
+                            .first()
+                            .copied()
+                            .context("Fragment onCreateView returned no value")?;
+                        if view != Word::ZERO {
+                            ensure!(
+                                container != Word::ZERO
+                                    && self.is_a(
+                                        &self.heap.get(container)?.class,
+                                        "Landroid/view/ViewGroup;"
+                                    ),
+                                fault(
+                                    "Ljava/lang/IllegalArgumentException;",
+                                    "Fragment returned a View without a ViewGroup container"
+                                )
+                            );
+                            self.invoke(
+                                Method {
+                                    class: "Landroid/view/ViewGroup;".into(),
+                                    name: "addView".into(),
+                                    parameters: vec!["Landroid/view/View;".into()],
+                                    returns: "V".into(),
+                                },
+                                vec![container, view],
+                                true,
+                            )?;
+                            self.fragment_set(fragment, "droidless:fragment:view", view)?;
+                            self.fragment_set(fragment, "droidless:fragment:container", container)?;
+                            self.fragment_callback(
+                                fragment,
+                                "onViewCreated",
+                                &["Landroid/view/View;", "Landroid/os/Bundle;"],
+                                vec![view, Word::ZERO],
+                                "V",
+                            )?;
+                        }
                         self.fragment_callback(
                             fragment,
                             "onActivityCreated",
@@ -167,6 +220,22 @@ impl Runtime {
                     }
                     2 => {
                         self.fragment_callback(fragment, "onDestroyView", &[], vec![], "V")?;
+                        let view = self.fragment_word(fragment, "droidless:fragment:view")?;
+                        let container =
+                            self.fragment_word(fragment, "droidless:fragment:container")?;
+                        if view != Word::ZERO && container != Word::ZERO {
+                            self.invoke(
+                                Method {
+                                    class: "Landroid/view/ViewGroup;".into(),
+                                    name: "removeView".into(),
+                                    parameters: vec!["Landroid/view/View;".into()],
+                                    returns: "V".into(),
+                                },
+                                vec![container, view],
+                                true,
+                            )?;
+                        }
+                        self.fragment_set(fragment, "droidless:fragment:view", Word::ZERO)?;
                     }
                     1 => {
                         self.fragment_callback(fragment, "onDestroy", &[], vec![], "V")?;
@@ -175,6 +244,9 @@ impl Runtime {
                             "droidless:fragment:activity",
                             "droidless:fragment:manager",
                             "droidless:fragment:added",
+                            "droidless:fragment:container",
+                            "droidless:fragment:container-id",
+                            "droidless:fragment:view",
                         ] {
                             self.fragment_set(fragment, key, Word::ZERO)?;
                         }
@@ -393,6 +465,38 @@ impl Runtime {
                 }
                 vec![receiver]
             }
+            (TRANSACTION, "add(ILandroid/app/Fragment;)Landroid/app/FragmentTransaction;") => {
+                self.require_main_thread()?;
+                let container_id = arg(1)?.int()?;
+                ensure!(container_id != 0, "Fragment container ID must be nonzero");
+                let fragment = arg(2)?;
+                ensure!(
+                    self.is_a(&self.heap.get(fragment)?.class, FRAGMENT),
+                    "transaction requires Fragment"
+                );
+                let manager = self.fragment_word(receiver, "manager")?;
+                let old = self.fragment_word(fragment, "droidless:fragment:manager")?;
+                ensure!(
+                    old == Word::ZERO || old == manager,
+                    "Fragment belongs to a different manager"
+                );
+                let adds = self
+                    .heap
+                    .get_mut(receiver)?
+                    .fields
+                    .entry("adds".into())
+                    .or_default();
+                ensure!(adds.len() < 64, "fragment transaction limit reached (64)");
+                adds.push(fragment);
+                self.fragment_set(
+                    fragment,
+                    "droidless:fragment:container-id",
+                    Word::from(container_id),
+                )?;
+                self.fragment_set(fragment, "droidless:fragment:container", Word::ZERO)?;
+                self.fragment_set(fragment, "droidless:fragment:manager", manager)?;
+                vec![receiver]
+            }
             (TRANSACTION, "commit()I") | (TRANSACTION, "commitAllowingStateLoss()I") => {
                 self.require_main_thread()?;
                 let manager = self.fragment_word(receiver, "manager")?;
@@ -460,14 +564,18 @@ impl Runtime {
                     .int()?
                     == 4,
             ))],
-            (FRAGMENT, "getView()Landroid/view/View;")
-            | (
+            (FRAGMENT, "getView()Landroid/view/View;") => {
+                vec![self.fragment_word(receiver, "droidless:fragment:view")?]
+            }
+            (
                 FRAGMENT,
                 "onCreateView(Landroid/view/LayoutInflater;Landroid/view/ViewGroup;Landroid/os/Bundle;)Landroid/view/View;",
-            ) => vec![Word::ZERO],
+            )
+            | (FRAGMENT, "getUserVisibleHint()Z") => vec![Word::ZERO],
             (FRAGMENT, "<init>()V")
             | (FRAGMENT, "onAttach(Landroid/app/Activity;)V")
             | (FRAGMENT, "onCreate(Landroid/os/Bundle;)V")
+            | (FRAGMENT, "onViewCreated(Landroid/view/View;Landroid/os/Bundle;)V")
             | (FRAGMENT, "onActivityCreated(Landroid/os/Bundle;)V")
             | (FRAGMENT, "onStart()V")
             | (FRAGMENT, "onResume()V")

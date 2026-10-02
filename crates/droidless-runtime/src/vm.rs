@@ -1145,6 +1145,7 @@ impl Runtime {
             "Landroid/text/TextUtils$TruncateAt;" => "Ljava/lang/Enum;",
             "Ljava/lang/ref/WeakReference;" => "Ljava/lang/ref/Reference;",
             "Ljava/io/FileInputStream;" => "Ljava/io/InputStream;",
+            "Ljava/io/FileOutputStream;" => "Ljava/io/OutputStream;",
             "Ljava/nio/channels/FileChannel;" => {
                 "Ljava/nio/channels/spi/AbstractInterruptibleChannel;"
             }
@@ -1158,6 +1159,8 @@ impl Runtime {
             "Ljava/nio/channels/Channel;" => "Ljava/io/Closeable;",
             "Ljava/io/Closeable;" => "Ljava/lang/AutoCloseable;",
             "Ljava/io/InputStream;" => "Ljava/lang/Object;",
+            "Ljava/io/OutputStream;" => "Ljava/lang/Object;",
+            "Landroid/widget/Toast;" => "Ljava/lang/Object;",
             "Ljava/io/File;" => "Ljava/lang/Object;",
             "Ljava/lang/Double;" => "Ljava/lang/Number;",
             "Ljava/lang/Integer;" | "Ljava/lang/Long;" => "Ljava/lang/Number;",
@@ -1178,6 +1181,7 @@ impl Runtime {
             "Landroid/animation/ObjectAnimator;" => "Landroid/animation/ValueAnimator;",
             "Landroid/animation/ValueAnimator;" => "Landroid/animation/Animator;",
             "Ljava/lang/reflect/Constructor;" => "Ljava/lang/reflect/AccessibleObject;",
+            "Ljava/lang/reflect/Field;" => "Ljava/lang/reflect/AccessibleObject;",
             "Landroid/view/ViewGroup$MarginLayoutParams;" => {
                 "Landroid/view/ViewGroup$LayoutParams;"
             }
@@ -1370,6 +1374,7 @@ impl Runtime {
                 work.extend(["Ljava/io/Closeable;", "Ljava/lang/AutoCloseable;"].map(String::from));
             }
             if current == "Ljava/io/InputStream;"
+                || current == "Ljava/io/OutputStream;"
                 || current == "Ljava/nio/channels/spi/AbstractInterruptibleChannel;"
             {
                 work.push("Ljava/io/Closeable;".into());

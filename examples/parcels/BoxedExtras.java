@@ -5,7 +5,7 @@ import android.os.Parcel;
 import java.io.Serializable;
 import java.util.ArrayList;
 
-/** Android's value tags carry boxed primitives without Java object serialization. */
+/** Android's value tags carry boxed primitives; custom serializables stay inside this runtime. */
 public class BoxedExtras {
     static void require(boolean value) { if (!value) throw new IllegalStateException("boxed extras contract"); }
     static Bundle copy(Bundle value) {
@@ -51,5 +51,11 @@ public class BoxedExtras {
         return 1;
     }
     static class Custom implements Serializable { int value = 9; }
-    public static void unsupported() { Bundle value = new Bundle(); value.putSerializable("custom",new Custom()); copy(value); }
+    public static int sameRuntimeCustom() {
+        Custom original = new Custom();
+        Bundle value = new Bundle(); value.putSerializable("custom",original);
+        Custom restored = (Custom)copy(value).getSerializable("custom");
+        require(restored == original && restored.value == 9);
+        return 1;
+    }
 }

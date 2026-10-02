@@ -457,6 +457,44 @@ impl Runtime {
                 }
                 result.push(array);
             }
+            (
+                "Ljava/lang/Class;",
+                "getDeclaredField(Ljava/lang/String;)Ljava/lang/reflect/Field;",
+            ) => {
+                let class = self.reflected_class(arg(0)?)?;
+                let name = self.heap.text(arg(1)?)?.to_owned();
+                let found = self.class_location(&class).and_then(|(dex, index)| {
+                    let definition = &self.apk.dex[dex].classes[index];
+                    definition
+                        .static_fields
+                        .iter()
+                        .map(|field| (*field, true))
+                        .chain(
+                            definition
+                                .instance_fields
+                                .iter()
+                                .map(|field| (*field, false)),
+                        )
+                        .find_map(|(index, is_static)| {
+                            let field = self.apk.dex[dex].fields[index].clone();
+                            (field.name == name).then_some((field, is_static))
+                        })
+                });
+                let Some((field, is_static)) = found else {
+                    return Err(fault(
+                        "Ljava/lang/NoSuchFieldException;",
+                        format!("{}.{}", class_name(&class), name),
+                    ));
+                };
+                let reflected = self.heap.instance("Ljava/lang/reflect/Field;")?;
+                let object = self.heap.get_mut(reflected)?;
+                object.data = Data::ReflectedField(field);
+                object.fields.insert(
+                    "droidless:reflect:static".into(),
+                    vec![Word::from(i32::from(is_static))],
+                );
+                result.push(reflected);
+            }
             ("Ljava/lang/Class;", "getDeclaredMethods()[Ljava/lang/reflect/Method;") => {
                 let class = self.reflected_class(arg(0)?)?;
                 let methods = self
@@ -1000,6 +1038,7 @@ impl Runtime {
                     .context("uninitialized Package")?,
             ),
             ("Ljava/lang/reflect/AccessibleObject;", "setAccessible(Z)V")
+            | ("Ljava/lang/reflect/Field;", "setAccessible(Z)V")
             | ("Ljava/lang/reflect/Method;", "setAccessible(Z)V")
             | ("Ljava/lang/reflect/Constructor;", "setAccessible(Z)V") => {
                 self.heap
@@ -1008,6 +1047,7 @@ impl Runtime {
                     .insert("droidless:accessible".into(), vec![arg(1)?]);
             }
             ("Ljava/lang/reflect/AccessibleObject;", "isAccessible()Z")
+            | ("Ljava/lang/reflect/Field;", "isAccessible()Z")
             | ("Ljava/lang/reflect/Method;", "isAccessible()Z")
             | ("Ljava/lang/reflect/Constructor;", "isAccessible()Z") => {
                 let accessible = self
@@ -1019,6 +1059,59 @@ impl Runtime {
                     .copied()
                     .unwrap_or(Word::ZERO);
                 result.push(accessible);
+            }
+            ("Ljava/lang/reflect/Field;", "get(Ljava/lang/Object;)Ljava/lang/Object;") => {
+                let field_object = arg(0)?;
+                let field = match &self.heap.get(field_object)?.data {
+                    Data::ReflectedField(field) => field.clone(),
+                    _ => bail!("uninitialized reflected Field"),
+                };
+                let is_static = self
+                    .heap
+                    .get(field_object)?
+                    .fields
+                    .get("droidless:reflect:static")
+                    .and_then(|values| values.first())
+                    .is_some_and(|value| value.int().unwrap_or(0) != 0);
+                let accessible = self
+                    .heap
+                    .get(field_object)?
+                    .fields
+                    .get("droidless:accessible")
+                    .and_then(|values| values.first())
+                    .is_some_and(|value| value.int().unwrap_or(0) != 0);
+                if !accessible {
+                    return Err(fault(
+                        "Ljava/lang/IllegalAccessException;",
+                        format!("{} is not accessible", field.key()),
+                    ));
+                }
+                let words = if is_static {
+                    self.statics
+                        .get(&field.key())
+                        .cloned()
+                        .unwrap_or_else(|| crate::heap::default_value(&field.ty))
+                } else {
+                    let target = arg(1)?;
+                    ensure!(
+                        self.is_a(&self.heap.get(target)?.class, &field.class),
+                        fault(
+                            "Ljava/lang/IllegalArgumentException;",
+                            "Field target has the wrong class"
+                        )
+                    );
+                    self.heap
+                        .get(target)?
+                        .fields
+                        .get(&field.key())
+                        .cloned()
+                        .unwrap_or_else(|| crate::heap::default_value(&field.ty))
+                };
+                result.push(if field.ty.starts_with(['L', '[']) {
+                    words[0]
+                } else {
+                    self.box_words(&field.ty, words)?
+                });
             }
             (
                 "Ljava/lang/reflect/Method;",
