@@ -1,6 +1,6 @@
 # First interactive milestone evidence
 
-Latest local source gate: 104 Rust tests, warning-free Clippy, optimized builds
+Latest local source gate: 129 Rust tests, warning-free Clippy, optimized builds
 and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
 
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
@@ -2147,3 +2147,40 @@ terminated with status 143 after attachment failed; this is not clean native
 closure or physical interaction proof. Folder deletion and fresh physical
 folder input remain unverified. GitHub Actions remain disabled, no new public
 release is claimed and the 50% checkpoint stays active.
+
+
+## Current-source themed contexts and folder-delete dialog boundary
+
+Date: 2026-10-02. Runtime source commit 5ca50c5, beyond the published v0.1.0 archive.
+
+The original focused saved-row delete listener previously stopped in the bundled
+AppCompat builder on unsupported ContextThemeWrapper. The framework now supports
+an independent lazy theme copy, virtual theme/resource/service callbacks, cached
+Resources and a cloned inflater retaining the base factories and wrapper context.
+New themes start empty; setTo copies style state while preserving destination
+ownership. Compiled contracts check immutable typed arrays, theme isolation,
+default API-21 theme IDs, late attachment, null/type errors, callback GC, fault
+recovery and the 32-call native wrapper bound. Complete system themes,
+configuration overrides and automatic XML theme wrapping remain unsupported.
+
+The unmodified SHA-256-pinned Notepad APK now passes that builder setup. Focusing
+saved editor 1 and tapping its left button reaches the actual clickLeftButton
+callback at DEX PC 0x0057, then the bundled support Dialog constructor at PC
+0x0013. It fails explicitly at `Landroid/app/Dialog;-><init>(Landroid/content/Context;I)V`
+with exit status 1. New SQLite connections confirm that the same folder and both
+exact note IDs, titles and bodies survive in the disposable copy and seed. The
+permanent replay checks this boundary and leaves folder deletion marked false.
+The confirmation window, Cancel, confirmed deletion and native folder input
+remain unverified; no replacement dialog or APK patch is used.
+
+The final local gate passes 129 Rust tests, warning-free Clippy, optimized
+workspace/document-replay builds, 4,096 seeded parser mutations and native
+font/focus component checks. The full optimized public replay retains all prior
+calculator, image/grid/result, SwpieView and Notepad workflow checks and adds the
+folder-delete boundary diagnosis. It records the CLI digest with verification
+false at startup and certifies it only after the full suite succeeds and the
+final digest matches. This rejects a binary changed by a concurrent local build.
+The unsigned development app bundle matches the optimized CLI byte for byte:
+SHA-256 `4c045e8af412f71b4942c1ee6e75a408726bfd19d3336c4554ae0212e5e0b8ab`.
+GitHub Actions stay disabled. No new public release or physical interaction is
+claimed, and the 50% checkpoint remains active.

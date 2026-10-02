@@ -61,7 +61,10 @@ Saved-row attachment now runs the APK's real TextInputLayout binding callbacks.
 Headless focus and pending input complete; restarting discards an unconfirmed
 name. Rename confirmation now completes using real host-font ascent/descent.
 The same folder ID/new name survive restart and Back with both exact notes.
-Folder deletion and native folder input remain unverified.
+The original delete listener now passes themed-context/inflater setup and reaches
+the unsupported Android Dialog constructor. Its failed attempt preserves the
+folder and both exact notes. Folder deletion and native folder input remain
+unverified. [Themed-context and dialog evidence](docs/verification.md#current-source-themed-contexts-and-folder-delete-dialog-boundary).
 [Folder rename and font-metrics evidence](docs/verification.md#current-source-folder-rename-and-host-font-metrics).
 
 ```sh
@@ -145,7 +148,7 @@ Snackbar after timeout, and runs Undo to restore both fields with a fresh row ID
 that survives restart and reopen. Native Delete/Undo input remains unverified.
 Headless navigation taps now open the APK's own drawer at 1000 ms; Back closes it
 while keeping Notes and both exact note rows. Generic View focus requests execute
-APK callbacks. Native drawer input and folder editing remain unverified.
+APK callbacks. Native drawer and physical folder input remain unverified.
 [Current checks](docs/verification.md#current-source-focus-and-original-notepad-drawer-navigation).
 Current source adds `--input TEXT` for the first visible EditText, per-package
 preferences by default, `--data-dir APPS_ROOT` and `--ephemeral` for memory-only runs.
@@ -228,7 +231,7 @@ sh tools/fetch-swpieview.sh
 python3 tools/compatibility.py
 ```
 
-Local checks cover formatting, builds, 104 Rust tests, Clippy and 4,096 seeded parser
+Local checks cover formatting, builds, 129 Rust tests, Clippy and 4,096 seeded parser
 mutations. Normal tests require neither an Android SDK nor an emulator.
 
 <details>

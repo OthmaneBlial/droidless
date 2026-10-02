@@ -91,6 +91,13 @@ folder ID and both exact notes. Native component checks cover first-responder
 gains, key-view traversal, selection through redraw and refused/failed focus.
 Physical folder input and complete bidirectional focus synchronization remain
 unverified. [Host-focus evidence](verification.md#current-source-native-editor-focus-bridge).
+The actual saved-folder delete listener now completes bundled AppCompat themed
+context and inflater setup, then fails explicitly at
+`Dialog.<init>(Context, int)`. The failed attempt retains the same folder and both
+exact note rows. The confirmation window, Cancel, confirmed folder deletion and
+native folder input remain unverified. The permanent replay tracks this boundary
+without treating it as a completed delete workflow.
+[Themed-context evidence](verification.md#current-source-themed-contexts-and-folder-delete-dialog-boundary).
 Generic `<view class="…">` layout inflation invokes the
 named APK View constructor, applies its XML attributes and invokes virtual
 onFinishInflate after attaching its children. Compiled checks retain the subtree
