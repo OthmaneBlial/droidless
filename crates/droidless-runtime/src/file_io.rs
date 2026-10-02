@@ -518,14 +518,25 @@ impl Runtime {
     }
 
     fn open_virtual_file_input(&mut self, receiver: Word, path: String) -> Result<()> {
-        if path != "/proc/self/cmdline" {
-            return Err(fault(
-                "Ljava/io/FileNotFoundException;",
-                format!("not present in DROIDLESS virtual files: {path}"),
-            ));
-        }
-        let mut bytes = self.apk.manifest.package.as_bytes().to_vec();
-        bytes.push(0);
+        let bytes = if path == "/proc/self/cmdline" {
+            let mut bytes = self.apk.manifest.package.as_bytes().to_vec();
+            bytes.push(0);
+            bytes
+        } else {
+            let missing = || {
+                fault(
+                    "Ljava/io/FileNotFoundException;",
+                    format!("not present in DROIDLESS virtual files: {path}"),
+                )
+            };
+            let relative = self.guest_file_relative(&path).ok_or_else(missing)?;
+            let storage = self.storage.as_ref().ok_or_else(missing)?;
+            // ponytail: bounded snapshot stream; retain open descriptors if live file changes are required.
+            storage
+                .read_app_file(&relative)
+                .map_err(|error| fault("Ljava/io/FileNotFoundException;", format!("{error:#}")))?
+                .ok_or_else(missing)?
+        };
         self.heap.get_mut(receiver)?.data = Data::ByteStream {
             bytes,
             position: 0,
@@ -788,6 +799,70 @@ mod tests {
                 .join("external/notes/subdir")
                 .is_dir()
         );
+        let file_path = ["external".into(), "notes".into(), "body.txt".into()];
+        vm.storage
+            .as_mut()
+            .unwrap()
+            .write_app_file(&file_path, b"saved bytes")
+            .unwrap();
+        let input = stream(&mut vm, &format!("{EXTERNAL_ROOT}/notes/body.txt"));
+        vm.storage
+            .as_mut()
+            .unwrap()
+            .write_app_file(&file_path, b"replacement")
+            .unwrap();
+        assert_eq!(
+            call(&mut vm, input, "available", vec![], &[]),
+            vec![Word::from(11)]
+        );
+        let target = bytes(&mut vm, 11);
+        assert_eq!(
+            call(&mut vm, input, "read", vec!["[B"], &[target]),
+            vec![Word::from(11)]
+        );
+        let Data::Array { values, .. } = &vm.heap.get(target).unwrap().data else {
+            panic!("expected bytes")
+        };
+        assert_eq!(
+            values
+                .iter()
+                .map(|v| v[0].int().unwrap() as u8)
+                .collect::<Vec<_>>(),
+            b"saved bytes"
+        );
+        call(&mut vm, input, "close", vec![], &[]);
+        let file = vm
+            .file_object(format!("/data/data/{package}/external/notes/body.txt"))
+            .unwrap();
+        let input = vm.heap.instance("Ljava/io/FileInputStream;").unwrap();
+        vm.invoke(
+            Method {
+                class: "Ljava/io/FileInputStream;".into(),
+                name: "<init>".into(),
+                parameters: vec!["Ljava/io/File;".into()],
+                returns: "V".into(),
+            },
+            vec![input, file],
+            false,
+        )
+        .unwrap();
+        assert!(
+            matches!(&vm.heap.get(input).unwrap().data, Data::ByteStream { bytes, .. } if bytes==b"replacement")
+        );
+        let oversized =
+            std::fs::File::create(directory.join(&package).join("external/oversized.bin")).unwrap();
+        oversized
+            .set_len(crate::storage::MAX_APP_FILE_BYTES as u64 + 1)
+            .unwrap();
+        let unopened = vm.heap.instance("Ljava/io/FileInputStream;").unwrap();
+        let error = vm
+            .open_virtual_file_input(unopened, format!("{EXTERNAL_ROOT}/oversized.bin"))
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("app file exceeds 64 MiB"));
+        assert!(matches!(
+            vm.heap.get(unopened).unwrap().data,
+            Data::Instance
+        ));
         for path in [
             "/storage/emulated/1/notes",
             "/storage/emulated/0/../escape",
@@ -846,6 +921,24 @@ mod tests {
                     .join("external/notes/escape")
                     .exists()
             );
+            let source = directory.join(&package).join("external/notes/body.txt");
+            std::os::unix::fs::symlink(
+                &source,
+                directory.join(&package).join("external/linked.txt"),
+            )
+            .unwrap();
+            std::fs::hard_link(&source, directory.join(&package).join("external/hard.txt"))
+                .unwrap();
+            for name in ["linked.txt", "hard.txt"] {
+                let input = reopened.heap.instance("Ljava/io/FileInputStream;").unwrap();
+                assert!(
+                    reopened
+                        .open_virtual_file_input(input, format!("{EXTERNAL_ROOT}/{name}"))
+                        .unwrap_err()
+                        .downcast_ref::<crate::heap::GuestFault>()
+                        .is_some_and(|error| error.0 == "Ljava/io/FileNotFoundException;")
+                );
+            }
         }
         assert!(vm.invoke(method, vec![Word::ZERO], false).is_err());
         drop((vm, reopened, other, ephemeral));

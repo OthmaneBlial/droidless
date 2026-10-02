@@ -35,7 +35,11 @@ Environment's virtual external directory maps to a separate subtree inside the
 current package capability. It grants no shared host volume or cross-package
 access. Directory traversal and symlinks are checked by the same storage boundary.
 
-General file streams, network, clipboard, camera, microphone, location, process and
+FileInputStream snapshots regular files only within the package capability,
+with no-follow opens, hard-link rejection and a 64 MiB read ceiling. Output
+streams and general file channels remain unavailable.
+
+Network, clipboard, camera, microphone, location, process and
 native-library APIs are unavailable. Inspected manifest permissions grant no host
 capabilities. Native controls handle explicit user input/paste, while the AppKit bridge consumes
 trusted Rust structures on the main thread. UI strings with NUL fail C conversion;

@@ -2,7 +2,7 @@
 
 Current source implements bounded `SharedPreferences` and SQLite subsets. The
 v0.1.0 release archive predates these capabilities. Private files/cache directory
-metadata is modeled; general Java file streams, preference listeners and String
+metadata and bounded input streams are modeled; output streams, preference listeners and String
 sets remain unsupported.
 
 ## Host-selected data root
@@ -32,6 +32,18 @@ This is DROIDLESS's app-isolated external-volume profile; Android's cross-app
 shared media storage and host home/Downloads access are not provided. Returning
 the directory does not make backup/restore or general Java file I/O work.
 References: [API-21 Environment](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/os/Environment.java).
+
+## Bounded file input
+
+FileInputStream constructors accepting a String or File can read regular files
+inside the current package's private or virtual external directory. The existing
+directory capability opens every parent and file without following symlinks;
+special files, hard links, missing files and paths outside the package fail with
+FileNotFoundException. Reads snapshot at most 64 MiB at construction, so later
+file replacement does not change that stream. Existing read/skip/available/close
+behavior applies to the snapshot. Ephemeral runtimes have no disk file access;
+the bounded virtual `/proc/self/cmdline` file remains available. Live descriptors,
+output streams and FileChannel operations remain unsupported.
 
 ## API behavior
 
