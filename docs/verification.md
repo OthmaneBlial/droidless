@@ -2283,7 +2283,7 @@ checkpoint remains active.
 
 ## Current-source modal dialog surfaces and AppCompat content boundary
 
-Date: 2026-10-02. Current source increment beyond the published v0.1.0 archive.
+Date: 2026-10-02. Runtime source commit bb23177, beyond the published v0.1.0 archive.
 
 The runtime now retains each attached Dialog independently of the Activity root
 and renders visible surfaces into separate real AppKit NSPanels. The authored
@@ -2318,3 +2318,11 @@ The source gate covers 136 Rust tests, warning-free Clippy, optimized workspace
 and document-replay builds, 4,096 seeded parser mutations, and native font,
 focus and panel components. GitHub Actions remain disabled. No new public release
 or physical dialog interaction is claimed. The 50% checkpoint remains active.
+
+
+The complete public replay passes prior calculator, image/grid/result, SwpieView
+and Notepad create/rename/restart/Back workflows and certifies the new onCreate/
+foreground boundary against one unchanged release CLI. Its unsigned development
+bundle is byte-identical: SHA-256 `9e81baab02d20dbef827f614c43ddd0da57a55b31c9f6ce9f8f527ec469b1697`. The replay keeps confirmed
+folder deletion false; entering onCreate is not completed dialog creation or
+presentation. The live site mirrors these source documents and compatibility data.

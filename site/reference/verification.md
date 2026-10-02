@@ -1,6 +1,6 @@
 # First interactive milestone evidence
 
-Latest local source gate: 135 Rust tests, warning-free Clippy, optimized builds
+Latest local source gate: 136 Rust tests, warning-free Clippy, optimized builds
 and 4,096 seeded parser mutations. Older sections retain their milestone's counts.
 
 Host: Apple Silicon macOS 26.6. Date: 2026-09-30. Runtime: DROIDLESS Rust interpreter
@@ -2279,3 +2279,50 @@ certifies one unchanged CLI. Its unsigned development bundle matches byte for
 byte: SHA-256 `53abe7906a87048e2de8f6857c36ef90d2895f8f12170327deb7738b9f8da309`. GitHub Actions stay disabled.
 No new public release or physical dialog interaction is claimed. The 50%
 checkpoint remains active.
+
+
+## Current-source modal dialog surfaces and AppCompat content boundary
+
+Date: 2026-10-02. Runtime source commit bb23177, beyond the published v0.1.0 archive.
+
+The runtime now retains each attached Dialog independently of the Activity root
+and renders visible surfaces into separate real AppKit NSPanels. The authored
+DialogSurfaceContract runs actual DEX creation/start/attachment/detachment/stop
+methods and queued show/cancel/dismiss listeners. It checks stable Activity state,
+distinct window tokens, hide/reopen behavior, nested Back, cancellation policy,
+outside touch, actual button callbacks, blocked background input, text/focus,
+window dimension bounds, host surface identity, collection after dropping guest
+statics, and recovery from create/start/stop failures. Existing unshown-window
+and weak cancellation contracts continue to pass.
+
+The native component check creates real panels and native button controls, sends
+their control callbacks, checks parent/child ownership and close routing, blocks
+lower-panel controls, reuses/resizes a panel, restores a previous panel and retires
+both without closing the Activity. It is a component test, not physical input into
+a public APK. Native frame application suppresses focus/resign callbacks to avoid
+reentering Rust while applying controls; the host reports the actual key surface.
+
+The original SHA-256-pinned Notepad APK now enters
+`Landroid/support/v7/a/q;->onCreate(Landroid/os/Bundle;)V` at PC 0x0012, then
+bundled AppCompat content installation. The original focused folder-delete
+listener still calls at PC 0x0057; its builder calls at PC 0x0004. The new first
+failure is `Landroid/widget/FrameLayout;->setForeground(Landroid/graphics/drawable/Drawable;)V`
+from `Landroid/support/v7/a/ac;->n()V` at PC 0x01b1. The unchanged APK digest is
+`2c35d3dc1d41d2c761b52785c591973886fb671a2cc2e7ab047ede89599db47f`.
+The diagnostic preserves the same saved folder ID/name and both exact note
+IDs/titles/bodies in the disposable copy and original seed. The public dialog is
+not yet displayed; confirmation, Cancel through native input and confirmed folder
+deletion remain unverified. No APK patch or replacement confirmation is used.
+
+The source gate covers 136 Rust tests, warning-free Clippy, optimized workspace
+and document-replay builds, 4,096 seeded parser mutations, and native font,
+focus and panel components. GitHub Actions remain disabled. No new public release
+or physical dialog interaction is claimed. The 50% checkpoint remains active.
+
+
+The complete public replay passes prior calculator, image/grid/result, SwpieView
+and Notepad create/rename/restart/Back workflows and certifies the new onCreate/
+foreground boundary against one unchanged release CLI. Its unsigned development
+bundle is byte-identical: SHA-256 `9e81baab02d20dbef827f614c43ddd0da57a55b31c9f6ce9f8f527ec469b1697`. The replay keeps confirmed
+folder deletion false; entering onCreate is not completed dialog creation or
+presentation. The live site mirrors these source documents and compatibility data.
