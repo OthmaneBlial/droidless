@@ -2599,3 +2599,31 @@ gate does not claim new physical public-app input. Backup/restore remain
 unfinished and the 50% goal remains active. GitHub Actions stay disabled.
 
 [v0.2.0 scope and download](releases/0.2.0.md).
+
+## Current source: bounded output and Notepad backup/restore
+
+Date: 2026-10-02. Runtime checkpoint: `64017cc`.
+
+`FileOutputStream` now accepts String/File paths in the current package's private
+or virtual external directory. Writes are staged up to 64 MiB and committed
+through the existing atomic storage path on flush/close. Append mode, byte-array
+offsets, `getChannel`, shared stream/channel position, close propagation,
+`transferFrom`, `transferTo` and unsafe host-path rejection run in a compiled
+DEX contract. An abandoned unclosed stream leaves the earlier file unchanged.
+File listing can run the APK's actual `FileFilter.accept` over the confined
+storage entries.
+
+The unchanged, SHA-256-pinned Notepad 1.0.0 APK now completes its Backup data
+callback. Its `external/notepad_backup.nbu` equals the private SQLite database
+byte-for-byte: 24,576 bytes, SHA-256
+`fcd71e0e647dede86efc58bf768bfbb3e7fefab7c5621a744ec6ad4ab2f19c09`. On a
+separate copy, the test alters one Note row, selects the backup through the real
+file-picker row and presses the APK's Restore confirmation. The original bytes,
+SQLite integrity, every Note row and the Folder row are recovered; the next
+process renders the saved notes and folder. The test seed stays untouched.
+
+After committing the restored database, this APK calls `System.exit(0)`. That
+method is still unsupported, so DROIDLESS reports a guest error after the data
+recovery has succeeded. This evidence is a bounded workflow check, not complete
+process-shutdown or Android compatibility. Custom Bundle Serializable objects
+are same-runtime references, not Java serialization or cross-process persistence.

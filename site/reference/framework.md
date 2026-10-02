@@ -98,10 +98,12 @@ Integer, Long, Double and Boolean extras also retain Serializable marker identit
 and typed getter values. Bundle primitive writes box these four types immediately,
 preserving object identity across shallow copies. Parcel transport uses Android's
 ordinary primitive value tags, including boxed entries in supported ArrayLists;
-it does not implement Java object serialization. Float/Byte/Short/Character
-boxing and arbitrary Serializable object transport remain unsupported. The
-compiled BoxedExtras contract checks aliases, nulls, wrong-type defaults, wide
-values, mixed lists, GC and explicit custom-serialization failure.
+it does not implement Java object serialization. Custom Serializable values can
+cross a snapshot only as bounded same-runtime references, so this does not
+persist or copy their fields. Float/Byte/Short/Character boxing and cross-process
+Serializable transport remain unsupported. The compiled BoxedExtras contract
+checks aliases, nulls, wrong-type defaults, wide values, mixed lists, GC and
+custom-object identity within one runtime.
 
 The authored Parcels APK verifies callback execution, Unicode/wide values, null
 list elements, shallow versus transported state, source-list mutation during GC,
@@ -245,7 +247,15 @@ References: [API-21 DocumentsContract](https://github.com/aosp-mirror/platform_f
 [DocumentsProvider](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/core/java/android/provider/DocumentsProvider.java),
 [SwpieView image code](https://github.com/err4nt/SwpieView/blob/d371afbe8337c6244e3ef0a41415b08b14f1c88c/app/src/main/java/org/voidptr/swpieview/ImageContainer.java).
 
-## Platform fragments without Views
+## Targeted convenience APIs
+
+`Toast.makeText(...).show()` writes a `toast:` trace message; it does not create
+an Android-style notification or native popup. `URLEncoder.encode(String,
+String)` supports bounded UTF-8 form encoding. `MimeTypeMap.getFileExtensionFromUrl`
+returns the final path extension. String lower/uppercase conversion and
+`Context.getText` use the runtime's current locale-independent text profile.
+
+## Platform fragments and mounted Views
 
 Activity.getFragmentManager retains one managed manager per Activity. Tag-only
 FragmentTransaction.add queues additions until executePendingTransactions, an
@@ -259,12 +269,15 @@ Queued transactions and callback snapshots stay rooted through guest GC; dispatc
 faults release temporary roots and the execution guard. Duplicate commit/add,
 tag changes, active argument changes and recursive execution raise guest errors.
 
-Limits: 64 attached fragments, 64 additions per transaction, 128 queued transactions
-and 1,024 dispatch batches. Fragment methods run on main. Returned Views, container
-mounting, remove/replace, fragment back stacks, children, saved-state recreation
-and missing-super enforcement remain unsupported. This is a platform Fragment
-subset, not general support-library or AndroidX Fragment compatibility. SwpieView
-attaches and creates its bundled ReportFragment before its next startup blocker.
+`FragmentTransaction.add(containerId, fragment)` also mounts a returned guest
+View in the Activity's matching ViewGroup and preserves `getView` through the
+fragment's visible lifetime. Limits: 64 attached fragments, 64 additions per
+transaction, 128 queued transactions and 1,024 dispatch batches. Fragment methods
+run on main. remove/replace, fragment back stacks, child fragments, saved-state
+recreation and missing-super enforcement remain unsupported. This is a platform
+Fragment subset, not general support-library or AndroidX Fragment compatibility.
+SwpieView attaches and creates its bundled ReportFragment before its next startup
+blocker.
 
 ## Application metadata and widget state
 

@@ -78,6 +78,15 @@ This is desktop Java differential evidence; no Android reference run is claimed.
 
 Reference contract: [Java 8 Class API](https://docs.oracle.com/javase/8/docs/api/java/lang/Class.html).
 
+## Bounded APK field objects
+
+`Class.getDeclaredField` looks up a field declared on the selected APK class.
+`Field.isAccessible`/`setAccessible` retain the override flag, and `Field.get`
+reads static or instance state after access is enabled. Primitive results are
+boxed through the runtime; instance targets must match the declaring class.
+Missing fields and wrong targets report guest exceptions. Field writes, inherited
+lookup through this API, and full Java access-control rules remain unsupported.
+
 ```sh
 mkdir -p artifacts/primitive-java-contract
 javac -source 8 -target 8 -Xlint:-options -d artifacts/primitive-java-contract \

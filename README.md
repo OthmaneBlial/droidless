@@ -6,7 +6,7 @@
 
 [![Release](https://img.shields.io/github/v/release/OthmaneBlial/droidless?style=for-the-badge&color=d9ff63&labelColor=171c21)](https://github.com/OthmaneBlial/droidless/releases/latest) [![Rust](https://img.shields.io/badge/Rust-1.95-83b8ff?style=for-the-badge&logo=rust&labelColor=171c21)](rust-toolchain.toml) [![License](https://img.shields.io/badge/license-Apache%202.0-d9ff63?style=for-the-badge&labelColor=171c21)](LICENSE) [![Checks](https://img.shields.io/badge/CI-local%20only-fffdf7?style=for-the-badge&labelColor=171c21)](tools/ci.sh)
 
-**[📦 Download v0.2.0](https://github.com/OthmaneBlial/droidless/releases/tag/v0.2.0)** · **[🌐 Explore the website](https://othmaneblial.github.io/droidless/)** · **[📖 Open the notebook](https://othmaneblial.github.io/droidless/docs.html)**
+**[📦 Download v0.3.0](https://github.com/OthmaneBlial/droidless/releases/tag/v0.3.0)** · **[🌐 Explore the website](https://othmaneblial.github.io/droidless/)** · **[📖 Open the notebook](https://othmaneblial.github.io/droidless/docs.html)**
 
 **Original APK bytecode → our Rust engine → native desktop views.**
 
@@ -30,7 +30,7 @@ fixtures. Compatibility is narrow, and unsupported APIs report explicit errors.
 
 | Real app | Verified native interaction | Verified headless replay |
 |---|---|---|
-| 📓 **[Notepad 1.0.0](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0)** | Mouse selection, keyboard title/body edits, Back save and exact restoration in a fresh process | Two persistent SQLite notes; edit/restart; Delete/Undo; drawer; folder create/rename; original folder-delete dialog, Cancel and confirmation |
+| 📓 **[Notepad 1.0.0](https://github.com/MohMah/android-notepad/releases/tag/v1.0.0)** | Mouse selection, keyboard title/body edits, Back save and exact restoration in a fresh process | Two persistent SQLite notes; edit/restart; Delete/Undo; drawer; folder create/rename/delete; exact database backup/restore and fresh-launch recovery |
 | 🖼️ **[SwpieView 1.3.2](https://f-droid.org/en/packages/org.voidptr.swpieview/)** | Folder chooser → three thumbnails → JPEG/PNG/WebP viewer → Escape back; taps hide/show controls | Original image swipes, first/last bounds, control visibility, Parcelable transfer and Back |
 | 🧮 **[Simple Calculator 1.0](https://github.com/swiftugandan/Simple-Android-Calculator/tree/3ba860b281eba34f144e4e75115f0c0a06bced31)** | Original clicks produce `7 + 5 = 12`, `8 × 8 = 64` and `9 / 3 = 3` | Seven arithmetic and input scenarios |
 
@@ -56,19 +56,27 @@ contracts, not arbitrary APK compatibility. [Read the verification record](docs/
 </table>
 </div>
 
+<div align="center">
+
+**📥 Open → ✍️ Edit → 💾 Save → 🗂️ Back up → 🔁 Restore → 🚀 Reopen**
+
+</div>
+
+<sub>Backup/restore is verified on an isolated data copy. The original APK calls `System.exit(0)` after restoring; that shutdown API remains unsupported, but a fresh DROIDLESS run confirms the exact database and notes were recovered.</sub>
+
 ## 🚀 Get your first APK running
 
-**v0.2.0 is a macOS ARM64 preview.** The archive contains the CLI, five authored
+**v0.3.0 is a macOS ARM64 preview.** The archive contains the CLI, five authored
 fixtures, three hash-checking public APK fetch helpers and release provenance.
 It has no Apple developer signature or notarization.
 
-[Download the archive and SHA256SUMS](https://github.com/OthmaneBlial/droidless/releases/tag/v0.2.0),
+[Download the archive and SHA256SUMS](https://github.com/OthmaneBlial/droidless/releases/tag/v0.3.0),
 then, from their download directory:
 
 ```sh
 shasum -a 256 -c SHA256SUMS
-tar -xzf droidless-0.2.0-macos-arm64.tar.gz
-cd droidless-0.2.0-macos-arm64
+tar -xzf droidless-0.3.0-macos-arm64.tar.gz
+cd droidless-0.3.0-macos-arm64
 
 # Your first guest callback 🤖
 ./droidless run --headless --ephemeral fixtures/counter.apk --click Increment
@@ -95,7 +103,7 @@ sh tools/fetch-notepad.sh
 
 **Escape delivers Back** in the native window. The package also includes
 `fetch-simple-calculator.sh` and `fetch-swpieview.sh`.
-[Release scope and known limits](docs/releases/0.2.0.md).
+[Release scope and known limits](docs/releases/0.3.0.md).
 
 <details>
 <summary><strong>🛠️ Prefer building from source?</strong></summary>
@@ -128,26 +136,30 @@ code path; Linux builds and native UI have not been verified.
 
 [Architecture](docs/architecture.md) · [DEX VM](docs/dex-vm.md) · [Framework](docs/framework.md)
 
-## 🧰 Inside v0.2.0
+## 🧰 Inside v0.3.0
 
 | Capability | Implemented scope |
 |---|---|
 | 🧠 **Our own VM** | DEX 035–040; arithmetic, wide values, branches, arrays, fields, dispatch, managed continuations, Java throw/catch and retained DEX stack diagnostics |
 | 🪟 **Native views** | Text, buttons, editors, nested layouts, bounded adapter grids, a targeted support-RecyclerView notes path and separate dialog panels |
-| 🧭 **Navigation** | Same-APK Intents, typed Bundle extras, retained Back stack, results, real Parcelable writers/CREATORs and lifecycle observers |
+| 🧭 **Navigation** | Same-APK Intents, typed Bundle extras, same-runtime Serializable references, retained Back stack, results, real Parcelable writers/CREATORs and lifecycle observers |
 | 📓 **Persistence** | Isolated SharedPreferences and the public Notepad's SQLite save/edit/restart workflows |
 | 🖼️ **Images** | Packaged XML, typed resources, PNG/JPEG/WebP decoding, granted read-only document streams and native ImageViews |
 | ⏱️ **Scheduled work** | Main Handler/Looper/Message queue, guest Timer tasks, deferred workers, executor/Future results and main-thread delivery |
 | 🗂️ **Java foundations** | Bounded collections, guest equality, reflection, primitive metadata, weak references and handle-based mark/sweep GC |
 | ✂️ **Layout and input** | Measured text, UTF-16 ellipsis metadata, host-font ascent/descent, full accessibility labels for shortened text, clipping, focus and single-pointer gesture contracts |
-| 💾 **Bounded file input** | App-private reads and a package-isolated virtual external directory; FileInputStream snapshots and shared channel position/close state |
+| 💾 **Bounded file I/O** | App-private reads/writes and package-isolated external files; staged output commits atomically up to 64 MiB; input/output channels share position and close state, with bounded transfers |
+| 🧩 **Everyday APIs** | Toast feedback, filtered file listing, selected reflected fields, UTF-8 form URLs, file-extension MIME lookup and fragment containers |
 
-These are supported profiles with explicit ceilings. **Notepad backup/restore
-remains unfinished**: backup reaches its private input channel, then stops at
-FileOutputStream. Missing-file restore stops at Toast. Physical public folder
-and dialog input, Android font/pixel parity, GIF animation and usable slideshow
-remain unverified. Broad AndroidX/Compose, JNI, networking, JIT and games are
-future work. [Exact compatibility](docs/compatibility.md) · [Storage limits](docs/storage.md)
+These are bounded profiles with explicit ceilings. The unchanged Notepad APK now
+creates a byte-exact `.nbu` database backup and restores a tampered database; a
+fresh process shows the original note and folder rows. Its post-restore
+`System.exit(0)` call is still unsupported, so the restore run reports that
+shutdown boundary after the data has been recovered. Custom Bundle serializables
+are same-runtime references, not Java serialization or durable snapshots.
+Physical public folder/dialog input, Android font/pixel parity, GIF animation
+and usable slideshow remain unverified. Broad AndroidX/Compose, JNI, networking,
+JIT and games are future work. [Exact compatibility](docs/compatibility.md) · [Storage limits](docs/storage.md)
 
 <details>
 <summary><strong>🔎 Inspect, replay and trace</strong></summary>
@@ -177,7 +189,7 @@ Use `--trace-bytecode`, `--trace-methods`, `--trace-framework` and
 
 ## 🧪 Small lab. Executable evidence.
 
-**147 Rust tests**, warning-free Clippy, optimized builds, five native component
+**150 Rust tests**, warning-free Clippy, optimized builds, five native component
 checks and **4,096 seeded parser mutations** run locally. The public APK replay
 checks the original app flows and certifies one unchanged CLI SHA-256. Release
 packaging extracts the archive into a clean directory and checks Counter,
@@ -238,6 +250,6 @@ remain unavailable. [Security boundaries](docs/security.md).
 
 Apache-2.0 · Third-party artifacts retain their upstream licenses.
 
-[Website](https://othmaneblial.github.io/droidless/) · [Notebook](https://othmaneblial.github.io/droidless/docs.html) · [Release](https://github.com/OthmaneBlial/droidless/releases/tag/v0.2.0)
+[Website](https://othmaneblial.github.io/droidless/) · [Notebook](https://othmaneblial.github.io/droidless/docs.html) · [Release](https://github.com/OthmaneBlial/droidless/releases/tag/v0.3.0)
 
 </div>

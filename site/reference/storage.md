@@ -1,9 +1,10 @@
 # Persistent preferences
 
-Current source implements bounded `SharedPreferences` and SQLite subsets. The
-v0.2.0 includes these bounded profiles; the v0.1.0 archive predates them. Private files/cache directory
-metadata and bounded input streams are modeled; output streams, preference listeners and String
-sets remain unsupported.
+Current source implements bounded `SharedPreferences`, SQLite and package-confined
+file I/O subsets. v0.2.0 added private file input; v0.3.0 adds bounded output
+and channel transfers. Private files/cache directory metadata are modeled.
+Preference listeners, String sets and unrestricted host file access remain
+unsupported.
 
 ## Host-selected data root
 
@@ -42,8 +43,8 @@ special files, hard links, missing files and paths outside the package fail with
 FileNotFoundException. Reads snapshot at most 64 MiB at construction, so later
 file replacement does not change that stream. Existing read/skip/available/close
 behavior applies to the snapshot. Ephemeral runtimes have no disk file access;
-the bounded virtual `/proc/self/cmdline` file remains available. Live descriptors,
-output streams and channel transfer operations remain unsupported.
+the bounded virtual `/proc/self/cmdline` file remains available. Live host
+descriptors remain unsupported.
 
 FileInputStream.getChannel returns one retained FileChannel for that stream.
 The read-only snapshot channel exposes size, shared position, isOpen and close.
@@ -51,9 +52,27 @@ Seeking changes subsequent stream reads; seeking beyond EOF preserves size and
 returns EOF on reading. Negative positions fail. Closing either object closes
 the other, with catchable ClosedChannelException from closed channel operations.
 Compiled DEX checks cover wide positions, interface identity, aliasing, faults
-and collection of the source/channel cycle. ByteBuffer reads, transfers, writes,
-mapping, locking and interruptible descriptor I/O remain unsupported.
+and collection of the source/channel cycle. FileChannel ByteBuffer I/O, mapping,
+locking and interruptible descriptor operations remain unsupported.
 Reference: [FileChannel API](https://developer.android.com/reference/java/nio/channels/FileChannel).
+
+## Bounded file output and channel transfers
+
+FileOutputStream accepts String and File paths inside the package's private or
+virtual external directory. It can replace or append to regular files and writes
+at most 64 MiB. Bytes remain staged until flush or close, then use the existing
+atomic storage writer. An abandoned unclosed stream leaves the old file intact.
+The path checks reject traversal, links, special files and host paths.
+
+Its FileChannel shares position, size and close state with the stream. Bounded
+`transferFrom` and `transferTo` connect the modeled input and output channels;
+stream reads/writes and channel position changes stay in sync. `File.listFiles`
+and `listFiles(FileFilter)` return only safe entries from the same package space,
+with guest filter callbacks for the latter. The original Notepad 1.0.0 APK now
+backs up its SQLite database byte-for-byte and restores it after a test copy is
+tampered. SQLite integrity, every Note/Folder row and a fresh-process display
+are verified. Its callback then calls unsupported `System.exit(0)` after the
+restore has completed; process-shutdown parity remains open.
 
 ## API behavior
 

@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.3.0 — 2026-10-02
+
+- Added bounded, package-confined `FileOutputStream`, append, flush/close,
+  filtered file listing and output `FileChannel` transfers. Writes are staged,
+  capped at 64 MiB and atomically committed. The unchanged Notepad APK now makes
+  a byte-exact SQLite backup and restores a deliberately modified database; exact
+  Note/Folder rows and a fresh-process display pass. Its post-restore
+  `System.exit(0)` remains unsupported and is reported as the shutdown boundary.
+- Added mounted Fragment Views, same-runtime Serializable-reference snapshots,
+  selected reflected-field reads, Toast logging, UTF-8 form URL encoding and
+  MIME extension lookup. Java serialization, fragment back stacks and broad
+  Android API compatibility remain outside this preview.
+- Refreshed the README and release/website links for v0.3.0. CI runs locally;
+  GitHub Actions remain disabled.
+
 ## 0.2.0 — 2026-10-02
 
 - App-isolated virtual external directories and bounded private FileInputStream

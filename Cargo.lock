@@ -160,7 +160,7 @@ dependencies = [
 
 [[package]]
 name = "droidless"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "cc",
@@ -171,7 +171,7 @@ dependencies = [
 
 [[package]]
 name = "droidless-formats"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -181,7 +181,7 @@ dependencies = [
 
 [[package]]
 name = "droidless-runtime"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "cap-fs-ext",

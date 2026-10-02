@@ -190,31 +190,35 @@ and results through a bounded Parcel subset. Authored checks exercise actual
 guest writers/CREATORs, mutation/GC, state isolation, malformed data and cleanup.
 [Exact Parcelable scope](framework.md#bounded-parcelable-state-transfer).
 Boxed Integer/Long/Double/Boolean extras and list entries use ordinary Parcel
-value tags and preserve shallow-copy identity. General Java serialization remains
-unsupported.
+value tags and preserve shallow-copy identity. Custom Serializable references
+also survive snapshots within one runtime; Java object serialization and
+cross-process Serializable persistence remain unsupported.
 The v0.1.0 release predates these additions. [Result and picker scope](framework.md#activity-results-and-native-folder-selection).
 Application lifecycle observers add bounded registration/removal, GC-rooted
 snapshot delivery from six Activity super methods and canonical getApplication
 identity. Native authored navigation/Back/close executes these observers; saved-state
 and modern pre/post callbacks remain unsupported. [Lifecycle scope](framework.md).
-Platform fragments without Views add queued tag-only transactions and guest
-callbacks across navigation, GC and teardown. Duplicate/recursive operations and
-callback failures are checked; Views, fragment back stacks and saved state remain
-unsupported. [Fragment scope](framework.md#platform-fragments-without-views).
+Platform fragments support bounded queued add transactions and guest lifecycle
+callbacks. Added Fragment Views mount in their real ViewGroup container and
+survive the active Activity snapshot. Duplicate/recursive operations and callback
+failures are checked; fragment back stacks and saved state remain unsupported.
+[Fragment scope](framework.md#platform-fragments-and-mounted-views).
 Build.VERSION.SDK_INT exposes a fixed read-only API-21 branch profile, independent
 of APK/host metadata. It does not imply complete API-21 support.
 [Profile and field checks](framework.md#virtual-api-profile).
 SharedPreferences adds String/int/long/float/boolean reads and staged editors,
 commit/apply/remove/clear, MODE_PRIVATE stores, Activity.getPreferences and a
 minimal application-context singleton. Native authored-note save/restart/clear
-and isolated persistence are verified. Apply is synchronous; preference listeners,
-String sets and general file APIs remain unsupported. Bounded FileInputStream
-snapshots can read regular private files within the package capability. The
-virtual external directory is package-isolated; input channels share stream
-position/close state. Output, channel transfer, mapping and locking remain
-unsupported. Original Notepad backup reaches its private input channel and stops
-at FileOutputStream; missing-file restore stops at Toast. The diagnostic replay
-preserves every Note/Folder field in the copy and seed, and creates no backup.
+and isolated persistence are verified. Apply is synchronous; preference listeners
+and String sets remain unsupported. Bounded FileInputStream snapshots read regular
+private or package-isolated external files; FileOutputStream stages bounded writes
+before an atomic commit. FileChannel input/output transfers share stream state.
+Mapping, locking, ByteBuffer I/O and unrestricted file paths remain unsupported.
+The original Notepad creates a byte-identical SQLite backup and restores a
+deliberately changed database. All Note/Folder rows and integrity check match,
+and a fresh process renders the restored note/folder state. Its `System.exit(0)`
+call after restore remains unsupported, so that run returns a guest error after
+the data is safely recovered. [Storage limits](storage.md).
 [Storage limits](storage.md).
 HashSet/ArrayList/HashMap and basic LinkedHashMap add bounded operations using
 guest equals; lists preserve duplicates/order and support indexed operations.
@@ -265,7 +269,8 @@ interaction and independent public-APK Looper workflows remain unverified.
 - Main blocking waits, blocking native-bridge callbacks/initializers, general wait/notify,
   nested Looper pumps/priority, parallel execution, Timer finalization and JVM process-liveness parity are unsupported.
 - Other bulk collections, custom Map copies/views, CopyOnWriteArrayList write revalidation,
-  ListIterator/subList, custom class loaders, method/field reflection, general file I/O,
+  ListIterator/subList, custom class loaders, general method reflection and file I/O outside
+  the bounded package profile,
   general SQLite APIs beyond the subset documented in [storage](storage.md),
   bitmap pixel manipulation/Canvas, networking, JNI, JIT,
   APK signature verification, installation registry or Linux native renderer.

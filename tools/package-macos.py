@@ -45,7 +45,11 @@ Neutral calculator: sh tools/fetch-simple-calculator.sh
 Image viewer: sh tools/fetch-swpieview.sh
 Public APKs are fetched unchanged with SHA-256 verification, never bundled here.
 Included authored fixtures: counter, intents, preferences, scheduling and images.
-Notepad backup/restore and broad Android API compatibility remain unfinished.
+The original Notepad backup/restore recovers exact database bytes on an isolated
+copy; its post-restore System.exit call remains outside the API profile.
+FileOutputStream and channel transfers stay inside the package data root and use
+bounded staged writes.
+Broad Android API compatibility remains unfinished.
 
 This is a limited Java/Android compatibility subset, not an audited sandbox.
 Use trusted APKs. This binary has no Apple developer signature or notarization.
