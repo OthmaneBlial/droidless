@@ -408,6 +408,14 @@ runs the APK's own TextInputLayout child-binding override rather than attaching
 around it. Compiled checks cover intermediate overrides, factories, getters,
 existing/supplied parameters, child order, callback GC and fault recovery.
 
+Paint/TextPaint retain finite shadow radius, offsets and ARGB color. Positive
+radius reports an attached shadow; zero/negative radius removes it. clearShadowLayer
+invokes virtual setShadowLayer with four zero values. The bridge check covers
+retained parameters and clearing. Canvas shadow rasterization and native shadow
+visual parity remain unsupported; this state profile is used by the public
+TextInputLayout collapsing-label calculation.
+[API-21 Paint](https://github.com/aosp-mirror/platform_frameworks_base/blob/android-5.0.0_r1/graphics/java/android/graphics/Paint.java).
+
 Typeface exposes cached sans/serif/monospace identities and four style bits.
 create preserves matching identities and clamps invalid styles to NORMAL;
 defaultFromStyle rejects invalid indices. Paint retains nullable faces and its

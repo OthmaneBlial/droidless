@@ -4955,6 +4955,46 @@ impl Runtime {
                         .unwrap_or(Word::from(0xff00_0000u32 as i32)),
                 );
             }
+            ("Landroid/graphics/Paint;", "setShadowLayer(FFFI)V") => {
+                ensure!(args.len() == 5, "invalid Paint shadow arguments");
+                for value in &args[1..4] {
+                    ensure!(
+                        f32::from_bits(value.int()? as u32).is_finite(),
+                        "non-finite Paint shadow"
+                    );
+                }
+                // ponytail: retain Paint shadow state; Canvas shadow rasterization is still unsupported.
+                self.heap
+                    .get_mut(receiver)?
+                    .fields
+                    .insert("droidless:paint:shadow".into(), args[1..].to_vec());
+            }
+            ("Landroid/graphics/Paint;", "clearShadowLayer()V") => {
+                ensure!(self.sync_depth < 32, "Paint callback nesting limit");
+                self.invoke(
+                    Method {
+                        class: "Landroid/graphics/Paint;".into(),
+                        name: "setShadowLayer".into(),
+                        parameters: vec!["F".into(), "F".into(), "F".into(), "I".into()],
+                        returns: "V".into(),
+                    },
+                    vec![receiver, Word::ZERO, Word::ZERO, Word::ZERO, Word::ZERO],
+                    true,
+                )?;
+            }
+            ("Landroid/graphics/Paint;", "hasShadowLayer()Z") => {
+                let radius = self
+                    .heap
+                    .get(receiver)?
+                    .fields
+                    .get("droidless:paint:shadow")
+                    .and_then(|values| values.first())
+                    .copied()
+                    .unwrap_or(Word::ZERO);
+                result.push(Word::from(i32::from(
+                    f32::from_bits(radius.int()? as u32) > 0.0,
+                )));
+            }
             ("Landroid/graphics/Paint;", "setStyle(Landroid/graphics/Paint$Style;)V")
             | ("Landroid/graphics/Paint;", "setStrokeCap(Landroid/graphics/Paint$Cap;)V")
             | ("Landroid/graphics/Paint;", "setStrokeJoin(Landroid/graphics/Paint$Join;)V") => {
@@ -9244,6 +9284,65 @@ fn java_double(v: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::rgb_to_hsv;
+
+    #[test]
+    fn paint_shadow_state_retains_parameters_and_clears() {
+        use crate::{Runtime, heap::Word};
+        use droidless_formats::{apk::Apk, dex::Method};
+        let mut vm = Runtime::new(
+            Apk::parse(include_bytes!("../../../fixtures/generated/images.apk")).unwrap(),
+        )
+        .unwrap();
+        let paint = vm.heap.instance("Landroid/text/TextPaint;").unwrap();
+        let call = |vm: &mut Runtime,
+                    name: &str,
+                    parameters: Vec<String>,
+                    returns: &str,
+                    values: Vec<Word>| {
+            vm.invoke(
+                Method {
+                    class: "Landroid/graphics/Paint;".into(),
+                    name: name.into(),
+                    parameters,
+                    returns: returns.into(),
+                },
+                std::iter::once(paint).chain(values).collect(),
+                true,
+            )
+            .unwrap()
+        };
+        assert_eq!(
+            call(&mut vm, "hasShadowLayer", vec![], "Z", vec![]),
+            [Word::ZERO]
+        );
+        let values = vec![
+            Word::Bits(2.0f32.to_bits()),
+            Word::Bits(1.0f32.to_bits()),
+            Word::Bits((-1.0f32).to_bits()),
+            Word::Bits(0xff123456),
+        ];
+        call(
+            &mut vm,
+            "setShadowLayer",
+            vec!["F".into(), "F".into(), "F".into(), "I".into()],
+            "V",
+            values.clone(),
+        );
+        assert_eq!(
+            call(&mut vm, "hasShadowLayer", vec![], "Z", vec![]),
+            [Word::from(1)]
+        );
+        assert_eq!(
+            vm.heap.get(paint).unwrap().fields["droidless:paint:shadow"],
+            values
+        );
+        call(&mut vm, "clearShadowLayer", vec![], "V", vec![]);
+        assert_eq!(
+            call(&mut vm, "hasShadowLayer", vec![], "Z", vec![]),
+            [Word::ZERO]
+        );
+        assert_eq!(vm.stack_depth(), 0);
+    }
 
     #[test]
     fn color_channels_and_packing_follow_java_argb_bits() {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Paint/TextPaint shadow configuration now retains radius, offsets and ARGB
+  color, exposes layer state and clears through the virtual setter. Canvas
+  shadow rasterization and native shadow visual parity remain unsupported.
+
 - Color channel extraction and RGB/ARGB packing now follow API-21 Java int bits,
   including signed colors. Saved-folder focus reaches the original collapsed
   label color calculation. Compiled bridge checks cover channel bytes and packing.
