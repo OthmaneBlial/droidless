@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.2.0 — 2026-10-02
+
+- App-isolated virtual external directories and bounded private FileInputStream
+  snapshots now reuse the package capability, rejecting escapes, links, special
+  files and inputs above 64 MiB. getChannel retains one real input channel with
+  shared position/close state, wide seeks, EOF and catchable closed-channel faults.
+  Compiled checks cover interface identity and GC of the source/channel cycle.
+  The original Notepad backup reaches this channel, then reports unsupported
+  FileOutputStream; missing-file restore reports unsupported Toast. Separate
+  replay copies retain every Note/Folder field and the seed; no backup is created.
+
+- The macOS ARM64 preview now packages five authored fixtures and neutral public
+  APK fetch helpers. Packaging requires a matching full public-replay certificate
+  and checks navigation, persistence and the original Notepad in a clean extracted
+  install. README artwork and release links have been refreshed. Local CI only.
+
 - TextView ellipsizing now records line-relative UTF-16 offsets, preserves source
   text and old Layout snapshots, and sends shortened display text to native
   controls with full accessibility labels. XML line/ellipsis settings share the
