@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Public replay now records the exact CLI digest, certifies it only after the
+  complete suite passes and rejects a runtime changed during execution. The
+  original focused folder-delete listener reaches the unsupported Dialog
+  constructor; this explicit boundary check retains the exact folder and notes
+  and keeps deletion marked unverified.
+
 - ContextThemeWrapper now copies the base theme into an independent cached theme,
   invokes actual guest theme callbacks and clones the base inflater with its
   factories and wrapper context. Supported ContextWrapper calls delegate to the
